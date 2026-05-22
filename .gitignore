@@ -1,0 +1,16 @@
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Vercel
+.vercel
+
+# Node (if you add tooling later)
+node_modules/
+
+# Local backups
+*.backup
+*.bak
