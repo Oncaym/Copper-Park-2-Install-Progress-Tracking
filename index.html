@@ -3382,73 +3382,103 @@ function setupPlanZoomPan() {
     planZoom(factor, cx, cy);
   }, { passive: false });
 
-  // ----- Touch: pinch zoom + 1-finger pan (when zoomed) -----
-  let pinch = null, pan = null;
-  let suppressClickUntil = 0;   // ms timestamp — clicks before this are swallowed (we panned, not tapped)
-  const PAN_THRESHOLD = 6;      // px before a tap becomes a pan
+  // ----- Unified Pointer Events: 1-pointer pan, 2-pointer pinch -----
+  // Works for touch + mouse + stylus uniformly. iOS Safari requires
+  // touch-action:none on the element (already set in CSS) so we own gestures.
+  const pointers = new Map();             // pointerId → { x, y, sx, sy }
+  let pinchPrevDist = 0;
+  let panActive = false;
+  let suppressClickUntil = 0;
+  const PAN_THRESHOLD = 5;
 
-  vp.addEventListener('touchstart', (e) => {
+  const isMarker = (el) => el && el.closest && el.closest('.plan-marker, .glass-marker');
+
+  function pointersCenter() {
+    let cx = 0, cy = 0, n = 0;
+    pointers.forEach(p => { cx += p.x; cy += p.y; n++; });
+    return n ? { x: cx / n, y: cy / n } : { x: 0, y: 0 };
+  }
+  function pointersDist() {
+    if (pointers.size < 2) return 0;
+    const arr = [...pointers.values()];
+    return Math.hypot(arr[0].x - arr[1].x, arr[0].y - arr[1].y);
+  }
+
+  vp.addEventListener('pointerdown', (e) => {
     if (placeMode) return;
-    if (e.touches.length === 2) {
-      const [a, b] = e.touches;
-      const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-      pinch = { dist };
-      pan = null;
-      e.preventDefault();
-    } else if (e.touches.length === 1) {
-      if (planView.s <= 1) return; // nothing to pan at base zoom
-      // Track the start even if the finger lands on a marker —
-      // a small move should still pan; a still tap still opens the marker.
-      pan = {
-        x: e.touches[0].clientX, y: e.touches[0].clientY,
-        sx: e.touches[0].clientX, sy: e.touches[0].clientY,
-        active: false
-      };
-    }
-  }, { passive: false });
+    // In edit mode, let markers handle their own drag — don't capture them here.
+    const editMode = document.getElementById('editPositionMode')?.checked;
+    if (editMode && isMarker(e.target)) return;
 
-  vp.addEventListener('touchmove', (e) => {
-    if (pinch && e.touches.length === 2) {
-      e.preventDefault();
-      const [a, b] = e.touches;
-      const r = vp.getBoundingClientRect();
-      const cx = (a.clientX + b.clientX) / 2 - r.left;
-      const cy = (a.clientY + b.clientY) / 2 - r.top;
-      const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-      const factor = dist / pinch.dist;
-      planZoom(factor, cx, cy);
-      pinch.dist = dist;
-    } else if (pan && e.touches.length === 1) {
-      const t = e.touches[0];
-      if (!pan.active) {
-        // Not panning yet — check threshold against the start point
-        if (Math.hypot(t.clientX - pan.sx, t.clientY - pan.sy) < PAN_THRESHOLD) return;
-        pan.active = true;
-      }
-      e.preventDefault();
-      const dx = t.clientX - pan.x;
-      const dy = t.clientY - pan.y;
-      planView.tx += dx;
-      planView.ty += dy;
-      clampPlanPan();
-      applyPlanTransform();
-      pan.x = t.clientX;
-      pan.y = t.clientY;
-    }
-  }, { passive: false });
+    pointers.set(e.pointerId, {
+      x: e.clientX, y: e.clientY,
+      sx: e.clientX, sy: e.clientY,
+    });
+    try { vp.setPointerCapture(e.pointerId); } catch(_) {}
 
-  vp.addEventListener('touchend', (e) => {
-    if (e.touches.length < 2) pinch = null;
-    if (e.touches.length === 0) {
-      if (pan && pan.active) {
-        // We dragged — swallow the synthetic click iOS fires next so we don't open a marker modal
-        suppressClickUntil = Date.now() + 400;
-      }
-      pan = null;
+    if (pointers.size === 2) {
+      pinchPrevDist = pointersDist();
     }
   });
 
-  // Capture-phase click guard: if the previous touch was a pan, eat the click
+  vp.addEventListener('pointermove', (e) => {
+    const p = pointers.get(e.pointerId);
+    if (!p) return;
+    const dx = e.clientX - p.x;
+    const dy = e.clientY - p.y;
+    p.x = e.clientX; p.y = e.clientY;
+
+    if (pointers.size === 2) {
+      // Pinch + pan together
+      e.preventDefault();
+      const r = vp.getBoundingClientRect();
+      const c = pointersCenter();
+      const cx = c.x - r.left, cy = c.y - r.top;
+      const dist = pointersDist();
+      if (pinchPrevDist > 0) {
+        const factor = dist / pinchPrevDist;
+        planZoom(factor, cx, cy);
+      }
+      pinchPrevDist = dist;
+      panActive = true;
+      return;
+    }
+
+    // Single pointer pan
+    if (!panActive) {
+      if (Math.hypot(e.clientX - p.sx, e.clientY - p.sy) < PAN_THRESHOLD) return;
+      panActive = true;
+      // At base zoom, auto-zoom on first drag so the gesture actually moves the map
+      if (planView.s <= 1) {
+        const r = vp.getBoundingClientRect();
+        planZoom(1.8, p.sx - r.left, p.sy - r.top);
+      }
+    }
+    e.preventDefault();
+    planView.tx += dx;
+    planView.ty += dy;
+    clampPlanPan();
+    applyPlanTransform();
+  });
+
+  function endPointer(e) {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.delete(e.pointerId);
+    try { vp.releasePointerCapture(e.pointerId); } catch(_) {}
+    if (pointers.size < 2) pinchPrevDist = 0;
+    if (pointers.size === 0) {
+      if (panActive) suppressClickUntil = Date.now() + 350;
+      panActive = false;
+    }
+  }
+  vp.addEventListener('pointerup', endPointer);
+  vp.addEventListener('pointercancel', endPointer);
+  vp.addEventListener('pointerleave', (e) => {
+    // Only end if we actually left (not just child transitions)
+    if (e.target === vp) endPointer(e);
+  });
+
+  // Eat the synthetic click that fires after a drag so markers don't open
   vp.addEventListener('click', (e) => {
     if (Date.now() < suppressClickUntil) {
       e.preventDefault();
@@ -3456,74 +3486,22 @@ function setupPlanZoomPan() {
     }
   }, true);
 
-  // ----- Mouse drag: pan with left-button drag (desktop) -----
-  // Always enabled (even at base zoom we attempt; clampPlanPan keeps it inside).
-  // Skip when interacting with markers or in placement/edit modes that need clicks.
-  let mPan = null;
-  let mSuppressClickUntil = 0;
-  const M_PAN_THRESHOLD = 4;
-
-  vp.addEventListener('mousedown', (e) => {
-    if (e.button !== 0) return;
-    if (placeMode) return;
-    // Don't start a pan if the user grabbed a marker (edit-mode drag uses its own handler)
-    if (e.target.closest && e.target.closest('.plan-marker, .glass-marker')) return;
-    mPan = {
-      x: e.clientX, y: e.clientY,
-      sx: e.clientX, sy: e.clientY,
-      active: false,
-    };
-  });
-
-  window.addEventListener('mousemove', (e) => {
-    if (!mPan) return;
-    if (!mPan.active) {
-      if (Math.hypot(e.clientX - mPan.sx, e.clientY - mPan.sy) < M_PAN_THRESHOLD) return;
-      mPan.active = true;
-      vp.style.cursor = 'grabbing';
-    }
-    // Nothing to pan when fully zoomed out — the map fills the viewport
-    if (planView.s <= 1) { mPan.x = e.clientX; mPan.y = e.clientY; return; }
-    const dx = e.clientX - mPan.x;
-    const dy = e.clientY - mPan.y;
-    planView.tx += dx;
-    planView.ty += dy;
-    clampPlanPan();
-    applyPlanTransform();
-    mPan.x = e.clientX;
-    mPan.y = e.clientY;
-  });
-
-  window.addEventListener('mouseup', () => {
-    if (mPan && mPan.active) {
-      mSuppressClickUntil = Date.now() + 300;
-    }
-    mPan = null;
-    vp.style.cursor = '';
-  });
-
-  // Swallow the click that fires right after a drag so markers don't open
-  vp.addEventListener('click', (e) => {
-    if (Date.now() < mSuppressClickUntil) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-  }, true);
-
-  // Cursor hint
+  // Cursor hint for desktop
   vp.style.cursor = 'grab';
+  vp.addEventListener('pointerdown', () => { vp.style.cursor = 'grabbing'; });
+  vp.addEventListener('pointerup',   () => { vp.style.cursor = 'grab'; });
 
   // ----- Double-click / double-tap to reset -----
   vp.addEventListener('dblclick', (e) => {
     if (placeMode) return;
-    if (e.target.closest && e.target.closest('.plan-marker')) return;
+    if (isMarker(e.target)) return;
     planZoomReset();
   });
   let lastTap = 0;
-  vp.addEventListener('touchstart', (e) => {
-    if (e.touches.length !== 1) return;
+  vp.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'touch') return;
     const now = Date.now();
-    if (now - lastTap < 300 && !(e.target.closest && e.target.closest('.plan-marker'))) {
+    if (now - lastTap < 300 && !isMarker(e.target)) {
       planZoomReset();
     }
     lastTap = now;
