@@ -59,18 +59,11 @@
 </script>
 
 <meta charset="UTF-8" data-om-id="17a02737:2">
-<meta name="viewport" content="width=device-width, initial-scale=1.0" data-om-id="17a02737:3">
-<title>Cooper Park 2 — Installation Progress Monitor (Cloud)</title>
-
-<!-- ============================================================
-     CLOUD SYNC — Firebase Auth + Realtime DB
-     Setup: see SETUP.md. Fill in firebase-config.js to enable.
-     ============================================================ -->
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
-<script src="firebase-config.js"></script>
-<script src="cloud-sync.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" data-om-id="17a02737:3">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f1419">
+<title>Cooper Park 2 — Installation Progress Monitor</title>
 
 
 
@@ -903,6 +896,219 @@
     background: var(--panel); border: 1px solid var(--accent);
     border-radius: 8px; flex-wrap: wrap;
   }
+
+  /* ===========================================================
+     MOBILE / iOS RESPONSIVE LAYER
+     - Tap-target sizing, safe-area insets, compact chrome
+     - Activates at <= 820px (tablet down) and refines at <= 480px
+     =========================================================== */
+  @supports (padding: max(0px)) {
+    body {
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+  }
+
+  @media (max-width: 820px) {
+    /* Overflow safety: prevent Chart.js's inline-sized canvases (834px wide)
+       from forcing grid tracks wider than the viewport */
+    body { overflow-x: hidden; }
+    .grid-2 > * { min-width: 0; }
+    .chart-wrap {
+      width: 100%;
+      min-width: 0;
+      overflow: hidden;
+      height: 220px;
+    }
+    .chart-wrap canvas {
+      max-width: 100% !important;
+      height: 100% !important;
+      width: auto !important;
+    }
+
+    /* ----- Header ----- */
+    header {
+      padding: 12px 14px;
+      padding-top: max(12px, env(safe-area-inset-top));
+    }
+    .header-inner { gap: 10px; }
+    .header-title h1 { font-size: 16px; line-height: 1.2; margin-bottom: 2px; }
+    .header-title p  { font-size: 11px; }
+    .header-actions {
+      width: 100%;
+      gap: 6px;
+      overflow-x: auto;
+      flex-wrap: nowrap;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      padding-bottom: 2px;
+    }
+    .header-actions::-webkit-scrollbar { display: none; }
+    .header-actions .btn {
+      flex: 0 0 auto;
+      padding: 8px 12px;
+      font-size: 12px;
+      min-height: 36px;
+    }
+
+    /* ----- Page padding ----- */
+    main { padding: 14px 12px calc(48px + env(safe-area-inset-bottom)); }
+
+    /* ----- KPI grid: 2 columns ----- */
+    .kpi-grid {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .kpi-card { padding: 12px 12px 12px 14px; border-radius: 8px; }
+    .kpi-label { font-size: 10px; letter-spacing: 0.3px; margin-bottom: 4px; }
+    .kpi-value { font-size: 22px; }
+    .kpi-sub   { font-size: 10px; margin-top: 4px; }
+
+    /* ----- Sections ----- */
+    .section { padding: 14px 12px; border-radius: 8px; margin-bottom: 14px; }
+    .section-header { margin-bottom: 12px; gap: 8px; }
+    .section-title  { font-size: 13px; }
+    .section-title::before { width: 3px; height: 14px; }
+
+    /* ----- Buttons (tap targets) ----- */
+    .btn { padding: 9px 12px; font-size: 12px; min-height: 36px; border-radius: 7px; }
+
+    /* ----- Floor plan viewport ----- */
+    .plan-viewport {
+      min-height: 320px;
+      border-radius: 6px;
+    }
+    .plan-zoom-controls {
+      top: 6px; right: 6px;
+      padding: 2px;
+      gap: 2px;
+      border-radius: 7px;
+      background: rgba(15,20,25,0.78);
+    }
+    .plan-zoom-controls button {
+      width: 30px;
+      height: 30px;
+      font-size: 16px;
+      border-radius: 5px;
+    }
+    .plan-zoom-controls .zoom-label {
+      font-size: 10px;
+      min-width: 34px;
+      padding: 0 4px;
+    }
+
+    /* Markers — slightly larger tap area on mobile */
+    .plan-marker {
+      width: 20px; height: 20px;
+      font-size: 8px;
+      border-width: 2px;
+    }
+    .plan-marker.has-louver::after {
+      top: -6px; right: -6px;
+      width: 11px; height: 11px;
+      font-size: 7px;
+    }
+
+    /* Plan toolbar wraps to its own block */
+    .plan-toolbar {
+      padding: 8px 10px;
+      gap: 8px;
+      font-size: 11px;
+      border-radius: 7px;
+    }
+    .plan-toolbar > * { font-size: 11px; }
+
+    /* ----- Two-column → already collapses at 1100px ----- */
+    .grid-2 { gap: 14px; margin-bottom: 14px; }
+
+    /* ----- Unit grid ----- */
+    .unit-grid {
+      grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+      gap: 6px;
+    }
+    .unit-cell { padding: 8px 6px; border-radius: 5px; }
+    .unit-cell .unit-id { font-size: 11px; }
+    .unit-cell .unit-meta { font-size: 9px; }
+
+    /* ----- Tables: horizontal scroll, smaller text ----- */
+    .table-wrap {
+      max-height: 60vh;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .table-wrap table { font-size: 11px; min-width: 520px; }
+    .table-wrap th, .table-wrap td { padding: 8px 8px; white-space: nowrap; }
+
+    /* ----- Filter bar / chips ----- */
+    .filter-bar, .tabs {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      flex-wrap: nowrap;
+      scrollbar-width: none;
+    }
+    .filter-bar::-webkit-scrollbar, .tabs::-webkit-scrollbar { display: none; }
+    .filter-chip, .tab { flex: 0 0 auto; }
+
+    /* ----- Legend wraps ----- */
+    .legend { gap: 10px 12px; font-size: 11px; flex-wrap: wrap; }
+
+    /* ----- Modals: fill the screen ----- */
+    .modal-overlay { align-items: flex-end; padding: 0; }
+    .modal {
+      width: 100%;
+      max-width: 100%;
+      max-height: 92vh;
+      border-radius: 14px 14px 0 0;
+      padding: 18px 16px calc(20px + env(safe-area-inset-bottom));
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .modal h3 { font-size: 15px; margin-bottom: 14px; }
+    .modal input, .modal select, .modal textarea {
+      font-size: 16px;   /* prevents iOS zoom-on-focus */
+    }
+    .modal-actions { position: sticky; bottom: 0; background: var(--panel); padding-top: 10px; }
+
+    /* Glass panel row stacks */
+    .glass-panel-row,
+    .glass-panel-th {
+      grid-template-columns: 1fr 1fr;
+      row-gap: 4px;
+    }
+    .glass-panel-th { display: none !important; }
+    .glass-panel-row .btn-remove { grid-column: 2; justify-self: end; }
+
+    /* Tabs inside modal */
+    .modal-tab { font-size: 12px; padding: 8px 0; }
+
+    /* Glass batch bar */
+    #glassBatchBar { padding: 6px 10px; font-size: 11px; }
+    #glassBatchBar select, #glassBatchBar input { font-size: 12px; }
+
+    /* Glass markers */
+    .glass-marker { width: 18px; height: 18px; font-size: 8px; }
+
+    /* Banner */
+    .glass-banner { padding: 10px 12px; gap: 8px; }
+  }
+
+  @media (max-width: 480px) {
+    /* iPhone-class refinements */
+    .header-title h1 { font-size: 15px; }
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .kpi-value { font-size: 19px; }
+    .plan-viewport { min-height: 280px; }
+    .plan-marker { width: 18px; height: 18px; }
+    main { padding: 12px 10px calc(40px + env(safe-area-inset-bottom)); }
+    .section { padding: 12px 10px; }
+  }
+
+  /* Pointer/coarse — touch hover suppression */
+  @media (hover: none) {
+    .plan-marker:hover { transform: translate(-50%, -50%); }
+    .unit-cell:hover { transform: none; border-color: var(--border); }
+  }
 </style>
 <style data-designer-overlay="1"></style></head>
 <body data-om-id="17a02737:4">
@@ -922,6 +1128,8 @@
       <button class="btn" onclick="exportData()" data-om-id="17a02737:15"><span data-i18n="btn_export" data-om-id="17a02737:16">⬇ Export JSON</span></button>
       <button class="btn" onclick="document.getElementById('importFile').click()" data-om-id="17a02737:17"><span data-i18n="btn_import" data-om-id="17a02737:18">⬆ Import JSON</span></button>
       <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)" data-om-id="17a02737:19">
+      <button class="btn btn-primary" onclick="saveToHTML()" title="有未保存到 HTML 的修改 — 点击保存
+Unsaved changes — click to save" data-om-id="17a02737:20" style="box-shadow: 0 0 0 2px var(--orange);">💾 Save to HTML</button>
       <button class="btn btn-primary" onclick="openAddLog()" data-om-id="17a02737:21"><span data-i18n="btn_add_log" data-om-id="17a02737:22">+ Add Daily Log</span></button>
       <button class="btn btn-danger" onclick="resetData()" data-om-id="17a02737:23"><span data-i18n="btn_reset" data-om-id="17a02737:24">↻ Reset</span></button>
     </div>
@@ -2885,44 +3093,14 @@ function loadState() {
   };
 }
 
-function saveState(showToast = true, description) {
-  // Don't echo a save that was triggered by applying a remote snapshot —
-  // otherwise two clients ping-pong updates back and forth forever.
-  const isRemoteApply = window._cloudIsSuppressed && window._cloudIsSuppressed();
-
+function saveState(showToast = true) {
   state.updatedAt = new Date().toISOString();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   // mark "unsaved-to-file" so the Save to HTML button can pulse
   markDirty();
   render();
-  if (showToast && !isRemoteApply) toast(t('toast_saved'));
-
-  // ---- CLOUD SYNC: push to Firebase Realtime DB (debounced ~350ms) ----
-  if (!isRemoteApply && window._cloudQueuePush) {
-    window._cloudQueuePush(state, description);
-  }
+  if (showToast) toast(t('toast_saved'));
 }
-
-/* Called by cloud-sync.js when another client pushes a state update.
-   Replaces local state with the remote snapshot and re-renders WITHOUT
-   pushing back to the cloud (the suppress flag is set by the caller). */
-window._cloudApplyRemoteState = function(remoteState, meta) {
-  if (!remoteState || !remoteState.units) return;
-  if (window._cloudSetSuppress) window._cloudSetSuppress(true);
-  try {
-    state = remoteState;
-    window.state = state;
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
-    if (typeof render === 'function') render();
-    if (typeof toast === 'function' && meta && meta.by) {
-      const who = String(meta.by).split('@')[0];
-      const what = meta.desc ? ` · ${meta.desc}` : '';
-      toast(`↻ Updated by ${who}${what}`);
-    }
-  } finally {
-    if (window._cloudSetSuppress) window._cloudSetSuppress(false);
-  }
-};
 
 /* -------- Embed-in-HTML save (team-shared workflow) -------- */
 let isDirty = false;
@@ -3028,8 +3206,10 @@ async function saveToHTML() {
   toast('已下载更新的 HTML — 替换团队共享文件 / Updated HTML downloaded');
 }
 
-// Cloud sync handles all persistence — no need to warn about unsaved local changes.
-// (beforeunload removed; isDirty is still tracked harmlessly for any code that reads it)
+// Warn before closing if there are unsaved-to-HTML changes
+window.addEventListener('beforeunload', (e) => {
+  if (isDirty) { e.preventDefault(); e.returnValue = ''; }
+});
 
 function toast(msg) {
   const t = document.getElementById('toast');
@@ -3852,7 +4032,6 @@ function importData(e) {
       const data = JSON.parse(ev.target.result);
       if (data.units && data.log) {
         state = data;
-        window.state = state;
         saveState();
         toast(t('msg_import_ok'));
       } else { toast(t('alert_invalid_format')); }
@@ -3866,7 +4045,6 @@ function resetData() {
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(BASELINE_KEY);
   state = loadState();
-  window.state = state;
   saveState(false);
   toast(t('msg_reset'));
 }
@@ -4085,23 +4263,8 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
 
 /* boot */
 function initApp() {
-  // ---- CLOUD SYNC: kick off Firebase Auth + Realtime DB sync ----
-  // Cloud-sync mounts a login gate. The app keeps booting underneath
-  // (so when the user signs in, everything's already initialized).
-  if (window.CloudSync && window.FIREBASE_CONFIG) {
-    try { window.CloudSync.init(window.FIREBASE_CONFIG); }
-    catch (e) { console.error('CloudSync init failed:', e); }
-  } else if (!window.FIREBASE_CONFIG) {
-    console.warn('CloudSync: firebase-config.js not loaded — running in local-only mode.');
-  }
-  // Expose render/toast on window so cloud-sync.js can call them
-  window.render = render;
-  window.toast  = toast;
-
   // Load state NOW that the entire <body> (including __embedded_state) is parsed.
   if (!state) state = loadState();
-  // Expose to cloud-sync.js so it can snapshot the baseline for read-only revert.
-  window.state = state;
 
   // When bundled, ensure the initial GF plan src points to the blob URL too
   if (window.__resources && window.__resources.planGF) {
