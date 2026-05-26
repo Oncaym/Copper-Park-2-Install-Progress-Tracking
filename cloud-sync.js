@@ -30,6 +30,14 @@
   let pushTimer = null;
   let lastDescription = null;      // optional description passed to next push (for history)
 
+  // Read-only mode: user is signed in but not in the /allowlist node.
+  // We detect this via a permission_denied error on the first state read
+  // (or on the presence write). When true, any saveState() attempt is
+  // intercepted: we toast the user and revert local state to the last
+  // known cloud snapshot.
+  let isReadOnly = false;
+  let lastRemoteSnapshot = null;   // last good remote state (for revert)
+
   // ---------- Public API ----------
   window.CloudSync = {
     init(config) {
@@ -54,6 +62,7 @@
     flush() { if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; flushPush(); } },
     isSignedIn() { return !!currentUser; },
     currentUser() { return currentUser; },
+    isReadOnly() { return isReadOnly; },
     logout() { if (auth) auth.signOut(); },
     openHistory() { openHistoryPanel(); },
   };
@@ -182,6 +191,10 @@
       subscribeToState();
       subscribeToPresence();
     } else {
+      // Clear read-only flag + banner so the next sign-in starts clean.
+      isReadOnly = false;
+      lastRemoteSnapshot = null;
+      hideReadOnlyBanner();
       unmountStatusBadge();
       showAuthGate();
       // Stop listening (Firebase auto-unsubs when ref handle is dropped, but be defensive)
@@ -286,28 +299,80 @@
         }
         return;
       }
+      // Stash the cloud snapshot so we can revert read-only users to it.
+      const { _clientId, _ts, _by, _desc, ...stateData } = remote;
+      lastRemoteSnapshot = JSON.parse(JSON.stringify(stateData));
+
       // Our own echo — ignore.
       if (remote._clientId === CLIENT_ID) return;
 
       // Remote update from another client — replace local state.
-      const { _clientId, _ts, _by, _desc, ...stateData } = remote;
       window._cloudApplyRemoteState(stateData, { by: _by, ts: _ts, desc: _desc });
     }, (err) => {
       console.error('Firebase state listen failed:', err);
       setConnState('offline');
+      // PERMISSION_DENIED on /state means this account is not in /allowlist.
+      // Flip into read-only mode so save attempts are blocked locally.
+      if (err && (err.code === 'PERMISSION_DENIED' || /permission/i.test(err.message || ''))) {
+        enterReadOnlyMode('你的账号不在白名单中，无法编辑（只读模式）');
+      }
     });
+  }
+
+  // ---------- Read-only mode ----------
+  function enterReadOnlyMode(reason) {
+    if (isReadOnly) return;
+    isReadOnly = true;
+    console.warn('[CloudSync] read-only mode:', reason);
+    showReadOnlyBanner(reason);
+    // Snapshot whatever the app currently has as the "good" baseline so
+    // we have something to revert to even if we never got a cloud read.
+    if (!lastRemoteSnapshot && window.state) {
+      lastRemoteSnapshot = JSON.parse(JSON.stringify(window.state));
+    }
+  }
+
+  function showReadOnlyBanner(reason) {
+    if (document.getElementById('cs-readonly-banner')) return;
+    const bar = document.createElement('div');
+    bar.id = 'cs-readonly-banner';
+    bar.innerHTML = `
+      <span class="cs-ro-icon">🔒</span>
+      <span class="cs-ro-text">${escapeHtml(reason || '只读模式：你没有编辑权限')}</span>
+      <span class="cs-ro-hint">如需编辑权限，请联系管理员把你的邮箱加入白名单。</span>
+    `;
+    document.body.appendChild(bar);
+  }
+  function hideReadOnlyBanner() {
+    const el = document.getElementById('cs-readonly-banner');
+    if (el) el.remove();
   }
 
   // Called by the HTML's monkey-patched saveState() — debounces ~350ms.
   window._cloudQueuePush = function(state, description) {
     if (suppressNextSave) return;       // applying a remote update, don't echo
     if (!currentUser) return;            // not signed in, nothing to push
+
+    // Read-only user — block the save and revert UI to the cloud snapshot.
+    if (isReadOnly) {
+      if (window.toast) window.toast('⚠ 你没有编辑权限，更改未保存');
+      revertToCloudSnapshot();
+      return;
+    }
+
     pendingState = state;
     if (description) lastDescription = description;
     setConnState('syncing');
     if (pushTimer) clearTimeout(pushTimer);
     pushTimer = setTimeout(flushPush, 350);
   };
+
+  function revertToCloudSnapshot() {
+    if (!lastRemoteSnapshot || !window._cloudApplyRemoteState) return;
+    // Deep-clone so the caller can't mutate our baseline by reference.
+    const fresh = JSON.parse(JSON.stringify(lastRemoteSnapshot));
+    window._cloudApplyRemoteState(fresh, { by: 'cloud', desc: '(已回滚 — 无编辑权限)' });
+  }
 
   function flushPush() {
     pushTimer = null;
@@ -337,6 +402,15 @@
     }).catch((err) => {
       console.error('State push failed:', err);
       setConnState('offline');
+      // PERMISSION_DENIED here means the user is not allowed to write —
+      // either removed from /allowlist mid-session, or never was.
+      // Flip to read-only and revert their local changes.
+      if (err && (err.code === 'PERMISSION_DENIED' || /permission/i.test(err.message || ''))) {
+        enterReadOnlyMode('你的账号不在白名单中，无法编辑（只读模式）');
+        if (window.toast) window.toast('⚠ 你没有编辑权限，更改未保存');
+        revertToCloudSnapshot();
+        return;
+      }
       // Surface to user
       if (window.toast) window.toast('⚠ Cloud save failed: ' + err.message);
     });
@@ -389,6 +463,12 @@
           email: currentUser.email,
           since: firebase.database.ServerValue.TIMESTAMP,
           clientId: CLIENT_ID,
+        }).catch((err) => {
+          // Writing presence failed → almost certainly not in /allowlist.
+          // This is the fastest signal that this user is read-only.
+          if (err && (err.code === 'PERMISSION_DENIED' || /permission/i.test(err.message || ''))) {
+            enterReadOnlyMode('你的账号不在白名单中，无法编辑（只读模式）');
+          }
         });
       }
     });
@@ -693,6 +773,25 @@
       font-size: 12px; font-weight: 500; font-family: inherit;
     }
     .cs-setup-dismiss:hover { background: rgba(0,0,0,0.25); }
+
+    /* Read-only banner — shown at the top when user is not in /allowlist */
+    #cs-readonly-banner {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 99997;
+      background: linear-gradient(90deg, #5a4a3a, #3d2f24);
+      color: #fde8d0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 12px;
+      padding: 8px 20px;
+      display: flex; align-items: center; gap: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+      border-bottom: 1px solid rgba(232, 93, 31, 0.4);
+    }
+    #cs-readonly-banner .cs-ro-icon { font-size: 14px; }
+    #cs-readonly-banner .cs-ro-text { font-weight: 600; color: #fff; }
+    #cs-readonly-banner .cs-ro-hint { color: #c9b9a3; font-size: 11px; }
+    @media (max-width: 720px) {
+      #cs-readonly-banner .cs-ro-hint { display: none; }
+    }
 
     @media (max-width: 720px) {
       .cs-user-email { display: none; }
