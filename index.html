@@ -1223,7 +1223,7 @@
       <button class="btn btn-primary" onclick="applyGlassBatch()" style="font-size:12px;padding:4px 12px">✓ Apply to Selected</button>
       <button class="btn" onclick="clearGlassBatch()" style="font-size:12px;padding:4px 12px">✕ Clear</button>
     </div>
-    <div class="plan-viewport" id="planViewport" data-zoom-bound="1" data-om-id="17a02737:86">
+    <div class="plan-viewport" id="planViewport" data-om-id="17a02737:86">
       <div class="plan-zoom-controls" data-om-id="17a02737:87">
         <button onclick="planZoom(0.7)" title="缩小 / Zoom out" data-om-id="17a02737:88">−</button>
         <button onclick="planZoomReset()" title="重置 / Reset" data-om-id="17a02737:89"><span class="zoom-label" id="zoomLabel" data-om-id="17a02737:90">100%</span></button>
@@ -3368,8 +3368,8 @@ function planZoomReset() {
 
 function setupPlanZoomPan() {
   const vp = document.getElementById('planViewport');
-  if (!vp || vp.dataset.zoomBound) return;
-  vp.dataset.zoomBound = '1';
+  if (!vp || vp._planZoomBound) return;
+  vp._planZoomBound = true;
 
   // ----- Wheel: zoom centered on cursor -----
   vp.addEventListener('wheel', (e) => {
