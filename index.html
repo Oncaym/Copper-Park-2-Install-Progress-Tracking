@@ -63,7 +63,17 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#0f1419">
-<title>Cooper Park 2 — Installation Progress Monitor</title>
+<title>Cooper Park 2 — Installation Progress Monitor (Cloud)</title>
+
+<!-- ============================================================
+     CLOUD SYNC — Firebase Auth + Realtime DB
+     Setup: see SETUP.md. Fill in firebase-config.js to enable.
+     ============================================================ -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="cloud-sync.js"></script>
 
 
 
@@ -1128,8 +1138,6 @@
       <button class="btn" onclick="exportData()" data-om-id="17a02737:15"><span data-i18n="btn_export" data-om-id="17a02737:16">⬇ Export JSON</span></button>
       <button class="btn" onclick="document.getElementById('importFile').click()" data-om-id="17a02737:17"><span data-i18n="btn_import" data-om-id="17a02737:18">⬆ Import JSON</span></button>
       <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)" data-om-id="17a02737:19">
-      <button class="btn btn-primary" onclick="saveToHTML()" title="有未保存到 HTML 的修改 — 点击保存
-Unsaved changes — click to save" data-om-id="17a02737:20" style="box-shadow: 0 0 0 2px var(--orange);">💾 Save to HTML</button>
       <button class="btn btn-primary" onclick="openAddLog()" data-om-id="17a02737:21"><span data-i18n="btn_add_log" data-om-id="17a02737:22">+ Add Daily Log</span></button>
       <button class="btn btn-danger" onclick="resetData()" data-om-id="17a02737:23"><span data-i18n="btn_reset" data-om-id="17a02737:24">↻ Reset</span></button>
     </div>
@@ -3093,14 +3101,43 @@ function loadState() {
   };
 }
 
-function saveState(showToast = true) {
+function saveState(showToast = true, description) {
+  // Don't echo a save that was triggered by applying a remote snapshot —
+  // otherwise two clients ping-pong updates back and forth forever.
+  const isRemoteApply = window._cloudIsSuppressed && window._cloudIsSuppressed();
+
   state.updatedAt = new Date().toISOString();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   // mark "unsaved-to-file" so the Save to HTML button can pulse
   markDirty();
   render();
-  if (showToast) toast(t('toast_saved'));
+  if (showToast && !isRemoteApply) toast(t('toast_saved'));
+
+  // ---- CLOUD SYNC: push to Firebase Realtime DB (debounced ~350ms) ----
+  if (!isRemoteApply && window._cloudQueuePush) {
+    window._cloudQueuePush(state, description);
+  }
 }
+
+/* Called by cloud-sync.js when another client pushes a state update.
+   Replaces local state with the remote snapshot and re-renders WITHOUT
+   pushing back to the cloud (the suppress flag is set by the caller). */
+window._cloudApplyRemoteState = function(remoteState, meta) {
+  if (!remoteState || !remoteState.units) return;
+  if (window._cloudSetSuppress) window._cloudSetSuppress(true);
+  try {
+    state = remoteState;
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+    if (typeof render === 'function') render();
+    if (typeof toast === 'function' && meta && meta.by) {
+      const who = String(meta.by).split('@')[0];
+      const what = meta.desc ? ` · ${meta.desc}` : '';
+      toast(`↻ Updated by ${who}${what}`);
+    }
+  } finally {
+    if (window._cloudSetSuppress) window._cloudSetSuppress(false);
+  }
+};
 
 /* -------- Embed-in-HTML save (team-shared workflow) -------- */
 let isDirty = false;
@@ -3206,10 +3243,8 @@ async function saveToHTML() {
   toast('已下载更新的 HTML — 替换团队共享文件 / Updated HTML downloaded');
 }
 
-// Warn before closing if there are unsaved-to-HTML changes
-window.addEventListener('beforeunload', (e) => {
-  if (isDirty) { e.preventDefault(); e.returnValue = ''; }
-});
+// Cloud sync handles all persistence — no need to warn about unsaved local changes.
+// (beforeunload removed; isDirty is still tracked harmlessly for any code that reads it)
 
 function toast(msg) {
   const t = document.getElementById('toast');
@@ -4287,6 +4322,19 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
 
 /* boot */
 function initApp() {
+  // ---- CLOUD SYNC: kick off Firebase Auth + Realtime DB sync ----
+  // Cloud-sync mounts a login gate. The app keeps booting underneath
+  // (so when the user signs in, everything's already initialized).
+  if (window.CloudSync && window.FIREBASE_CONFIG) {
+    try { window.CloudSync.init(window.FIREBASE_CONFIG); }
+    catch (e) { console.error('CloudSync init failed:', e); }
+  } else if (!window.FIREBASE_CONFIG) {
+    console.warn('CloudSync: firebase-config.js not loaded — running in local-only mode.');
+  }
+  // Expose render/toast on window so cloud-sync.js can call them
+  window.render = render;
+  window.toast  = toast;
+
   // Load state NOW that the entire <body> (including __embedded_state) is parsed.
   if (!state) state = loadState();
 
