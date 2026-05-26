@@ -1135,9 +1135,6 @@
         <button class="lang-btn" data-lang="zh" data-om-id="17a02737:13">中文</button>
         <button class="lang-btn" data-lang="ko" data-om-id="17a02737:14">한국어</button>
       </div>
-      <button class="btn" onclick="exportData()" data-om-id="17a02737:15"><span data-i18n="btn_export" data-om-id="17a02737:16">⬇ Export JSON</span></button>
-      <button class="btn" onclick="document.getElementById('importFile').click()" data-om-id="17a02737:17"><span data-i18n="btn_import" data-om-id="17a02737:18">⬆ Import JSON</span></button>
-      <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)" data-om-id="17a02737:19">
       <button class="btn btn-primary" onclick="openAddLog()" data-om-id="17a02737:21"><span data-i18n="btn_add_log" data-om-id="17a02737:22">+ Add Daily Log</span></button>
       <button class="btn btn-danger" onclick="resetData()" data-om-id="17a02737:23"><span data-i18n="btn_reset" data-om-id="17a02737:24">↻ Reset</span></button>
     </div>
@@ -3458,6 +3455,63 @@ function setupPlanZoomPan() {
       e.stopPropagation();
     }
   }, true);
+
+  // ----- Mouse drag: pan with left-button drag (desktop) -----
+  // Always enabled (even at base zoom we attempt; clampPlanPan keeps it inside).
+  // Skip when interacting with markers or in placement/edit modes that need clicks.
+  let mPan = null;
+  let mSuppressClickUntil = 0;
+  const M_PAN_THRESHOLD = 4;
+
+  vp.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    if (placeMode) return;
+    // Don't start a pan if the user grabbed a marker (edit-mode drag uses its own handler)
+    if (e.target.closest && e.target.closest('.plan-marker, .glass-marker')) return;
+    mPan = {
+      x: e.clientX, y: e.clientY,
+      sx: e.clientX, sy: e.clientY,
+      active: false,
+    };
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!mPan) return;
+    if (!mPan.active) {
+      if (Math.hypot(e.clientX - mPan.sx, e.clientY - mPan.sy) < M_PAN_THRESHOLD) return;
+      mPan.active = true;
+      vp.style.cursor = 'grabbing';
+    }
+    // Nothing to pan when fully zoomed out — the map fills the viewport
+    if (planView.s <= 1) { mPan.x = e.clientX; mPan.y = e.clientY; return; }
+    const dx = e.clientX - mPan.x;
+    const dy = e.clientY - mPan.y;
+    planView.tx += dx;
+    planView.ty += dy;
+    clampPlanPan();
+    applyPlanTransform();
+    mPan.x = e.clientX;
+    mPan.y = e.clientY;
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (mPan && mPan.active) {
+      mSuppressClickUntil = Date.now() + 300;
+    }
+    mPan = null;
+    vp.style.cursor = '';
+  });
+
+  // Swallow the click that fires right after a drag so markers don't open
+  vp.addEventListener('click', (e) => {
+    if (Date.now() < mSuppressClickUntil) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, true);
+
+  // Cursor hint
+  vp.style.cursor = 'grab';
 
   // ----- Double-click / double-tap to reset -----
   vp.addEventListener('dblclick', (e) => {

@@ -30,14 +30,6 @@
   let pushTimer = null;
   let lastDescription = null;      // optional description passed to next push (for history)
 
-  // Read-only mode: user is signed in but not in the /allowlist node.
-  // We detect this via a permission_denied error on the first state read
-  // (or on the presence write). When true, any saveState() attempt is
-  // intercepted: we toast the user and revert local state to the last
-  // known cloud snapshot.
-  let isReadOnly = false;
-  let lastRemoteSnapshot = null;   // last good remote state (for revert)
-
   // ---------- Public API ----------
   window.CloudSync = {
     init(config) {
@@ -62,7 +54,6 @@
     flush() { if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; flushPush(); } },
     isSignedIn() { return !!currentUser; },
     currentUser() { return currentUser; },
-    isReadOnly() { return isReadOnly; },
     logout() { if (auth) auth.signOut(); },
     openHistory() { openHistoryPanel(); },
   };
@@ -191,10 +182,6 @@
       subscribeToState();
       subscribeToPresence();
     } else {
-      // Clear read-only flag + banner so the next sign-in starts clean.
-      isReadOnly = false;
-      lastRemoteSnapshot = null;
-      hideReadOnlyBanner();
       unmountStatusBadge();
       showAuthGate();
       // Stop listening (Firebase auto-unsubs when ref handle is dropped, but be defensive)
@@ -234,10 +221,37 @@
     document.getElementById('cs-history-btn').addEventListener('click', openHistoryPanel);
     const userBtn = document.getElementById('cs-user-btn');
     const dropdown = document.getElementById('cs-user-dropdown');
+
+    // Move the dropdown out of .header-actions (which clips with overflow-x: auto on mobile)
+    // and attach to <body>. We re-position it under the button each time it opens.
+    document.body.appendChild(dropdown);
+    dropdown.style.position = 'fixed';
+
+    function positionDropdown() {
+      const r = userBtn.getBoundingClientRect();
+      const dw = dropdown.offsetWidth || 180;
+      const vw = window.innerWidth;
+      let left = r.right - dw;
+      if (left < 8) left = 8;
+      if (left + dw > vw - 8) left = vw - dw - 8;
+      dropdown.style.top  = (r.bottom + 6) + 'px';
+      dropdown.style.left = left + 'px';
+      dropdown.style.right = 'auto';
+    }
+
     userBtn.addEventListener('click', (e) => {
       e.stopPropagation();
+      const willOpen = !dropdown.classList.contains('open');
+      if (willOpen) positionDropdown();
       dropdown.classList.toggle('open');
     });
+    window.addEventListener('resize', () => {
+      if (dropdown.classList.contains('open')) positionDropdown();
+    });
+    window.addEventListener('scroll', () => {
+      if (dropdown.classList.contains('open')) positionDropdown();
+    }, true);
+
     document.addEventListener('click', () => dropdown.classList.remove('open'));
     dropdown.addEventListener('click', (e) => {
       const action = e.target.dataset.action;
@@ -299,92 +313,28 @@
         }
         return;
       }
-      // Stash the cloud snapshot so we can revert read-only users to it.
-      const { _clientId, _ts, _by, _desc, ...stateData } = remote;
-      lastRemoteSnapshot = JSON.parse(JSON.stringify(stateData));
-
       // Our own echo — ignore.
       if (remote._clientId === CLIENT_ID) return;
 
       // Remote update from another client — replace local state.
+      const { _clientId, _ts, _by, _desc, ...stateData } = remote;
       window._cloudApplyRemoteState(stateData, { by: _by, ts: _ts, desc: _desc });
     }, (err) => {
       console.error('Firebase state listen failed:', err);
       setConnState('offline');
-      // PERMISSION_DENIED on /state means this account is not in /allowlist.
-      // Flip into read-only mode so save attempts are blocked locally.
-      if (err && (err.code === 'PERMISSION_DENIED' || /permission/i.test(err.message || ''))) {
-        enterReadOnlyMode('Your account is not on the allowlist — read-only mode');
-      }
     });
-  }
-
-  // ---------- Read-only mode ----------
-  function enterReadOnlyMode(reason) {
-    if (isReadOnly) return;
-    isReadOnly = true;
-    console.warn('[CloudSync] read-only mode:', reason);
-    showReadOnlyBanner(reason);
-    // Snapshot whatever the app currently has as the "good" baseline so
-    // we have something to revert to even if we never got a cloud read.
-    // (The HTML exposes its local `state` as `window.state` for this.)
-    if (!lastRemoteSnapshot && window.state) {
-      try {
-        lastRemoteSnapshot = JSON.parse(JSON.stringify(window.state));
-      } catch (e) {
-        console.warn('[CloudSync] failed to snapshot baseline state:', e);
-      }
-    }
-  }
-
-  function showReadOnlyBanner(reason) {
-    if (document.getElementById('cs-readonly-banner')) return;
-    const bar = document.createElement('div');
-    bar.id = 'cs-readonly-banner';
-    bar.innerHTML = `
-      <span class="cs-ro-icon">🔒</span>
-      <span class="cs-ro-text">${escapeHtml(reason || 'Read-only mode — you do not have edit permission')}</span>
-      <span class="cs-ro-hint">Ask an admin to add your email to the allowlist if you need to edit.</span>
-    `;
-    document.body.appendChild(bar);
-  }
-  function hideReadOnlyBanner() {
-    const el = document.getElementById('cs-readonly-banner');
-    if (el) el.remove();
   }
 
   // Called by the HTML's monkey-patched saveState() — debounces ~350ms.
   window._cloudQueuePush = function(state, description) {
     if (suppressNextSave) return;       // applying a remote update, don't echo
     if (!currentUser) return;            // not signed in, nothing to push
-
-    // Read-only user — block the save and revert UI to the cloud snapshot.
-    if (isReadOnly) {
-      if (window.toast) window.toast('⚠ You do not have edit permission — changes were not saved');
-      revertToCloudSnapshot();
-      return;
-    }
-
     pendingState = state;
     if (description) lastDescription = description;
     setConnState('syncing');
     if (pushTimer) clearTimeout(pushTimer);
     pushTimer = setTimeout(flushPush, 350);
   };
-
-  function revertToCloudSnapshot() {
-    if (!window._cloudApplyRemoteState) return;
-    if (!lastRemoteSnapshot) {
-      // We have no baseline at all (e.g. read-only user with no localStorage
-      // history). Best we can do is warn — the UI will stay as-is until the
-      // user reloads.
-      console.warn('[CloudSync] cannot revert — no baseline snapshot. Reload to discard changes.');
-      return;
-    }
-    // Deep-clone so the caller can't mutate our baseline by reference.
-    const fresh = JSON.parse(JSON.stringify(lastRemoteSnapshot));
-    window._cloudApplyRemoteState(fresh, { by: 'cloud', desc: '(reverted — no edit permission)' });
-  }
 
   function flushPush() {
     pushTimer = null;
@@ -414,15 +364,6 @@
     }).catch((err) => {
       console.error('State push failed:', err);
       setConnState('offline');
-      // PERMISSION_DENIED here means the user is not allowed to write —
-      // either removed from /allowlist mid-session, or never was.
-      // Flip to read-only and revert their local changes.
-      if (err && (err.code === 'PERMISSION_DENIED' || /permission/i.test(err.message || ''))) {
-        enterReadOnlyMode('Your account is not on the allowlist — read-only mode');
-        if (window.toast) window.toast('⚠ You do not have edit permission — changes were not saved');
-        revertToCloudSnapshot();
-        return;
-      }
       // Surface to user
       if (window.toast) window.toast('⚠ Cloud save failed: ' + err.message);
     });
@@ -475,12 +416,6 @@
           email: currentUser.email,
           since: firebase.database.ServerValue.TIMESTAMP,
           clientId: CLIENT_ID,
-        }).catch((err) => {
-          // Writing presence failed → almost certainly not in /allowlist.
-          // This is the fastest signal that this user is read-only.
-          if (err && (err.code === 'PERMISSION_DENIED' || /permission/i.test(err.message || ''))) {
-            enterReadOnlyMode('Your account is not on the allowlist — read-only mode');
-          }
         });
       }
     });
@@ -803,25 +738,6 @@
       font-size: 12px; font-weight: 500; font-family: inherit;
     }
     .cs-setup-dismiss:hover { background: rgba(0,0,0,0.25); }
-
-    /* Read-only banner — shown at the top when user is not in /allowlist */
-    #cs-readonly-banner {
-      position: fixed; top: 0; left: 0; right: 0; z-index: 99997;
-      background: linear-gradient(90deg, #5a4a3a, #3d2f24);
-      color: #fde8d0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-      font-size: 12px;
-      padding: 8px 20px;
-      display: flex; align-items: center; gap: 10px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-      border-bottom: 1px solid rgba(232, 93, 31, 0.4);
-    }
-    #cs-readonly-banner .cs-ro-icon { font-size: 14px; }
-    #cs-readonly-banner .cs-ro-text { font-weight: 600; color: #fff; }
-    #cs-readonly-banner .cs-ro-hint { color: #c9b9a3; font-size: 11px; }
-    @media (max-width: 720px) {
-      #cs-readonly-banner .cs-ro-hint { display: none; }
-    }
 
     @media (max-width: 720px) {
       .cs-user-email { display: none; }
