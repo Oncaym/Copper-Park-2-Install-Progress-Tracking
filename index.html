@@ -3352,6 +3352,8 @@ function setupPlanZoomPan() {
 
   // ----- Touch: pinch zoom + 1-finger pan (when zoomed) -----
   let pinch = null, pan = null;
+  let suppressClickUntil = 0;   // ms timestamp — clicks before this are swallowed (we panned, not tapped)
+  const PAN_THRESHOLD = 6;      // px before a tap becomes a pan
 
   vp.addEventListener('touchstart', (e) => {
     if (placeMode) return;
@@ -3362,12 +3364,14 @@ function setupPlanZoomPan() {
       pan = null;
       e.preventDefault();
     } else if (e.touches.length === 1) {
-      // Only pan from background, not from markers (they handle their own drag/click)
-      const target = e.target;
-      const onMarker = target.closest && target.closest('.plan-marker');
-      if (onMarker) return;
-      if (planView.s <= 1) return; // nothing to pan
-      pan = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      if (planView.s <= 1) return; // nothing to pan at base zoom
+      // Track the start even if the finger lands on a marker —
+      // a small move should still pan; a still tap still opens the marker.
+      pan = {
+        x: e.touches[0].clientX, y: e.touches[0].clientY,
+        sx: e.touches[0].clientX, sy: e.touches[0].clientY,
+        active: false
+      };
     }
   }, { passive: false });
 
@@ -3383,22 +3387,42 @@ function setupPlanZoomPan() {
       planZoom(factor, cx, cy);
       pinch.dist = dist;
     } else if (pan && e.touches.length === 1) {
+      const t = e.touches[0];
+      if (!pan.active) {
+        // Not panning yet — check threshold against the start point
+        if (Math.hypot(t.clientX - pan.sx, t.clientY - pan.sy) < PAN_THRESHOLD) return;
+        pan.active = true;
+      }
       e.preventDefault();
-      const dx = e.touches[0].clientX - pan.x;
-      const dy = e.touches[0].clientY - pan.y;
+      const dx = t.clientX - pan.x;
+      const dy = t.clientY - pan.y;
       planView.tx += dx;
       planView.ty += dy;
       clampPlanPan();
       applyPlanTransform();
-      pan.x = e.touches[0].clientX;
-      pan.y = e.touches[0].clientY;
+      pan.x = t.clientX;
+      pan.y = t.clientY;
     }
   }, { passive: false });
 
   vp.addEventListener('touchend', (e) => {
     if (e.touches.length < 2) pinch = null;
-    if (e.touches.length === 0) pan = null;
+    if (e.touches.length === 0) {
+      if (pan && pan.active) {
+        // We dragged — swallow the synthetic click iOS fires next so we don't open a marker modal
+        suppressClickUntil = Date.now() + 400;
+      }
+      pan = null;
+    }
   });
+
+  // Capture-phase click guard: if the previous touch was a pan, eat the click
+  vp.addEventListener('click', (e) => {
+    if (Date.now() < suppressClickUntil) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, true);
 
   // ----- Double-click / double-tap to reset -----
   vp.addEventListener('dblclick', (e) => {

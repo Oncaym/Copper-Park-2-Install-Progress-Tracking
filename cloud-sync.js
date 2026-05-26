@@ -604,8 +604,26 @@
       border: 1px solid #2d3744;
       border-radius: 16px;
       padding: 32px;
-      width: 380px; max-width: calc(100vw - 40px);
+      width: 380px; max-width: calc(100vw - 24px);
+      max-height: calc(100vh - 24px);
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
       box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+    @media (max-width: 480px) {
+      #cs-auth-gate {
+        padding: max(16px, env(safe-area-inset-top)) 12px
+                 max(16px, env(safe-area-inset-bottom)) 12px;
+        align-items: flex-start;
+      }
+      .cs-auth-card { padding: 20px 18px; border-radius: 14px; width: 100%; }
+      .cs-auth-brand { margin-bottom: 18px; gap: 12px; }
+      .cs-auth-logo { width: 42px; height: 42px; }
+      .cs-auth-title { font-size: 16px; }
+      #cs-auth-form label { margin-bottom: 12px; }
+      #cs-auth-form input { font-size: 16px; padding: 11px 12px; }   /* 16px prevents iOS zoom-on-focus */
+      #cs-auth-submit { padding: 13px; font-size: 15px; }
+      .cs-auth-foot { margin-top: 16px; padding-top: 14px; }
     }
     .cs-auth-brand { display: flex; gap: 14px; align-items: center; margin-bottom: 24px; }
     .cs-auth-logo {
