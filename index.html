@@ -2911,6 +2911,7 @@ window._cloudApplyRemoteState = function(remoteState, meta) {
   if (window._cloudSetSuppress) window._cloudSetSuppress(true);
   try {
     state = remoteState;
+    window.state = state;
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
     if (typeof render === 'function') render();
     if (typeof toast === 'function' && meta && meta.by) {
@@ -3851,6 +3852,7 @@ function importData(e) {
       const data = JSON.parse(ev.target.result);
       if (data.units && data.log) {
         state = data;
+        window.state = state;
         saveState();
         toast(t('msg_import_ok'));
       } else { toast(t('alert_invalid_format')); }
@@ -3864,6 +3866,7 @@ function resetData() {
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(BASELINE_KEY);
   state = loadState();
+  window.state = state;
   saveState(false);
   toast(t('msg_reset'));
 }
@@ -4097,6 +4100,8 @@ function initApp() {
 
   // Load state NOW that the entire <body> (including __embedded_state) is parsed.
   if (!state) state = loadState();
+  // Expose to cloud-sync.js so it can snapshot the baseline for read-only revert.
+  window.state = state;
 
   // When bundled, ensure the initial GF plan src points to the blob URL too
   if (window.__resources && window.__resources.planGF) {

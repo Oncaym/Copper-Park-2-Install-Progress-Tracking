@@ -314,7 +314,7 @@
       // PERMISSION_DENIED on /state means this account is not in /allowlist.
       // Flip into read-only mode so save attempts are blocked locally.
       if (err && (err.code === 'PERMISSION_DENIED' || /permission/i.test(err.message || ''))) {
-        enterReadOnlyMode('你的账号不在白名单中，无法编辑（只读模式）');
+        enterReadOnlyMode('Your account is not on the allowlist — read-only mode');
       }
     });
   }
@@ -327,8 +327,13 @@
     showReadOnlyBanner(reason);
     // Snapshot whatever the app currently has as the "good" baseline so
     // we have something to revert to even if we never got a cloud read.
+    // (The HTML exposes its local `state` as `window.state` for this.)
     if (!lastRemoteSnapshot && window.state) {
-      lastRemoteSnapshot = JSON.parse(JSON.stringify(window.state));
+      try {
+        lastRemoteSnapshot = JSON.parse(JSON.stringify(window.state));
+      } catch (e) {
+        console.warn('[CloudSync] failed to snapshot baseline state:', e);
+      }
     }
   }
 
@@ -338,8 +343,8 @@
     bar.id = 'cs-readonly-banner';
     bar.innerHTML = `
       <span class="cs-ro-icon">🔒</span>
-      <span class="cs-ro-text">${escapeHtml(reason || '只读模式：你没有编辑权限')}</span>
-      <span class="cs-ro-hint">如需编辑权限，请联系管理员把你的邮箱加入白名单。</span>
+      <span class="cs-ro-text">${escapeHtml(reason || 'Read-only mode — you do not have edit permission')}</span>
+      <span class="cs-ro-hint">Ask an admin to add your email to the allowlist if you need to edit.</span>
     `;
     document.body.appendChild(bar);
   }
@@ -355,7 +360,7 @@
 
     // Read-only user — block the save and revert UI to the cloud snapshot.
     if (isReadOnly) {
-      if (window.toast) window.toast('⚠ 你没有编辑权限，更改未保存');
+      if (window.toast) window.toast('⚠ You do not have edit permission — changes were not saved');
       revertToCloudSnapshot();
       return;
     }
@@ -368,10 +373,17 @@
   };
 
   function revertToCloudSnapshot() {
-    if (!lastRemoteSnapshot || !window._cloudApplyRemoteState) return;
+    if (!window._cloudApplyRemoteState) return;
+    if (!lastRemoteSnapshot) {
+      // We have no baseline at all (e.g. read-only user with no localStorage
+      // history). Best we can do is warn — the UI will stay as-is until the
+      // user reloads.
+      console.warn('[CloudSync] cannot revert — no baseline snapshot. Reload to discard changes.');
+      return;
+    }
     // Deep-clone so the caller can't mutate our baseline by reference.
     const fresh = JSON.parse(JSON.stringify(lastRemoteSnapshot));
-    window._cloudApplyRemoteState(fresh, { by: 'cloud', desc: '(已回滚 — 无编辑权限)' });
+    window._cloudApplyRemoteState(fresh, { by: 'cloud', desc: '(reverted — no edit permission)' });
   }
 
   function flushPush() {
@@ -406,8 +418,8 @@
       // either removed from /allowlist mid-session, or never was.
       // Flip to read-only and revert their local changes.
       if (err && (err.code === 'PERMISSION_DENIED' || /permission/i.test(err.message || ''))) {
-        enterReadOnlyMode('你的账号不在白名单中，无法编辑（只读模式）');
-        if (window.toast) window.toast('⚠ 你没有编辑权限，更改未保存');
+        enterReadOnlyMode('Your account is not on the allowlist — read-only mode');
+        if (window.toast) window.toast('⚠ You do not have edit permission — changes were not saved');
         revertToCloudSnapshot();
         return;
       }
@@ -467,7 +479,7 @@
           // Writing presence failed → almost certainly not in /allowlist.
           // This is the fastest signal that this user is read-only.
           if (err && (err.code === 'PERMISSION_DENIED' || /permission/i.test(err.message || ''))) {
-            enterReadOnlyMode('你的账号不在白名单中，无法编辑（只读模式）');
+            enterReadOnlyMode('Your account is not on the allowlist — read-only mode');
           }
         });
       }
