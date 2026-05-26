@@ -3518,6 +3518,10 @@ function setupPlanInteractions() {
   wrap.classList.toggle('edit-mode', editMode);
 
   wrap.querySelectorAll('.plan-marker').forEach(m => {
+    m.onpointerdown = (e) => {
+      if (placeMode) return;
+      e.stopPropagation();
+    };
     m.onclick = (e) => {
       if (dragState && dragState.moved) { dragState = null; return; }
       if (placeMode) return;
@@ -4247,6 +4251,10 @@ function renderGlassMarkers() {
       el.title = u.id + ' · ' + (p.panel || '?') + ' · ' + sc + (p.date ? ' · ' + p.date : '');
       el.dataset.unitKey  = u.key;
       el.dataset.panelIdx = pi;
+      el.onpointerdown = function(e) {
+        if (placeMode) return;
+        e.stopPropagation();
+      };
       el.onclick = function(e) {
         e.stopPropagation();
         if (dragState && dragState.moved) { dragState = null; return; }
