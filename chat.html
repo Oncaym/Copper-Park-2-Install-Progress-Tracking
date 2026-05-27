@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CP2 安装播报</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📋%3C/text%3E%3C/svg%3E">
+<title>CP2 Chat Updater</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E💬%3C/text%3E%3C/svg%3E">
 <style>
   :root {
     --bg: #0f1115;
@@ -255,20 +255,20 @@
     <div class="gate-brand">
       <div class="gate-logo">CP2</div>
       <div>
-        <div class="gate-title">安装播报</div>
-        <div class="gate-sub">Cooper Park 2 · 聊天式更新</div>
+        <div class="gate-title">Chat Updater</div>
+        <div class="gate-sub">Cooper Park 2 · Natural-language progress</div>
       </div>
     </div>
     <form id="gate-form">
-      <label>邮箱</label>
+      <label>Email</label>
       <input type="email" id="email" autocomplete="email" required placeholder="you@advfacade.com">
-      <label>密码</label>
+      <label>Password</label>
       <input type="password" id="password" autocomplete="current-password" required>
       <div class="gate-err" id="gate-err"></div>
-      <button type="submit" id="signin">登录</button>
+      <button type="submit" id="signin">Sign in</button>
     </form>
     <div class="gate-foot">
-      账户需要管理员在 Firebase 后台创建 · <a href="/">回到主页</a>
+      Accounts are created by your admin in Firebase Console · <a href="/">Back to dashboard</a>
     </div>
   </div>
 </div>
@@ -277,23 +277,23 @@
 <div id="app">
   <header>
     <div>
-      <div class="h-title">CP2 安装播报</div>
+      <div class="h-title">CP2 Chat Updater</div>
       <div class="h-sub" id="user-label">—</div>
     </div>
     <div class="h-spacer"></div>
-    <a class="h-link" href="/" title="回到主 tracker">📋 主页</a>
-    <a class="h-link" href="#" id="logout">退出</a>
+    <a class="h-link" href="/" title="Back to main tracker">📋 Dashboard</a>
+    <a class="h-link" href="#" id="logout">Sign out</a>
   </header>
 
   <div id="msgs"></div>
 
   <div id="composer">
     <div id="composer-inner">
-      <textarea id="input" rows="1" placeholder="例：今天装了 SF11A 和 SF11B 的框，11A.2 出问题了 …"></textarea>
-      <button id="send">发送</button>
+      <textarea id="input" rows="1" placeholder="e.g. Installed SF11A and SF11B framing today, 11A.2 has an issue …"></textarea>
+      <button id="send">Send</button>
     </div>
     <div id="hints">
-      <kbd>Enter</kbd> 发送 · <kbd>Shift+Enter</kbd> 换行 · 报完进度后会先预览再确认
+      <kbd>Enter</kbd> send · <kbd>Shift+Enter</kbd> new line · You'll preview each change before it's written
     </div>
   </div>
 </div>
@@ -354,8 +354,8 @@
         const v = snap.val();
         if (v) cachedState = v;
       });
-      pushSystem(`已登录: ${user.email.split('@')[0]} · 数据已加载（${cachedState?.units?.length || 0} 个 unit）`);
-      pushBot('你好。把今天的安装情况告诉我，我会先解析、给你看预览，确认后再写入数据库。\n\n例如：\n• "今天装了 SF11A 和 SF11B 的框"\n• "SF12A.3 出问题了，开洞错了"\n• "20A.1 加了百叶"\n• "明天打算装 SF03 那一排"');
+      pushSystem(`Signed in as ${user.email.split('@')[0]} · loaded ${cachedState?.units?.length || 0} units`);
+      pushBot('Hi. Tell me what got installed today and I\'ll show you a preview before writing anything to the database.\n\nFor example:\n• "Installed SF11A and SF11B framing today"\n• "SF12A.3 has an opening error"\n• "Added louver to SF20A.1"\n• "Planning the SF03 row tomorrow"\n\nYou can write in English, 中文, or 한국어 — Claude will figure it out.');
     } else {
       currentUser = null;
       cachedState = null;
@@ -369,20 +369,20 @@
       const snap = await db.ref('state').once('value');
       cachedState = snap.val();
       if (!cachedState || !cachedState.units) {
-        pushError('数据库里还没有 state — 请先打开主 tracker 保存一次以初始化。');
+        pushError('No state in database yet — open the main tracker once to save an initial snapshot.');
       }
     } catch (err) {
-      pushError('读取数据失败: ' + (err.message || err));
+      pushError('Failed to read state: ' + (err.message || err));
     }
   }
 
   function humanAuthError(err) {
     const code = err && err.code;
-    if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') return '邮箱或密码错误';
-    if (code === 'auth/user-not-found') return '账户不存在';
-    if (code === 'auth/too-many-requests') return '尝试次数过多，请稍后再试';
-    if (code === 'auth/network-request-failed') return '网络错误';
-    return err.message || '登录失败';
+    if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') return 'Wrong email or password';
+    if (code === 'auth/user-not-found') return 'Account not found';
+    if (code === 'auth/too-many-requests') return 'Too many attempts — try again later';
+    if (code === 'auth/network-request-failed') return 'Network error';
+    return err.message || 'Sign-in failed';
   }
 
   // ---------- Messages ----------
@@ -434,9 +434,9 @@
   async function sendMessage() {
     const text = input.value.trim();
     if (!text) return;
-    if (!cachedState) { pushError('数据还没加载好，稍等一下'); return; }
+    if (!cachedState) { pushError('State not loaded yet — wait a moment'); return; }
     if (pendingPreview) {
-      pushSystem('你上一条改动还没确认 — 先点确认或取消');
+      pushSystem('You have a pending change — confirm or cancel it first');
       return;
     }
 
@@ -444,7 +444,7 @@
     input.value = '';
     input.style.height = 'auto';
     $('send').disabled = true;
-    const loadingEl = pushLoading('正在解析…');
+    const loadingEl = pushLoading('Parsing…');
 
     try {
       const today = new Date().toISOString().slice(0, 10);
@@ -464,14 +464,14 @@
       loadingEl.remove();
       if (!r.ok) {
         const errBody = await r.text();
-        pushError('解析失败 (' + r.status + '): ' + errBody.slice(0, 300));
+        pushError('Parse failed (' + r.status + '): ' + errBody.slice(0, 300));
         return;
       }
       const parsed = await r.json();
       handleParsed(parsed);
     } catch (err) {
       loadingEl.remove();
-      pushError('网络错误: ' + (err.message || err));
+      pushError('Network error: ' + (err.message || err));
     } finally {
       $('send').disabled = false;
     }
@@ -486,7 +486,7 @@
       return;
     }
     if (!hasUpdates) {
-      pushBot('我没听懂这条 — 能换一种说法吗？比如 "SF11A 今天装了"');
+      pushBot('I didn\'t catch that — could you rephrase? Try something like "SF11A installed today".');
       return;
     }
 
@@ -509,15 +509,15 @@
         unitRows.push(`
           <div class="diff-row">
             <span class="diff-key">${escapeHtml(up.key)}</span>
-            <span class="diff-change" style="color: var(--bad);">⚠ 数据库里没找到这个 key</span>
+            <span class="diff-change" style="color: var(--bad);">⚠ Key not found in database</span>
           </div>`);
         return;
       }
       const changes = [];
       ['status', 'date', 'louver', 'note'].forEach(field => {
         if (up[field] !== undefined && up[field] !== cur[field]) {
-          const oldV = cur[field] || '(空)';
-          const newV = up[field] || '(空)';
+          const oldV = cur[field] || '(empty)';
+          const newV = up[field] || '(empty)';
           changes.push(`${field}: <span class="diff-old">${escapeHtml(oldV)}</span> <span class="diff-arrow">→</span> <span class="diff-new">${escapeHtml(newV)}</span>`);
         }
       });
@@ -536,15 +536,15 @@
       </div>`).join('');
 
     card.innerHTML = `
-      <div class="preview-head">📋 预览改动${parsed.summary ? ' — ' + escapeHtml(parsed.summary) : ''}</div>
+      <div class="preview-head">📋 Preview${parsed.summary ? ' — ' + escapeHtml(parsed.summary) : ''}</div>
       <div class="preview-body">
         ${unitRows.length ? `<div class="preview-section"><h4>Units (${unitRows.length})</h4>${unitRows.join('')}</div>` : ''}
         ${logRows ? `<div class="preview-section"><h4>Log</h4>${logRows}</div>` : ''}
-        ${parsed.needs_clarification ? `<div class="preview-section"><h4>提示</h4><div style="color:var(--warn);font-size:12px;">${escapeHtml(parsed.needs_clarification)}</div></div>` : ''}
+        ${parsed.needs_clarification ? `<div class="preview-section"><h4>Note</h4><div style="color:var(--warn);font-size:12px;">${escapeHtml(parsed.needs_clarification)}</div></div>` : ''}
       </div>
       <div class="preview-actions">
-        <button class="btn btn-cancel" data-action="cancel">取消</button>
-        <button class="btn btn-confirm" data-action="confirm">确认写入</button>
+        <button class="btn btn-cancel" data-action="cancel">Cancel</button>
+        <button class="btn btn-confirm" data-action="confirm">Confirm &amp; write</button>
       </div>
     `;
     card.querySelector('[data-action="cancel"]').addEventListener('click', () => cancelPreview(card));
@@ -556,7 +556,7 @@
     const wasPending = pendingPreview && pendingPreview.card === card;
     if (card.parentNode) card.remove();
     if (wasPending) pendingPreview = null;
-    pushSystem('已取消');
+    pushSystem('Cancelled');
   }
 
   async function confirmPreview(card) {
@@ -565,7 +565,7 @@
     const btns = card.querySelectorAll('.btn');
     btns.forEach(b => b.disabled = true);
     const confirmBtn = card.querySelector('[data-action="confirm"]');
-    confirmBtn.innerHTML = '<span class="loader"></span> 写入中…';
+    confirmBtn.innerHTML = '<span class="loader"></span> Writing…';
 
     try {
       // Build new state — fresh snapshot from server first to avoid clobbering
@@ -598,7 +598,7 @@
       next.updatedAt = new Date().toISOString();
 
       // Push to Firebase /state
-      const desc = parsed.summary || ('Chat: 修改 ' + updated.length + ' 个 unit');
+      const desc = parsed.summary || ('Chat: updated ' + updated.length + ' unit(s)');
       const payload = Object.assign({}, next, {
         _ts: firebase.database.ServerValue.TIMESTAMP,
         _by: currentUser.email,
@@ -621,19 +621,19 @@
       });
 
       cachedState = next;
-      card.querySelector('.preview-actions').innerHTML = '<span style="color:var(--good);font-size:13px;">✓ 已写入数据库</span>';
+      card.querySelector('.preview-actions').innerHTML = '<span style="color:var(--good);font-size:13px;">✓ Saved</span>';
       pendingPreview = null;
-      pushBot('✅ ' + desc + '\n\n主 tracker 如果开着会自动刷新。');
+      pushBot('✅ ' + desc + '\n\nThe main dashboard will auto-refresh within ~1 second if it\'s open in another tab.');
     } catch (err) {
       console.error(err);
       btns.forEach(b => b.disabled = false);
-      confirmBtn.textContent = '确认写入';
+      confirmBtn.textContent = 'Confirm & write';
       const code = err && err.code;
       let msg = err.message || String(err);
       if (code === 'PERMISSION_DENIED' || /permission/i.test(msg)) {
-        msg = '你的账户没有写权限 — 请联系管理员把邮箱加入 /allowlist';
+        msg = 'Your account does not have write permission — ask the admin to add your email to /allowlist';
       }
-      pushError('写入失败: ' + msg);
+      pushError('Save failed: ' + msg);
     }
   }
 
