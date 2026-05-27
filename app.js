@@ -1623,48 +1623,105 @@ function saveUnit() {
   saveState();
 }
 
-/* Build / update Daily Log entries from a unit save.
-   Same-day same-category auto entries are CONSOLIDATED into one row.
-   e.g. framing installs on 5/27 all sit in a single "12A · 11A · 20B" row. */
+/* State-driven Daily Log sync.
+   Instead of recording a "diff", we treat the daily log as a projection of the
+   unit's CURRENT state on u.date. Every save:
+     1) Sweep this unit out of every existing unit-kind auto entry
+     2) Re-add it to u.date's framing/issue/louver entry if it currently belongs
+   Effects:
+   - Status reversal (installed → pending) removes the unit instead of stacking suffixes.
+   - Same unit ID never appears twice in one entry.
+   - Log date follows u.date (not "today").
+   - Glass changes are NOT logged here — they're managed by the Glass Batch tool. */
 function autoLogUnitChanges(u, old) {
-  const today = new Date().toISOString().slice(0,10);
-  const label = u.id || old.id || u.key;
+  const oldId = (old && old.id) || u.id;
+  removeUnitFromUnitLogs(oldId);
+  if (oldId !== u.id) removeUnitFromUnitLogs(u.id);
 
-  // 1) Framing-side status change → framing (or issue) bucket
-  if (old.status !== u.status) {
-    const cat = u.status === 'issue' ? 'issue' : 'framing';
-    appendAutoLog(today, cat, label, u.status);
-  } else if (old.date !== (u.date || '') && u.status === 'installed') {
-    // Date moved but status was already installed — still note the unit today
-    appendAutoLog(today, 'framing', label, 'installed');
+  const date = u.date || new Date().toISOString().slice(0,10);
+
+  if (u.status === 'installed') {
+    upsertUnitLog(date, 'framing', u.id);
+  } else if (u.status === 'issue') {
+    upsertUnitLog(date, 'issue', u.id);
   }
+  // pending / in-progress: no entry (the sweep above already cleaned any prior log)
 
-  // 2) Louver toggled
-  if (old.louver !== u.louver) {
-    appendAutoLog(today, 'louver', label, u.louver === 'yes' ? '' : 'removed');
-  }
-
-  // 3) Glass panel diffs → framing (or issue) bucket, suffix with panel id
-  const newP = u.glassPanels || [];
-  const oldP = old.glassPanels || [];
-  for (let i = 0; i < Math.max(newP.length, oldP.length); i++) {
-    const np = newP[i] || {};
-    const op = oldP[i] || {};
-    if ((op.status || '') === (np.status || '') &&
-        (op.date   || '') === (np.date   || '') &&
-        (op.panel  || '') === (np.panel  || '')) continue;
-    const cat   = np.status === 'issue' ? 'issue' : 'framing';
-    const panel = np.panel || op.panel || ('glass' + (i+1));
-    const suf   = 'glass ' + panel + (np.status && np.status !== 'installed' ? ' ' + np.status : '');
-    appendAutoLog(today, cat, label, suf);
+  if (u.louver === 'yes') {
+    upsertUnitLog(date, 'louver', u.id);
   }
 }
 
-/* Append (or upsert) a unit token into today's auto-log entry for a category.
-   Each (date, category) gets ONE auto entry; unit IDs are joined by " · ". */
-function appendAutoLog(date, category, unitId, suffix) {
+/* Treat both new kind='unit' entries AND legacy auto entries (no kind set)
+   as the same "unit-kind" bucket. New glass-batch entries use kind='glass'
+   so this sweep doesn't touch them. */
+function isUnitAutoEntry(l) {
+  return l && l.auto === true && Array.isArray(l.categories) && (!l.kind || l.kind === 'unit');
+}
+
+function upsertUnitLog(date, category, unitId) {
   let entry = state.log.find(l =>
-    l.date === date && l.auto === true &&
+    isUnitAutoEntry(l) && l.date === date &&
+    l.categories.length === 1 && l.categories[0] === category
+  );
+  if (!entry) {
+    entry = {
+      date: date,
+      categories: [category],
+      category: category,
+      content: '',
+      auto: true,
+      kind: 'unit',
+      autoUnits: {}
+    };
+    state.log.push(entry);
+  }
+  if (!entry.kind) entry.kind = 'unit';
+  if (!entry.autoUnits) {
+    // Legacy entry — migrate content tokens into the structured map
+    entry.autoUnits = {};
+    if (entry.content) {
+      entry.content.split(' · ').forEach(tok => {
+        const id = tok.split(' (')[0].trim();
+        if (id) entry.autoUnits[id] = '';
+      });
+    }
+  }
+  entry.autoUnits[unitId] = '';
+  entry.content = Object.keys(entry.autoUnits).join(' · ');
+}
+
+function removeUnitFromUnitLogs(unitId) {
+  for (let i = state.log.length - 1; i >= 0; i--) {
+    const l = state.log[i];
+    if (!isUnitAutoEntry(l)) continue;
+    // Migrate legacy entries lazily so removal works
+    if (!l.autoUnits) {
+      l.autoUnits = {};
+      if (l.content) {
+        l.content.split(' · ').forEach(tok => {
+          const id = tok.split(' (')[0].trim();
+          if (id) l.autoUnits[id] = '';
+        });
+      }
+    }
+    if (unitId in l.autoUnits) {
+      delete l.autoUnits[unitId];
+      const keys = Object.keys(l.autoUnits);
+      if (keys.length === 0) {
+        state.log.splice(i, 1);
+      } else {
+        l.content = keys.join(' · ');
+      }
+    }
+  }
+}
+
+/* Glass-batch entries — separate kind='glass' so unit-modal sweeps leave them alone.
+   Keys are "unitId panel" (e.g. "12A 1F-3") so the same unit can have multiple panels. */
+function upsertGlassLog(date, category, unitId, panel, status) {
+  let entry = state.log.find(l =>
+    l && l.auto === true && l.kind === 'glass' && l.date === date &&
     Array.isArray(l.categories) && l.categories.length === 1 && l.categories[0] === category
   );
   if (!entry) {
@@ -1674,17 +1731,16 @@ function appendAutoLog(date, category, unitId, suffix) {
       category: category,
       content: '',
       auto: true,
+      kind: 'glass',
       autoUnits: {}
     };
     state.log.push(entry);
   }
   if (!entry.autoUnits) entry.autoUnits = {};
-  // Show suffix only when it adds info (installed = the default, no suffix)
-  const sufNorm = (suffix && suffix !== 'installed') ? String(suffix) : '';
-  entry.autoUnits[unitId] = sufNorm;
-  // Rebuild content from the unit map
+  const key = unitId + (panel ? ' ' + panel : '');
+  entry.autoUnits[key] = (status && status !== 'installed') ? status : '';
   entry.content = Object.entries(entry.autoUnits)
-    .map(([id, s]) => s ? `${id} (${s})` : id)
+    .map(([k, s]) => s ? `${k} (${s})` : k)
     .join(' · ');
 }
 
@@ -1976,14 +2032,13 @@ function applyGlassBatch() {
       touched.push({ unitId: u.id, panel: p.panel || '' });
     }
   });
-  // Auto-log: merge each glass panel into today's framing/issue auto entry
+  // Auto-log: glass entries are kind='glass' so unit-modal saves don't sweep them away.
+  // Log date follows the panel's date when the batch sets one, otherwise today.
   if (touched.length) {
-    const today = new Date().toISOString().slice(0,10);
-    const cat   = status === 'issue' ? 'issue' : 'framing';
+    const logDate = date || new Date().toISOString().slice(0,10);
+    const cat     = status === 'issue' ? 'issue' : 'framing';
     touched.forEach(function(t) {
-      const suf = 'glass' + (t.panel ? ' ' + t.panel : '') +
-                  (status && status !== 'installed' ? ' ' + status : '');
-      appendAutoLog(today, cat, t.unitId, suf);
+      upsertGlassLog(logDate, cat, t.unitId, t.panel, status);
     });
   }
   selectedGlassPanels = [];
