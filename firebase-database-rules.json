@@ -1,23 +1,66 @@
 {
   "rules": {
-    ".read":  "auth != null",
-    ".write": "auth != null",
+    // ---------- 全局默认：拒绝 ----------
+    ".read":  false,
+    ".write": false,
 
+    // ---------- 业务数据：state（项目状态） ----------
+    // 读：任何登录用户（包括非 editor，用来给主 tracker 和 chat 看数据）
+    // 写：仅 allowlist 内的 editor
     "state": {
       ".read":  "auth != null",
-      ".write": "auth != null"
+      ".write": "auth != null && root.child('allowlist').child(auth.token.email.replace('.', ',')).exists()",
+      ".validate": "newData.hasChildren(['_clientId', '_ts', '_by'])"
     },
+
+    // ---------- 周五到货调度 (Friday glass delivery triage) ----------
+    // 读：任何登录用户
+    // 写：仅 editor。每件玻璃存在 /triage/{deliveryId}/pieces/{tagKey}
+    "triage": {
+      ".read":  "auth != null",
+      "$deliveryId": {
+        "pieces": {
+          ".write": "auth != null && root.child('allowlist').child(auth.token.email.replace('.', ',')).exists()",
+          "$tagKey": {
+            ".validate": "newData.hasChild('status')"
+          }
+        },
+        "meta": {
+          ".write": "auth != null && root.child('allowlist').child(auth.token.email.replace('.', ',')).exists()"
+        }
+      }
+    },
+
+    // ---------- 编辑历史 ----------
+    // 读：任何登录用户
+    // 写（追加）：仅 editor，且 user 字段必须等于自己的邮箱
     "history": {
       ".read": "auth != null",
       "$pushId": {
-        ".write": "auth != null && !data.exists()",
-        ".validate": "newData.hasChildren(['ts','user','desc'])"
+        ".write": "auth != null && !data.exists() && root.child('allowlist').child(auth.token.email.replace('.', ',')).exists()",
+        ".validate": "newData.hasChildren(['ts','user','desc']) && newData.child('user').val() == auth.token.email"
       }
     },
+
+    // ---------- 在线状态 ----------
+    // 读：任何登录用户
+    // 写：仅 editor 且只能写自己那条
     "presence": {
       ".read": "auth != null",
       "$uid": {
-        ".write": "auth != null && auth.uid == $uid"
+        ".write": "auth != null && auth.uid == $uid && root.child('allowlist').child(auth.token.email.replace('.', ',')).exists()",
+        ".validate": "newData.hasChildren(['email','since']) && newData.child('email').val() == auth.token.email"
+      }
+    },
+
+    // ---------- 白名单本身 ----------
+    // 整体不可读（防止枚举所有 editor 邮箱）
+    // 但允许登录用户读自己那条（用来判断当前账号是不是 editor）
+    "allowlist": {
+      ".read":  false,
+      ".write": false,
+      "$emailKey": {
+        ".read": "auth != null && auth.token.email.replace('.', ',') == $emailKey"
       }
     }
   }
