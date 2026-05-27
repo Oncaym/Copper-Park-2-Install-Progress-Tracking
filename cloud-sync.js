@@ -24,6 +24,7 @@
   let auth = null;
   let db = null;
   let currentUser = null;
+  let isEditor = false;   // whether currentUser is in /allowlist (can write)
 
   let suppressNextSave = false;   // true while applying a remote snapshot (don't push it back)
   let pendingState = null;         // debounced push buffer
@@ -53,6 +54,7 @@
     // Force-flush any pending push immediately
     flush() { if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; flushPush(); } },
     isSignedIn() { return !!currentUser; },
+    isEditor() { return isEditor; },
     currentUser() { return currentUser; },
     logout() { if (auth) auth.signOut(); },
     openHistory() { openHistoryPanel(); },
@@ -176,17 +178,80 @@
   function onAuthChanged(user) {
     currentUser = user;
     if (user) {
-      hideAuthGate();
-      mountStatusBadge();
-      updateBadge();
-      subscribeToState();
-      subscribeToPresence();
+      // Check editor status BEFORE mounting UI so viewer-mode styles apply on first paint.
+      checkEditorStatus().then(() => {
+        hideAuthGate();
+        applyRoleToBody();
+        mountStatusBadge();
+        updateBadge();
+        updateRoleChip();
+        if (!isEditor) showViewerBanner();
+        subscribeToState();
+        if (isEditor) subscribeToPresence();   // rules block viewers from writing presence
+      });
     } else {
+      isEditor = false;
+      applyRoleToBody();
+      hideViewerBanner();
       unmountStatusBadge();
       showAuthGate();
       // Stop listening (Firebase auto-unsubs when ref handle is dropped, but be defensive)
       if (db) try { db.ref('state').off(); } catch(e){}
     }
+  }
+
+  async function checkEditorStatus() {
+    isEditor = false;
+    if (!currentUser || !db) return;
+    try {
+      const emailKey = currentUser.email.replace(/\./g, ',');
+      const snap = await db.ref('allowlist/' + emailKey).once('value');
+      isEditor = snap.exists();
+    } catch (err) {
+      console.warn('Allowlist check failed:', err);
+      isEditor = false;
+    }
+  }
+
+  function applyRoleToBody() {
+    if (!currentUser) {
+      delete document.body.dataset.csRole;
+    } else {
+      document.body.dataset.csRole = isEditor ? 'editor' : 'viewer';
+    }
+  }
+
+  function updateRoleChip() {
+    let chip = document.getElementById('cs-role-chip');
+    if (!chip) return;
+    if (isEditor) {
+      chip.textContent = 'Editor';
+      chip.className = 'cs-role-chip editor';
+      chip.title = 'You can save changes';
+    } else {
+      chip.textContent = 'View only';
+      chip.className = 'cs-role-chip viewer';
+      chip.title = 'You can view but not save changes — ask an admin to add your email to the editor allowlist';
+    }
+  }
+
+  function showViewerBanner() {
+    // Only show on the main tracker — chat.html has its own role indicator in its header.
+    if (!document.querySelector('.header-actions')) return;
+    if (document.getElementById('cs-viewer-banner')) return;
+    const b = document.createElement('div');
+    b.id = 'cs-viewer-banner';
+    b.innerHTML = `
+      <span class="cs-vb-icon">👁</span>
+      <span class="cs-vb-text">You're in <strong>view-only</strong> mode — edits won't be saved. Ask an admin to add you to the editor allowlist.</span>
+      <button class="cs-vb-dismiss" title="Dismiss">×</button>
+    `;
+    document.body.appendChild(b);
+    b.querySelector('.cs-vb-dismiss').addEventListener('click', () => b.remove());
+  }
+  function hideViewerBanner() {
+    const b = document.getElementById('cs-viewer-banner');
+    if (b) b.remove();
   }
 
   // ---------- Header status badge ----------
@@ -202,6 +267,7 @@
         <span class="cs-dot" id="cs-conn-dot"></span>
         <span class="cs-status-text" id="cs-status-text">Connecting…</span>
       </button>
+      <span class="cs-role-chip" id="cs-role-chip"></span>
       <div class="cs-user-menu">
         <button class="cs-user-btn" id="cs-user-btn">
           <span class="cs-user-avatar" id="cs-user-avatar"></span>
@@ -308,7 +374,8 @@
       if (!remote) {
         // First time anyone has touched this DB. Seed it with whatever
         // local state we have so the team has a starting point.
-        if (window.state) {
+        // Only editors can seed — viewers' writes would be rejected by rules.
+        if (window.state && isEditor) {
           pushNow(window.state, 'Initialized cloud state from local snapshot');
         }
         return;
@@ -329,6 +396,7 @@
   window._cloudQueuePush = function(state, description) {
     if (suppressNextSave) return;       // applying a remote update, don't echo
     if (!currentUser) return;            // not signed in, nothing to push
+    if (!isEditor) return;               // viewer mode — local edits don't persist
     pendingState = state;
     if (description) lastDescription = description;
     setConnState('syncing');
@@ -742,6 +810,58 @@
     @media (max-width: 720px) {
       .cs-user-email { display: none; }
       .cs-status-text { display: none; }
+    }
+
+    /* ---------- Role chip + viewer mode ---------- */
+    .cs-role-chip {
+      display: none;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.4px;
+      text-transform: uppercase;
+      padding: 3px 8px; border-radius: 10px;
+      white-space: nowrap;
+      cursor: default;
+    }
+    .cs-role-chip.editor { display: inline-block; background: rgba(52, 199, 122, 0.15); color: #3fb950; border: 1px solid rgba(52, 199, 122, 0.3); }
+    .cs-role-chip.viewer { display: inline-block; background: rgba(245, 165, 36, 0.18); color: #f5a524; border: 1px solid rgba(245, 165, 36, 0.4); }
+
+    /* In viewer mode, hide common edit affordances in the main tracker.
+       This is a defense-in-depth on top of the Firebase rule — even if
+       a viewer clicks something edit-y, _cloudQueuePush bails. */
+    body[data-cs-role="viewer"] .header-actions .btn-primary,
+    body[data-cs-role="viewer"] .header-actions .btn-danger {
+      display: none !important;
+    }
+
+    /* Viewer banner */
+    #cs-viewer-banner {
+      position: fixed;
+      left: 50%; transform: translateX(-50%);
+      bottom: max(16px, env(safe-area-inset-bottom));
+      z-index: 9000;
+      display: flex; align-items: center; gap: 10px;
+      max-width: calc(100vw - 24px);
+      background: rgba(245, 165, 36, 0.12);
+      border: 1px solid rgba(245, 165, 36, 0.4);
+      color: #f5d28a;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      backdrop-filter: blur(8px);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    .cs-vb-icon { font-size: 14px; }
+    .cs-vb-text { line-height: 1.4; }
+    .cs-vb-text strong { color: #f5a524; }
+    .cs-vb-dismiss {
+      background: transparent; border: none; color: #f5d28a;
+      font-size: 18px; line-height: 1; cursor: pointer;
+      padding: 0 4px; margin-left: 4px;
+    }
+    .cs-vb-dismiss:hover { color: #fff; }
+    @media (max-width: 480px) {
+      #cs-viewer-banner { font-size: 12px; padding: 9px 12px; }
+      .cs-vb-text { max-width: 220px; }
     }
   `;
   document.head.appendChild(css);
