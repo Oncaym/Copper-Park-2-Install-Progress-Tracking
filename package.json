@@ -1,0 +1,7 @@
+{
+  "name": "cp2-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cooper Park 2 install tracker — static site + /api/parse serverless function"
+}

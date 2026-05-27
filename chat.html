@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CP2 安装播报</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📋%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #181b22;
+    --panel-2: #1f232c;
+    --line: #2a2f3a;
+    --text: #e6e8ee;
+    --muted: #8a93a3;
+    --accent: #4f8cff;
+    --accent-2: #6ba1ff;
+    --good: #34c77a;
+    --warn: #f5a524;
+    --bad: #ef5a5a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    overflow: hidden;
+  }
+  /* ---------- Auth gate ---------- */
+  #gate {
+    position: fixed; inset: 0; z-index: 999;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .gate-card {
+    width: min(380px, 92vw);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 28px 26px;
+  }
+  .gate-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .gate-logo {
+    width: 40px; height: 40px;
+    background: var(--accent); color: #fff;
+    border-radius: 9px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .gate-title { font-size: 17px; font-weight: 600; }
+  .gate-sub { font-size: 12px; color: var(--muted); }
+  .gate-card label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+  .gate-card input {
+    width: 100%; padding: 10px 12px;
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px;
+    font-size: 14px; outline: none;
+  }
+  .gate-card input:focus { border-color: var(--accent); }
+  .gate-card button {
+    width: 100%; padding: 11px;
+    margin-top: 14px;
+    background: var(--accent); color: white;
+    border: none; border-radius: 8px;
+    font-size: 14px; font-weight: 600;
+    cursor: pointer;
+  }
+  .gate-card button:hover { background: var(--accent-2); }
+  .gate-card button:disabled { opacity: .5; cursor: not-allowed; }
+  .gate-err { color: var(--bad); font-size: 12px; min-height: 16px; margin-top: 8px; }
+  .gate-foot { font-size: 11px; color: var(--muted); text-align: center; margin-top: 16px; }
+  .gate-foot a { color: var(--accent); text-decoration: none; }
+
+  /* ---------- App layout ---------- */
+  #app { display: none; flex-direction: column; height: 100vh; }
+  #app.ready { display: flex; }
+  header {
+    display: flex; align-items: center;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+    gap: 12px;
+  }
+  .h-title { font-size: 16px; font-weight: 600; }
+  .h-sub { color: var(--muted); font-size: 12px; }
+  .h-spacer { flex: 1; }
+  .h-link {
+    color: var(--muted); font-size: 12px;
+    text-decoration: none; padding: 6px 10px;
+    border: 1px solid var(--line); border-radius: 6px;
+  }
+  .h-link:hover { color: var(--text); border-color: var(--accent); }
+
+  /* ---------- Messages ---------- */
+  #msgs {
+    flex: 1; overflow-y: auto;
+    padding: 18px 16px 8px;
+    display: flex; flex-direction: column; gap: 10px;
+    max-width: 760px; width: 100%; margin: 0 auto;
+  }
+  .msg {
+    max-width: 86%;
+    padding: 10px 14px;
+    border-radius: 14px;
+    font-size: 14px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  .msg.user {
+    align-self: flex-end;
+    background: var(--accent);
+    color: white;
+    border-bottom-right-radius: 4px;
+  }
+  .msg.bot {
+    align-self: flex-start;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-bottom-left-radius: 4px;
+  }
+  .msg.system {
+    align-self: center;
+    background: transparent;
+    color: var(--muted);
+    font-size: 12px;
+    text-align: center;
+  }
+  .msg.error {
+    align-self: flex-start;
+    background: rgba(239, 90, 90, 0.12);
+    border: 1px solid rgba(239, 90, 90, 0.3);
+    color: #ffb3b3;
+  }
+
+  /* Preview card */
+  .preview {
+    align-self: flex-start;
+    width: 86%;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+    border-bottom-left-radius: 4px;
+  }
+  .preview-head {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel-2);
+    font-weight: 600; font-size: 14px;
+  }
+  .preview-body { padding: 12px 16px; font-size: 13px; }
+  .preview-section { margin: 6px 0; }
+  .preview-section h4 {
+    margin: 4px 0 4px;
+    font-size: 12px; font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .diff-row {
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 4px 0;
+    border-bottom: 1px dashed rgba(255,255,255,0.05);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+  }
+  .diff-row:last-child { border-bottom: none; }
+  .diff-key { color: var(--accent-2); min-width: 110px; }
+  .diff-change { color: var(--text); flex: 1; }
+  .diff-old { color: var(--muted); text-decoration: line-through; }
+  .diff-arrow { color: var(--muted); }
+  .diff-new { color: var(--good); }
+  .preview-actions {
+    padding: 10px 16px;
+    border-top: 1px solid var(--line);
+    display: flex; gap: 8px; justify-content: flex-end;
+  }
+  .btn {
+    padding: 7px 14px;
+    border: none; border-radius: 6px;
+    font-size: 13px; font-weight: 500;
+    cursor: pointer;
+  }
+  .btn-confirm { background: var(--good); color: white; }
+  .btn-confirm:hover { filter: brightness(1.1); }
+  .btn-cancel { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+  .btn-cancel:hover { color: var(--text); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+  /* Loader */
+  .loader {
+    display: inline-block; width: 14px; height: 14px;
+    border: 2px solid var(--line);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- Composer ---------- */
+  #composer {
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+    padding: 12px 16px;
+  }
+  #composer-inner {
+    max-width: 760px; margin: 0 auto;
+    display: flex; gap: 8px;
+    align-items: flex-end;
+  }
+  #input {
+    flex: 1;
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-family: inherit;
+    line-height: 1.45;
+    resize: none;
+    max-height: 140px;
+    outline: none;
+  }
+  #input:focus { border-color: var(--accent); }
+  #send {
+    background: var(--accent); color: white;
+    border: none; border-radius: 10px;
+    padding: 10px 18px;
+    font-size: 14px; font-weight: 600;
+    cursor: pointer; flex-shrink: 0;
+  }
+  #send:hover { background: var(--accent-2); }
+  #send:disabled { opacity: .4; cursor: not-allowed; }
+
+  #hints {
+    max-width: 760px; margin: 6px auto 0;
+    font-size: 11px; color: var(--muted);
+    text-align: center;
+  }
+  #hints kbd {
+    background: var(--panel-2); border: 1px solid var(--line);
+    padding: 1px 5px; border-radius: 3px; font-family: inherit;
+  }
+</style>
+</head>
+<body>
+
+<!-- Auth gate -->
+<div id="gate">
+  <div class="gate-card">
+    <div class="gate-brand">
+      <div class="gate-logo">CP2</div>
+      <div>
+        <div class="gate-title">安装播报</div>
+        <div class="gate-sub">Cooper Park 2 · 聊天式更新</div>
+      </div>
+    </div>
+    <form id="gate-form">
+      <label>邮箱</label>
+      <input type="email" id="email" autocomplete="email" required placeholder="you@advfacade.com">
+      <label>密码</label>
+      <input type="password" id="password" autocomplete="current-password" required>
+      <div class="gate-err" id="gate-err"></div>
+      <button type="submit" id="signin">登录</button>
+    </form>
+    <div class="gate-foot">
+      账户需要管理员在 Firebase 后台创建 · <a href="/">回到主页</a>
+    </div>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <header>
+    <div>
+      <div class="h-title">CP2 安装播报</div>
+      <div class="h-sub" id="user-label">—</div>
+    </div>
+    <div class="h-spacer"></div>
+    <a class="h-link" href="/" title="回到主 tracker">📋 主页</a>
+    <a class="h-link" href="#" id="logout">退出</a>
+  </header>
+
+  <div id="msgs"></div>
+
+  <div id="composer">
+    <div id="composer-inner">
+      <textarea id="input" rows="1" placeholder="例：今天装了 SF11A 和 SF11B 的框，11A.2 出问题了 …"></textarea>
+      <button id="send">发送</button>
+    </div>
+    <div id="hints">
+      <kbd>Enter</kbd> 发送 · <kbd>Shift+Enter</kbd> 换行 · 报完进度后会先预览再确认
+    </div>
+  </div>
+</div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script src="firebase-config.js"></script>
+
+<script>
+/* ============================================================
+   CP2 Chat — main script
+   ============================================================ */
+(() => {
+  const $ = (id) => document.getElementById(id);
+
+  // ---------- State ----------
+  let currentUser = null;
+  let cachedState = null;   // last snapshot loaded from /state
+  let pendingPreview = null; // currently shown preview {parsed, msgEl}
+
+  // ---------- Firebase init ----------
+  firebase.initializeApp(window.FIREBASE_CONFIG);
+  const auth = firebase.auth();
+  const db = firebase.database();
+
+  // ---------- Auth ----------
+  $('gate-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = $('email').value.trim();
+    const pw = $('password').value;
+    $('gate-err').textContent = '';
+    $('signin').disabled = true;
+    try {
+      await auth.signInWithEmailAndPassword(email, pw);
+    } catch (err) {
+      $('gate-err').textContent = humanAuthError(err);
+    } finally {
+      $('signin').disabled = false;
+    }
+  });
+
+  $('logout').addEventListener('click', (e) => {
+    e.preventDefault();
+    auth.signOut();
+  });
+
+  auth.onAuthStateChanged(async (user) => {
+    if (user) {
+      currentUser = user;
+      $('user-label').textContent = user.email;
+      $('gate').style.display = 'none';
+      $('app').classList.add('ready');
+      await loadState();
+      // Subscribe to state changes so multi-tab edits keep us fresh
+      db.ref('state').on('value', (snap) => {
+        const v = snap.val();
+        if (v) cachedState = v;
+      });
+      pushSystem(`已登录: ${user.email.split('@')[0]} · 数据已加载（${cachedState?.units?.length || 0} 个 unit）`);
+      pushBot('你好。把今天的安装情况告诉我，我会先解析、给你看预览，确认后再写入数据库。\n\n例如：\n• "今天装了 SF11A 和 SF11B 的框"\n• "SF12A.3 出问题了，开洞错了"\n• "20A.1 加了百叶"\n• "明天打算装 SF03 那一排"');
+    } else {
+      currentUser = null;
+      cachedState = null;
+      $('gate').style.display = 'flex';
+      $('app').classList.remove('ready');
+    }
+  });
+
+  async function loadState() {
+    try {
+      const snap = await db.ref('state').once('value');
+      cachedState = snap.val();
+      if (!cachedState || !cachedState.units) {
+        pushError('数据库里还没有 state — 请先打开主 tracker 保存一次以初始化。');
+      }
+    } catch (err) {
+      pushError('读取数据失败: ' + (err.message || err));
+    }
+  }
+
+  function humanAuthError(err) {
+    const code = err && err.code;
+    if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') return '邮箱或密码错误';
+    if (code === 'auth/user-not-found') return '账户不存在';
+    if (code === 'auth/too-many-requests') return '尝试次数过多，请稍后再试';
+    if (code === 'auth/network-request-failed') return '网络错误';
+    return err.message || '登录失败';
+  }
+
+  // ---------- Messages ----------
+  function pushMsg(cls, text) {
+    const d = document.createElement('div');
+    d.className = 'msg ' + cls;
+    d.textContent = text;
+    $('msgs').appendChild(d);
+    scrollBottom();
+    return d;
+  }
+  function pushUser(text) { return pushMsg('user', text); }
+  function pushBot(text) { return pushMsg('bot', text); }
+  function pushSystem(text) { return pushMsg('system', text); }
+  function pushError(text) { return pushMsg('error', '⚠ ' + text); }
+
+  function pushLoading(text) {
+    const d = document.createElement('div');
+    d.className = 'msg bot';
+    d.innerHTML = `<span class="loader"></span>  <span>${escapeHtml(text)}</span>`;
+    $('msgs').appendChild(d);
+    scrollBottom();
+    return d;
+  }
+
+  function scrollBottom() {
+    const c = $('msgs');
+    c.scrollTop = c.scrollHeight;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+
+  // ---------- Composer ----------
+  const input = $('input');
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+  input.addEventListener('input', () => {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 140) + 'px';
+  });
+  $('send').addEventListener('click', sendMessage);
+
+  async function sendMessage() {
+    const text = input.value.trim();
+    if (!text) return;
+    if (!cachedState) { pushError('数据还没加载好，稍等一下'); return; }
+    if (pendingPreview) {
+      pushSystem('你上一条改动还没确认 — 先点确认或取消');
+      return;
+    }
+
+    pushUser(text);
+    input.value = '';
+    input.style.height = 'auto';
+    $('send').disabled = true;
+    const loadingEl = pushLoading('正在解析…');
+
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const r = await fetch('/api/parse', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          message: text,
+          today,
+          state: {
+            units: (cachedState.units || []).map(u => ({
+              key: u.key, id: u.id, zone: u.zone, status: u.status, date: u.date,
+            })),
+          },
+        }),
+      });
+      loadingEl.remove();
+      if (!r.ok) {
+        const errBody = await r.text();
+        pushError('解析失败 (' + r.status + '): ' + errBody.slice(0, 300));
+        return;
+      }
+      const parsed = await r.json();
+      handleParsed(parsed);
+    } catch (err) {
+      loadingEl.remove();
+      pushError('网络错误: ' + (err.message || err));
+    } finally {
+      $('send').disabled = false;
+    }
+  }
+
+  // ---------- Preview / confirm ----------
+  function handleParsed(parsed) {
+    const hasUpdates = (parsed.unit_updates && parsed.unit_updates.length) || (parsed.log_entries && parsed.log_entries.length);
+
+    if (parsed.needs_clarification && !hasUpdates) {
+      pushBot('🤔 ' + parsed.needs_clarification);
+      return;
+    }
+    if (!hasUpdates) {
+      pushBot('我没听懂这条 — 能换一种说法吗？比如 "SF11A 今天装了"');
+      return;
+    }
+
+    // Build preview
+    const card = renderPreview(parsed);
+    $('msgs').appendChild(card);
+    scrollBottom();
+    pendingPreview = { parsed, card };
+  }
+
+  function renderPreview(parsed) {
+    const card = document.createElement('div');
+    card.className = 'preview';
+
+    // Build unit diff rows
+    const unitRows = [];
+    (parsed.unit_updates || []).forEach(up => {
+      const cur = (cachedState.units || []).find(u => u.key === up.key);
+      if (!cur) {
+        unitRows.push(`
+          <div class="diff-row">
+            <span class="diff-key">${escapeHtml(up.key)}</span>
+            <span class="diff-change" style="color: var(--bad);">⚠ 数据库里没找到这个 key</span>
+          </div>`);
+        return;
+      }
+      const changes = [];
+      ['status', 'date', 'louver', 'note'].forEach(field => {
+        if (up[field] !== undefined && up[field] !== cur[field]) {
+          const oldV = cur[field] || '(空)';
+          const newV = up[field] || '(空)';
+          changes.push(`${field}: <span class="diff-old">${escapeHtml(oldV)}</span> <span class="diff-arrow">→</span> <span class="diff-new">${escapeHtml(newV)}</span>`);
+        }
+      });
+      if (!changes.length) return; // nothing actually changed
+      unitRows.push(`
+        <div class="diff-row">
+          <span class="diff-key">${escapeHtml(up.key)} <span style="color:var(--muted)">(${escapeHtml(cur.id)})</span></span>
+          <span class="diff-change">${changes.join(' · ')}</span>
+        </div>`);
+    });
+
+    const logRows = (parsed.log_entries || []).map(le => `
+      <div class="diff-row">
+        <span class="diff-key">+log ${escapeHtml(le.date)}</span>
+        <span class="diff-change">[${escapeHtml(le.category)}] ${escapeHtml(le.content)}${le.planned ? ' <span style="color:var(--warn)">(planned)</span>' : ''}</span>
+      </div>`).join('');
+
+    card.innerHTML = `
+      <div class="preview-head">📋 预览改动${parsed.summary ? ' — ' + escapeHtml(parsed.summary) : ''}</div>
+      <div class="preview-body">
+        ${unitRows.length ? `<div class="preview-section"><h4>Units (${unitRows.length})</h4>${unitRows.join('')}</div>` : ''}
+        ${logRows ? `<div class="preview-section"><h4>Log</h4>${logRows}</div>` : ''}
+        ${parsed.needs_clarification ? `<div class="preview-section"><h4>提示</h4><div style="color:var(--warn);font-size:12px;">${escapeHtml(parsed.needs_clarification)}</div></div>` : ''}
+      </div>
+      <div class="preview-actions">
+        <button class="btn btn-cancel" data-action="cancel">取消</button>
+        <button class="btn btn-confirm" data-action="confirm">确认写入</button>
+      </div>
+    `;
+    card.querySelector('[data-action="cancel"]').addEventListener('click', () => cancelPreview(card));
+    card.querySelector('[data-action="confirm"]').addEventListener('click', () => confirmPreview(card));
+    return card;
+  }
+
+  function cancelPreview(card) {
+    const wasPending = pendingPreview && pendingPreview.card === card;
+    if (card.parentNode) card.remove();
+    if (wasPending) pendingPreview = null;
+    pushSystem('已取消');
+  }
+
+  async function confirmPreview(card) {
+    if (!pendingPreview || pendingPreview.card !== card) return;
+    const { parsed } = pendingPreview;
+    const btns = card.querySelectorAll('.btn');
+    btns.forEach(b => b.disabled = true);
+    const confirmBtn = card.querySelector('[data-action="confirm"]');
+    confirmBtn.innerHTML = '<span class="loader"></span> 写入中…';
+
+    try {
+      // Build new state — fresh snapshot from server first to avoid clobbering
+      const snap = await db.ref('state').once('value');
+      const live = snap.val() || cachedState;
+      const next = JSON.parse(JSON.stringify(live));
+
+      // Apply unit updates
+      const updated = [];
+      (parsed.unit_updates || []).forEach(up => {
+        const u = (next.units || []).find(x => x.key === up.key);
+        if (!u) return;
+        ['status', 'date', 'louver', 'note'].forEach(f => {
+          if (up[f] !== undefined) u[f] = up[f];
+        });
+        updated.push(up.key);
+      });
+
+      // Append log entries
+      if (!Array.isArray(next.log)) next.log = [];
+      (parsed.log_entries || []).forEach(le => {
+        next.log.push({
+          date: le.date,
+          category: le.category,
+          content: le.content,
+          ...(le.planned ? { planned: true } : {}),
+        });
+      });
+
+      next.updatedAt = new Date().toISOString();
+
+      // Push to Firebase /state
+      const desc = parsed.summary || ('Chat: 修改 ' + updated.length + ' 个 unit');
+      const payload = Object.assign({}, next, {
+        _ts: firebase.database.ServerValue.TIMESTAMP,
+        _by: currentUser.email,
+        _desc: desc,
+      });
+      await db.ref('state').set(payload);
+      // History
+      const counts = { installed: 0, pending: 0, issue: 0 };
+      (next.units || []).forEach(u => { if (counts[u.status] != null) counts[u.status]++; });
+      await db.ref('history').push({
+        ts: firebase.database.ServerValue.TIMESTAMP,
+        user: currentUser.email,
+        desc,
+        snapshot: {
+          units: next.units.length,
+          installed: counts.installed,
+          issues: counts.issue,
+          log: (next.log || []).length,
+        },
+      });
+
+      cachedState = next;
+      card.querySelector('.preview-actions').innerHTML = '<span style="color:var(--good);font-size:13px;">✓ 已写入数据库</span>';
+      pendingPreview = null;
+      pushBot('✅ ' + desc + '\n\n主 tracker 如果开着会自动刷新。');
+    } catch (err) {
+      console.error(err);
+      btns.forEach(b => b.disabled = false);
+      confirmBtn.textContent = '确认写入';
+      const code = err && err.code;
+      let msg = err.message || String(err);
+      if (code === 'PERMISSION_DENIED' || /permission/i.test(msg)) {
+        msg = '你的账户没有写权限 — 请联系管理员把邮箱加入 /allowlist';
+      }
+      pushError('写入失败: ' + msg);
+    }
+  }
+
+})();
+</script>
+</body>
+</html>
