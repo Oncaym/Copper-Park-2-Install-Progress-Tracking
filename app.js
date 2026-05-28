@@ -133,7 +133,8 @@ const I18N = {
     col_panel: "Panel",
     pie_issue_tooltip_title: "ISSUE units",
     pie_click_hint: "Click to view details",
-    btn_close: "Close"
+    btn_close: "Close",
+    btn_glass_triage: "🪟 Glass Triage"
   },
   zh: {
     header_sub: "Broadway Builder · 一层 · 框架与百叶安装追踪",
@@ -262,7 +263,8 @@ const I18N = {
     col_panel: "面板",
     pie_issue_tooltip_title: "ISSUE 单元",
     pie_click_hint: "点击查看明细",
-    btn_close: "关闭"
+    btn_close: "关闭",
+    btn_glass_triage: "🪟 玻璃巡检"
   },
   ko: {
     header_sub: "Broadway Builder · 1층 · 프레임 및 루버 설치 추적",
@@ -391,7 +393,8 @@ const I18N = {
     col_panel: "패널",
     pie_issue_tooltip_title: "ISSUE 유닛",
     pie_click_hint: "클릭하여 상세 보기",
-    btn_close: "닫기"
+    btn_close: "닫기",
+    btn_glass_triage: "🪟 유리 점검"
   }
 };
 const WEEKDAYS = {
