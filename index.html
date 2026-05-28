@@ -669,6 +669,102 @@
     margin-top: 18px;
   }
 
+  /* ---- Daily Log: photo upload UI ---- */
+  .log-photo-row { margin-bottom: 14px; }
+  .log-photo-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .log-photo-controls .btn { padding: 6px 12px; font-size: 12px; }
+  .log-photo-status { font-size: 11px; color: var(--text-dim); }
+  .log-photo-hint { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+  .log-photo-thumbs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .log-photo-thumb {
+    position: relative; width: 72px; height: 72px;
+    border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
+    background: var(--bg);
+  }
+  .log-photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .log-photo-thumb-x {
+    position: absolute; top: 2px; right: 2px;
+    width: 18px; height: 18px; border: 0; border-radius: 50%;
+    background: rgba(0,0,0,0.7); color: #fff; cursor: pointer;
+    font-size: 12px; line-height: 18px; padding: 0;
+  }
+  .log-photo-thumb-x:hover { background: var(--red); }
+
+  /* ---- Timeline: photo strip on each entry ---- */
+  .timeline-entry.is-issue { border-left: 3px solid var(--red); padding-left: 9px; }
+  .tag.photo-badge {
+    background: rgba(248,81,73,0.18); color: var(--red); border-color: var(--red);
+  }
+  .timeline-photos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .timeline-photos img {
+    width: 64px; height: 64px; object-fit: cover; border-radius: 4px;
+    border: 1px solid var(--border); cursor: zoom-in; display: block;
+  }
+  .timeline-photos img:hover { border-color: var(--accent); }
+  .timeline-photo-more {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 64px; height: 64px; border-radius: 4px;
+    background: var(--bg); border: 1px dashed var(--border);
+    font-size: 12px; color: var(--text-dim); cursor: pointer;
+  }
+
+  /* ---- Photo gallery modal ---- */
+  .photo-gallery-modal { max-width: 920px; width: 92%; padding: 18px; }
+  .photo-gallery-main {
+    position: relative; background: #000; border-radius: 8px;
+    overflow: hidden; height: 60vh; min-height: 300px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .photo-gallery-main img { max-width: 100%; max-height: 100%; display: block; }
+  .photo-gallery-nav {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    background: rgba(0,0,0,0.5); color: #fff; border: 0;
+    width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
+    font-size: 22px; line-height: 1;
+  }
+  .photo-gallery-nav:hover { background: rgba(0,0,0,0.8); }
+  .photo-gallery-nav.prev { left: 10px; }
+  .photo-gallery-nav.next { right: 10px; }
+  .photo-gallery-counter {
+    position: absolute; bottom: 8px; right: 12px; color: #fff;
+    background: rgba(0,0,0,0.55); padding: 2px 8px; border-radius: 10px;
+    font-size: 11px;
+  }
+  .photo-gallery-strip { display: flex; gap: 6px; margin-top: 10px; overflow-x: auto; padding-bottom: 4px; }
+  .photo-gallery-strip img {
+    width: 60px; height: 60px; object-fit: cover; border-radius: 4px;
+    border: 2px solid transparent; cursor: pointer; flex: 0 0 auto;
+  }
+  .photo-gallery-strip img.active { border-color: var(--accent); }
+
+  /* ---- Clickable KPI cards ---- */
+  .kpi-card.clickable { cursor: pointer; transition: transform 120ms ease, border-color 120ms ease, background 120ms ease; }
+  .kpi-card.clickable:hover { transform: translateY(-1px); border-color: var(--accent); }
+  .kpi-card.clickable:active { transform: translateY(0); }
+
+  /* ---- KPI detail modal ---- */
+  .kpi-detail-modal { max-width: 760px; width: 92%; }
+  .kpi-detail-modal h3 { display: flex; align-items: center; gap: 8px; }
+  .kpi-detail-count {
+    background: var(--accent); color: #fff; padding: 1px 8px;
+    border-radius: 10px; font-size: 11px;
+  }
+  .kpi-detail-body {
+    max-height: 60vh; overflow-y: auto;
+    border: 1px solid var(--border); border-radius: 6px;
+  }
+  .kpi-detail-empty { padding: 24px; text-align: center; color: var(--text-dim); }
+  .kpi-detail-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .kpi-detail-table th, .kpi-detail-table td {
+    padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .kpi-detail-table th {
+    background: var(--bg); color: var(--text-dim); font-weight: 600;
+    position: sticky; top: 0; z-index: 1;
+  }
+  .kpi-detail-table tbody tr:hover { background: rgba(88,166,255,0.06); }
+
   /* Legend */
   .legend {
     display: flex;
@@ -1135,8 +1231,7 @@
         <button class="lang-btn" data-lang="zh" data-om-id="17a02737:13">中文</button>
         <button class="lang-btn" data-lang="ko" data-om-id="17a02737:14">한국어</button>
       </div>
-      <a class="btn" href="chat.html" title="Natural-language chat updater">💬 Chat</a>
-      <a class="btn" href="friday-triage.html" title="Friday glass delivery triage" id="btn-friday-triage">🚚 Friday Triage</a>
+      <a class="btn" href="/chat" title="Natural-language chat updater">💬 Chat</a>
       <button class="btn btn-primary" onclick="openAddLog()" data-om-id="17a02737:21"><span data-i18n="btn_add_log" data-om-id="17a02737:22">+ Add Daily Log</span></button>
       <button class="btn btn-danger" onclick="resetData()" data-om-id="17a02737:23"><span data-i18n="btn_reset" data-om-id="17a02737:24">↻ Reset</span></button>
     </div>
@@ -1146,33 +1241,33 @@
 <main data-om-id="17a02737:25">
   <!-- KPI Cards -->
   <section class="kpi-grid" data-om-id="17a02737:26">
-    <div class="kpi-card green" data-om-id="17a02737:27">
+    <div class="kpi-card green clickable" onclick="openKpiDetail('installed')" data-om-id="17a02737:27">
       <div class="kpi-label" data-i18n="kpi_installed" data-om-id="17a02737:28">Installed</div>
       <div class="kpi-value" id="kpi-installed" data-om-id="17a02737:29">29</div>
       <div class="kpi-sub" data-i18n="kpi_installed_sub" data-om-id="17a02737:30">Framing units completed</div>
     </div>
 
-    <div class="kpi-card red" data-om-id="17a02737:35">
+    <div class="kpi-card red clickable" onclick="openKpiDetail('issue')" data-om-id="17a02737:35">
       <div class="kpi-label" data-i18n="kpi_issues" data-om-id="17a02737:36">Issues</div>
       <div class="kpi-value" id="kpi-issues" data-om-id="17a02737:37">5</div>
       <div class="kpi-sub" data-i18n="kpi_issues_sub" data-om-id="17a02737:38">Opening error / rework needed</div>
     </div>
-    <div class="kpi-card" data-om-id="17a02737:39">
+    <div class="kpi-card clickable" onclick="openKpiDetail('pending')" data-om-id="17a02737:39">
       <div class="kpi-label" data-i18n="kpi_pending" data-om-id="17a02737:40">Pending</div>
       <div class="kpi-value" id="kpi-pending" data-om-id="17a02737:41">35</div>
       <div class="kpi-sub" data-i18n="kpi_pending_sub" data-om-id="17a02737:42">Not yet installed</div>
     </div>
-    <div class="kpi-card purple" data-om-id="17a02737:43">
+    <div class="kpi-card purple clickable" onclick="openKpiDetail('louvers')" data-om-id="17a02737:43">
       <div class="kpi-label" data-i18n="kpi_louvers" data-om-id="17a02737:44">Louvers Installed</div>
       <div class="kpi-value" id="kpi-louvers" data-om-id="17a02737:45">11</div>
       <div class="kpi-sub" data-i18n="kpi_louvers_sub" data-om-id="17a02737:46">Louver installation count</div>
     </div>
-    <div class="kpi-card green">
+    <div class="kpi-card green clickable" onclick="openKpiDetail('glass')">
       <div class="kpi-label">Glass Installed</div>
       <div class="kpi-value" id="kpi-glass-installed">0</div>
       <div class="kpi-sub" id="kpi-glass-installed-sub">0 / 53 panels</div>
     </div>
-    <div class="kpi-card" data-om-id="17a02737:47">
+    <div class="kpi-card clickable" onclick="openKpiDetail('percent')" data-om-id="17a02737:47">
       <div class="kpi-label" data-i18n="kpi_percent" data-om-id="17a02737:48">Overall Progress</div>
       <div class="kpi-value" id="kpi-percent" data-om-id="17a02737:49">42%</div>
       <div class="kpi-sub" id="kpi-percent-sub" data-i18n="kpi_percent_sub" data-om-id="17a02737:50">29 / 69 units · Ground FL</div>
@@ -2427,10 +2522,52 @@
       <label data-i18n="form_units_desc" data-om-id="17a02737:1352">Units / Description</label>
       <input type="text" id="l-content" data-i18n-placeholder="ph_log_content" placeholder="e.g. 11A 11B 10A or Caulking" data-om-id="17a02737:1353">
     </div>
+    <div class="form-row log-photo-row">
+      <label data-i18n="form_photos">Site Photos</label>
+      <div class="log-photo-controls">
+        <input type="file" id="l-photo-input" accept="image/*" capture="environment" multiple
+               style="display:none" onchange="handleLogPhotoFiles(this.files); this.value='';">
+        <button type="button" class="btn" onclick="document.getElementById('l-photo-input').click()" data-i18n="btn_add_photo">📷 Add Photos</button>
+        <span class="log-photo-status" id="l-photo-status"></span>
+      </div>
+      <div class="log-photo-hint" data-i18n="photo_hint">Take / select photos. Auto-compressed and saved with this log.</div>
+      <div class="log-photo-thumbs" id="l-photo-thumbs"></div>
+    </div>
     <div class="modal-actions" data-om-id="17a02737:1354">
       <button class="btn btn-danger" id="logDeleteBtn" onclick="deleteLogFromModal()" style="margin-right:auto;display:none" data-i18n="btn_delete" data-om-id="17a02737:1355">Delete</button>
       <button class="btn" onclick="closeLogModal()" data-i18n="btn_cancel" data-om-id="17a02737:1356">Cancel</button>
       <button class="btn btn-primary" onclick="saveLog()" data-i18n="btn_save" data-om-id="17a02737:1357">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Photo gallery modal (viewing ISSUE photos) -->
+<div class="modal-overlay" id="photoGalleryModal">
+  <div class="modal photo-gallery-modal">
+    <h3 id="photoGalleryTitle" data-i18n="photo_gallery_title">Site Issue Photos</h3>
+    <div class="photo-gallery-main">
+      <button type="button" class="photo-gallery-nav prev" onclick="galleryPrev()" aria-label="prev">‹</button>
+      <img id="photoGalleryImg" alt="">
+      <button type="button" class="photo-gallery-nav next" onclick="galleryNext()" aria-label="next">›</button>
+      <div class="photo-gallery-counter" id="photoGalleryCounter">1 / 1</div>
+    </div>
+    <div class="photo-gallery-strip" id="photoGalleryStrip"></div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="closePhotoGallery()" data-i18n="btn_close">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- KPI / Pie-chart drill-down modal -->
+<div class="modal-overlay" id="kpiDetailModal">
+  <div class="modal kpi-detail-modal">
+    <h3>
+      <span id="kpiDetailTitle" data-i18n="kpi_detail_title_installed">Details</span>
+      <span class="kpi-detail-count" id="kpiDetailCount">0</span>
+    </h3>
+    <div class="kpi-detail-body" id="kpiDetailBody"></div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="closeKpiDetail()" data-i18n="btn_close">Close</button>
     </div>
   </div>
 </div>

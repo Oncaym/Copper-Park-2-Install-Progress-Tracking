@@ -105,7 +105,35 @@ const I18N = {
     legend_planned: "Planned",
     filter_planned: "Planned",
     no_units_match: "No units match",
-    edit_unit_title: "Edit · {id}"
+    edit_unit_title: "Edit · {id}",
+    form_photos: "Site Photos",
+    btn_add_photo: "📷 Add Photos",
+    photo_hint: "Take / select photos. Auto-compressed (max ~1280px) and saved with this log.",
+    photo_processing: "Processing photo…",
+    photo_remove_confirm: "Remove this photo?",
+    photo_gallery_title: "Site Issue Photos",
+    photo_count: "{n} photo(s)",
+    photo_open: "View photos",
+    badge_photo: "📷",
+    no_photos: "No photos attached",
+    kpi_detail_title_installed: "Installed Units",
+    kpi_detail_title_pending: "Pending Units",
+    kpi_detail_title_progress: "Ready Units",
+    kpi_detail_title_issues: "Issue Units",
+    kpi_detail_title_louvers: "Louver-Installed Units",
+    kpi_detail_title_glass: "Glass-Installed Panels",
+    kpi_detail_title_percent: "All Units",
+    kpi_detail_empty: "Nothing to show.",
+    col_unit: "Unit",
+    col_zone: "Zone",
+    col_type: "Type",
+    col_status: "Status",
+    col_note: "Note",
+    col_date: "Date",
+    col_panel: "Panel",
+    pie_issue_tooltip_title: "ISSUE units",
+    pie_click_hint: "Click to view details",
+    btn_close: "Close"
   },
   zh: {
     header_sub: "Broadway Builder · 一层 · 框架与百叶安装追踪",
@@ -206,7 +234,35 @@ const I18N = {
     legend_planned: "计划",
     filter_planned: "计划",
     no_units_match: "无匹配单元",
-    edit_unit_title: "编辑 · {id}"
+    edit_unit_title: "编辑 · {id}",
+    form_photos: "现场照片",
+    btn_add_photo: "📷 添加照片",
+    photo_hint: "支持拍照或本地选择，会自动压缩（最长边约1280px）后随日报一起保存。",
+    photo_processing: "正在处理照片…",
+    photo_remove_confirm: "移除这张照片?",
+    photo_gallery_title: "现场问题照片",
+    photo_count: "{n} 张照片",
+    photo_open: "查看照片",
+    badge_photo: "📷",
+    no_photos: "暂无照片",
+    kpi_detail_title_installed: "已安装单元",
+    kpi_detail_title_pending: "待安装单元",
+    kpi_detail_title_progress: "就绪单元",
+    kpi_detail_title_issues: "问题单元明细",
+    kpi_detail_title_louvers: "已装百叶单元",
+    kpi_detail_title_glass: "已装玻璃面板",
+    kpi_detail_title_percent: "全部单元",
+    kpi_detail_empty: "暂无数据。",
+    col_unit: "单元",
+    col_zone: "区域",
+    col_type: "类型",
+    col_status: "状态",
+    col_note: "备注",
+    col_date: "日期",
+    col_panel: "面板",
+    pie_issue_tooltip_title: "ISSUE 单元",
+    pie_click_hint: "点击查看明细",
+    btn_close: "关闭"
   },
   ko: {
     header_sub: "Broadway Builder · 1층 · 프레임 및 루버 설치 추적",
@@ -307,7 +363,35 @@ const I18N = {
     legend_planned: "예정",
     filter_planned: "예정",
     no_units_match: "일치하는 유닛 없음",
-    edit_unit_title: "편집 · {id}"
+    edit_unit_title: "편집 · {id}",
+    form_photos: "현장 사진",
+    btn_add_photo: "📷 사진 추가",
+    photo_hint: "촬영 또는 로컬에서 선택, 자동으로 압축되어 일지에 저장됩니다.",
+    photo_processing: "사진 처리 중…",
+    photo_remove_confirm: "이 사진을 제거하시겠습니까?",
+    photo_gallery_title: "현장 문제 사진",
+    photo_count: "{n}장",
+    photo_open: "사진 보기",
+    badge_photo: "📷",
+    no_photos: "첨부된 사진 없음",
+    kpi_detail_title_installed: "설치 완료 유닛",
+    kpi_detail_title_pending: "대기 유닛",
+    kpi_detail_title_progress: "준비 유닛",
+    kpi_detail_title_issues: "문제 유닛 상세",
+    kpi_detail_title_louvers: "루버 설치 유닛",
+    kpi_detail_title_glass: "유리 설치 패널",
+    kpi_detail_title_percent: "전체 유닛",
+    kpi_detail_empty: "데이터 없음.",
+    col_unit: "유닛",
+    col_zone: "구역",
+    col_type: "유형",
+    col_status: "상태",
+    col_note: "비고",
+    col_date: "날짜",
+    col_panel: "패널",
+    pie_issue_tooltip_title: "ISSUE 유닛",
+    pie_click_hint: "클릭하여 상세 보기",
+    btn_close: "닫기"
   }
 };
 const WEEKDAYS = {
@@ -1343,11 +1427,30 @@ function renderTimeline() {
     const entriesHtml = entries.map(({ l, i }) => {
       const cats = getCats(l);
       const tags = cats.map(c => `<span class="tag ${c}">${categoryLabel(c)}</span>`).join('');
+      const photos = Array.isArray(l.photos) ? l.photos : [];
+      const isIssue = cats.includes('issue');
+      // ISSUE logs with photos -> opening the entry pops the photo gallery directly.
+      // Everything else falls back to the existing edit modal.
+      const onClick = (isIssue && photos.length)
+        ? `openPhotoGallery(${i},0)`
+        : `editLog(${i})`;
+      const title = (isIssue && photos.length)
+        ? esc(t('photo_open'))
+        : esc(t('log_click_edit'));
+      const camBadge = photos.length
+        ? `<span class="tag photo-badge" title="${esc(t('photo_count').replace('{n}', photos.length))}">${t('badge_photo')} ${photos.length}</span>`
+        : '';
+      const thumbs = photos.length
+        ? `<div class="timeline-photos">${photos.slice(0,6).map((p, pi) =>
+              `<img src="${p}" alt="photo ${pi+1}" onclick="event.stopPropagation();openPhotoGallery(${i},${pi})">`
+            ).join('')}${photos.length>6?`<span class="timeline-photo-more" onclick="event.stopPropagation();openPhotoGallery(${i},6)">+${photos.length-6}</span>`:''}</div>`
+        : '';
       return `
-      <div class="timeline-entry" data-log-idx="${i}" onclick="editLog(${i})" title="${esc(t('log_click_edit'))}">
+      <div class="timeline-entry${isIssue?' is-issue':''}" data-log-idx="${i}" onclick="${onClick}" title="${title}">
         <button class="log-delete-btn" onclick="event.stopPropagation();deleteLog(${i})" title="${esc(t('log_delete'))}" aria-label="delete">×</button>
         <div class="timeline-content">${esc(l.content)}</div>
-        <div class="timeline-tags">${tags}</div>
+        <div class="timeline-tags">${tags}${camBadge}</div>
+        ${thumbs}
       </div>`;
     }).join('');
 
@@ -1396,6 +1499,10 @@ function renderCharts() {
     pending: state.units.filter(u=>u.status==='pending').length,
   };
   if (donutChart) donutChart.destroy();
+  // For the Issue slice we feed the tooltip the actual unit IDs + notes so
+  // hovering it lists site issues directly (no more bare count).
+  const issueUnits = state.units.filter(u => u.status === 'issue');
+  const sliceTypes = ['installed','in-progress','issue','pending'];
   donutChart = new Chart(document.getElementById('donutChart'), {
     type: 'doughnut',
     data: {
@@ -1411,11 +1518,139 @@ function renderCharts() {
       responsive: true,
       maintainAspectRatio: false,
       cutout: '65%',
+      onClick: (evt, els) => {
+        if (!els || !els.length) return;
+        const kind = sliceTypes[els[0].index];
+        if (kind) openKpiDetail(kind === 'in-progress' ? 'progress' : kind);
+      },
+      onHover: (evt, els) => {
+        evt.native.target.style.cursor = (els && els.length) ? 'pointer' : 'default';
+      },
       plugins: {
-        legend: { position: 'bottom', labels: { color:'#e6edf3', boxWidth: 12, padding: 12 } }
+        legend: { position: 'bottom', labels: { color:'#e6edf3', boxWidth: 12, padding: 12 } },
+        tooltip: {
+          backgroundColor: 'rgba(20,24,30,0.96)',
+          borderColor: '#30363d',
+          borderWidth: 1,
+          titleColor: '#e6edf3',
+          bodyColor: '#c9d1d9',
+          padding: 10,
+          boxPadding: 4,
+          callbacks: {
+            // For ISSUE slice -> list actual ISSUE units + notes
+            label: (ctx) => {
+              const i = ctx.dataIndex;
+              const v = ctx.parsed;
+              if (sliceTypes[i] === 'issue') {
+                if (!issueUnits.length) return ctx.label + ': 0';
+                const lines = [ctx.label + ': ' + v];
+                issueUnits.slice(0, 8).forEach(u => {
+                  const n = (u.note || '').toString().trim();
+                  lines.push('  • ' + u.id + (n ? ' — ' + (n.length > 60 ? n.slice(0,57)+'…' : n) : ''));
+                });
+                if (issueUnits.length > 8) lines.push('  …+' + (issueUnits.length - 8) + ' more');
+                lines.push(t('pie_click_hint'));
+                return lines;
+              }
+              return ctx.label + ': ' + v;
+            }
+          }
+        }
       }
     }
   });
+}
+
+/* ======================================================
+   KPI DRILL-DOWN PANEL
+   Each KPI card and the donut slices route to openKpiDetail(kind).
+   ====================================================== */
+function _kpiUnitsForKind(kind) {
+  const u = state.units || [];
+  switch (kind) {
+    case 'installed': return { units: u.filter(x => x.status === 'installed'), title: t('kpi_detail_title_installed') };
+    case 'pending':   return { units: u.filter(x => x.status === 'pending'),   title: t('kpi_detail_title_pending') };
+    case 'progress':
+    case 'in-progress':
+    case 'ready':
+                      return { units: u.filter(x => x.status === 'in-progress'), title: t('kpi_detail_title_progress') };
+    case 'issue':
+    case 'issues':    return { units: u.filter(x => x.status === 'issue'),     title: t('kpi_detail_title_issues') };
+    case 'louvers':   return { units: u.filter(x => x.louver === 'yes'),       title: t('kpi_detail_title_louvers') };
+    case 'percent':   return { units: u.slice(),                               title: t('kpi_detail_title_percent') };
+    case 'glass': {
+      // Flatten glass panels
+      const rows = [];
+      u.forEach(x => {
+        const panels = x.glassPanels || (x.glass ? [{ panel: x.panels||'', status: x.glass }] : []);
+        panels.forEach(p => {
+          if (p.status === 'installed') rows.push({ id: x.id, panel: p.panel || '', zone: x.zone, type: x.type, status: 'installed', note: '' });
+        });
+      });
+      return { units: rows, title: t('kpi_detail_title_glass'), variant: 'glass' };
+    }
+    default: return { units: [], title: t('kpi_detail_title_installed') };
+  }
+}
+
+function openKpiDetail(kind) {
+  const { units, title, variant } = _kpiUnitsForKind(kind);
+  const modal = document.getElementById('kpiDetailModal');
+  if (!modal) return;
+  const titleEl = document.getElementById('kpiDetailTitle');
+  const countEl = document.getElementById('kpiDetailCount');
+  const bodyEl  = document.getElementById('kpiDetailBody');
+  if (titleEl) titleEl.textContent = title;
+  if (countEl) countEl.textContent = units.length + '';
+  const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  if (!units.length) {
+    bodyEl.innerHTML = `<div class="kpi-detail-empty">${esc(t('kpi_detail_empty'))}</div>`;
+  } else if (variant === 'glass') {
+    bodyEl.innerHTML = `
+      <table class="kpi-detail-table">
+        <thead><tr>
+          <th>${esc(t('col_unit'))}</th>
+          <th>${esc(t('col_panel'))}</th>
+          <th>${esc(t('col_zone'))}</th>
+          <th>${esc(t('col_type'))}</th>
+          <th>${esc(t('col_status'))}</th>
+        </tr></thead>
+        <tbody>${units.map(r => `
+          <tr>
+            <td><strong>${esc(r.id)}</strong></td>
+            <td>${esc(r.panel)}</td>
+            <td>${esc(r.zone||'')}</td>
+            <td>${esc(r.type||'')}</td>
+            <td><span class="status-dot ${r.status}"></span>${esc(formatStatus(r.status))}</td>
+          </tr>`).join('')}</tbody>
+      </table>`;
+  } else {
+    bodyEl.innerHTML = `
+      <table class="kpi-detail-table">
+        <thead><tr>
+          <th>${esc(t('col_unit'))}</th>
+          <th>${esc(t('col_type'))}</th>
+          <th>${esc(t('col_zone'))}</th>
+          <th>${esc(t('col_status'))}</th>
+          <th>${esc(t('col_date'))}</th>
+          <th>${esc(t('col_note'))}</th>
+        </tr></thead>
+        <tbody>${units.map(u => `
+          <tr onclick="closeKpiDetail();openUnit('${esc(u.key)}')" style="cursor:pointer">
+            <td><strong>${esc(u.id)}</strong></td>
+            <td>${esc(u.type||'')}</td>
+            <td>${esc(u.zone||'')}</td>
+            <td><span class="status-dot ${u.status}"></span>${esc(formatStatus(u.status))}</td>
+            <td>${u.date ? esc(formatDate(u.date)) : '<span style="color:var(--text-dim)">—</span>'}</td>
+            <td style="color:var(--text-dim)">${esc(u.note || '')}</td>
+          </tr>`).join('')}</tbody>
+      </table>`;
+  }
+  modal.classList.add('show');
+}
+function closeKpiDetail() {
+  const m = document.getElementById('kpiDetailModal');
+  if (m) m.classList.remove('show');
 }
 
 function renderGlassChart() {
@@ -1754,12 +1989,77 @@ function setLogCategoryCheckboxes(cats) {
 function getLogCategoryCheckboxes() {
   return Array.from(document.querySelectorAll('#l-categories input[type="checkbox"]:checked')).map(cb => cb.value);
 }
+/* -------- Daily Log photo helpers --------
+   Photos are stored as compressed JPEG data-URLs on entry.photos[].
+   This keeps everything inside state.json so Firebase + Save-to-HTML
+   both keep working with zero extra plumbing. */
+let _logPhotosDraft = [];   // in-progress photos for the open log modal
+
+function _photoFileToDataUrl(file, maxEdge = 1280, quality = 0.72) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('read failed'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('img failed'));
+      img.onload = () => {
+        let { width: w, height: h } = img;
+        const scale = Math.min(1, maxEdge / Math.max(w, h));
+        w = Math.round(w * scale); h = Math.round(h * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        try { resolve(canvas.toDataURL('image/jpeg', quality)); }
+        catch(e){ reject(e); }
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleLogPhotoFiles(fileList) {
+  if (!fileList || !fileList.length) return;
+  const status = document.getElementById('l-photo-status');
+  if (status) status.textContent = t('photo_processing');
+  for (const f of Array.from(fileList)) {
+    if (!f.type || !f.type.startsWith('image/')) continue;
+    try {
+      const dataUrl = await _photoFileToDataUrl(f);
+      _logPhotosDraft.push(dataUrl);
+    } catch(e) { /* skip bad image */ }
+  }
+  if (status) status.textContent = '';
+  renderLogPhotoThumbs();
+}
+
+function removeLogPhoto(idx) {
+  if (!confirm(t('photo_remove_confirm'))) return;
+  _logPhotosDraft.splice(idx, 1);
+  renderLogPhotoThumbs();
+}
+
+function renderLogPhotoThumbs() {
+  const wrap = document.getElementById('l-photo-thumbs');
+  if (!wrap) return;
+  if (!_logPhotosDraft.length) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = _logPhotosDraft.map((src, i) => `
+    <div class="log-photo-thumb">
+      <img src="${src}" alt="photo ${i+1}">
+      <button type="button" class="log-photo-thumb-x" onclick="removeLogPhoto(${i})" title="remove" aria-label="remove">×</button>
+    </div>`).join('');
+}
+
 function openAddLog() {
   editingLogIdx = null;
   document.querySelector('#logModal h3').textContent = t('modal_add_log');
   document.getElementById('l-date').value = new Date().toISOString().slice(0,10);
   setLogCategoryCheckboxes(['framing']);
   document.getElementById('l-content').value = '';
+  _logPhotosDraft = [];
+  renderLogPhotoThumbs();
+  const inp = document.getElementById('l-photo-input'); if (inp) inp.value = '';
   document.getElementById('logDeleteBtn').style.display = 'none';
   document.getElementById('logModal').classList.add('show');
 }
@@ -1771,6 +2071,9 @@ function editLog(idx) {
   document.getElementById('l-date').value = entry.date || '';
   setLogCategoryCheckboxes(getCats(entry));
   document.getElementById('l-content').value = entry.content || '';
+  _logPhotosDraft = Array.isArray(entry.photos) ? entry.photos.slice() : [];
+  renderLogPhotoThumbs();
+  const inp = document.getElementById('l-photo-input'); if (inp) inp.value = '';
   document.getElementById('logDeleteBtn').style.display = '';
   document.getElementById('logModal').classList.add('show');
 }
@@ -1798,10 +2101,16 @@ function saveLog() {
     date: document.getElementById('l-date').value,
     categories: cats,
     category: cats[0], // legacy compat
-    content: document.getElementById('l-content').value.trim()
+    content: document.getElementById('l-content').value.trim(),
+    photos: _logPhotosDraft.slice()
   };
   if (!entry.date || !entry.content) { toast(t('alert_fill_required')); return; }
   if (editingLogIdx !== null) {
+    // Preserve auto/kind/autoUnits metadata when editing an auto-generated entry
+    const prev = state.log[editingLogIdx] || {};
+    if (prev.auto)      entry.auto = prev.auto;
+    if (prev.kind)      entry.kind = prev.kind;
+    if (prev.autoUnits) entry.autoUnits = prev.autoUnits;
     state.log[editingLogIdx] = entry;
   } else {
     state.log.push(entry);
@@ -1809,6 +2118,48 @@ function saveLog() {
   closeLogModal();
   saveState();
 }
+
+/* -------- Photo gallery viewer (ISSUE logs) -------- */
+let _galleryPhotos = [];
+let _galleryIdx = 0;
+function openPhotoGallery(logIdx, startIdx) {
+  const entry = state.log[logIdx];
+  if (!entry || !Array.isArray(entry.photos) || !entry.photos.length) return;
+  _galleryPhotos = entry.photos.slice();
+  _galleryIdx = Math.max(0, Math.min(startIdx|0, _galleryPhotos.length - 1));
+  const title = document.getElementById('photoGalleryTitle');
+  if (title) {
+    const cats = getCats(entry);
+    title.textContent = (cats.includes('issue') ? '⚠ ' : '') +
+      t('photo_gallery_title') + ' · ' + (entry.date || '') +
+      (entry.content ? ' · ' + entry.content : '');
+  }
+  renderGalleryView();
+  document.getElementById('photoGalleryModal').classList.add('show');
+}
+function closePhotoGallery() {
+  document.getElementById('photoGalleryModal').classList.remove('show');
+  _galleryPhotos = []; _galleryIdx = 0;
+}
+function renderGalleryView() {
+  const img = document.getElementById('photoGalleryImg');
+  const counter = document.getElementById('photoGalleryCounter');
+  const strip = document.getElementById('photoGalleryStrip');
+  if (!img) return;
+  img.src = _galleryPhotos[_galleryIdx] || '';
+  if (counter) counter.textContent = (_galleryIdx + 1) + ' / ' + _galleryPhotos.length;
+  if (strip) {
+    strip.innerHTML = _galleryPhotos.map((p, i) =>
+      `<img src="${p}" class="${i===_galleryIdx?'active':''}" onclick="galleryGoto(${i})" alt="thumb ${i+1}">`
+    ).join('');
+  }
+}
+function galleryGoto(i) {
+  if (i < 0 || i >= _galleryPhotos.length) return;
+  _galleryIdx = i; renderGalleryView();
+}
+function galleryPrev() { galleryGoto((_galleryIdx - 1 + _galleryPhotos.length) % _galleryPhotos.length); }
+function galleryNext() { galleryGoto((_galleryIdx + 1) % _galleryPhotos.length); }
 
 /* -------- Import / Export / Reset -------- */
 function exportData() {
