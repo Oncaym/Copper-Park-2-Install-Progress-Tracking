@@ -567,42 +567,44 @@
 // size = "W × H" (inches). order = packing list ref.
 const ROSTER = [
   // Order J01 — typical floor stack
-  { tag: "1F-01", qty: 4, size: '67-1/4 × 122-1/2', order: "J04" },
-  { tag: "1F-02", qty: 5, size: '32-3/4 × 75-1/4',  order: "J01" },
-  { tag: "1F-03", qty: 2, size: '75-1/4 × 120-3/4', order: "J03" },
-  { tag: "1F-04", qty: 2, size: '47 × 67-1/4',      order: "J04" },
-  { tag: "1F-05", qty: 2, size: '67-1/4 × 90-1/8',  order: "J04" },
-  { tag: "1F-06", qty: 3, size: '47 × 67-1/2',      order: "J04" },
-  { tag: "1F-07", qty: 3, size: '67-1/2 × 90-1/8',  order: "J04" },
-  { tag: "1F-08", qty: 3, size: '75-1/4 × 108-5/8', order: "J02" },
-  { tag: "1F-09", qty: 1, size: '32-3/4 × 67',      order: "J01" },
-  { tag: "1F-10", qty: 1, size: '67 × 120-5/8',     order: "J03" },
-  { tag: "1F-11", qty: 1, size: '32-3/4 × 67-1/4',  order: "J01" },
-  { tag: "1F-12", qty: 1, size: '67-1/4 × 120-5/8', order: "J03" },
-  { tag: "1F-13", qty: 1, size: '32-3/4 × 67-1/2',  order: "J01" },
-  { tag: "1F-14", qty: 1, size: '67-1/2 × 108-1/2', order: "J02" },
-  { tag: "1F-15", qty: 1, size: '67-3/4 × 108-1/2', order: "J02" },
-  { tag: "1F-27", qty: 7, size: '47 × 67-1/4',      order: "J04" },
-  { tag: "1F-28", qty: 7, size: '67-1/4 × 90-3/4',  order: "J04" },
-  { tag: "1F-29", qty: 1, size: '32-3/4 × 38-1/8',  order: "J01" },
-  { tag: "1F-30", qty: 1, size: '38-1/8 × 108-3/4', order: "J02" },
-  { tag: "1F-31", qty: 1, size: '32-3/4 × 78-3/4',  order: "J01" },
-  { tag: "1F-32", qty: 1, size: '78-3/4 × 108-3/4', order: "J02" },
-  { tag: "1F-33", qty: 1, size: '32-3/4 × 78-1/8',  order: "J01" },
-  { tag: "1F-34", qty: 1, size: '78-1/8 × 108-1/2', order: "J02" },
-  { tag: "1F-35", qty: 1, size: '32-3/4 × 34-1/2',  order: "J01" },
-  { tag: "1F-36", qty: 1, size: '34-1/2 × 108-1/2', order: "J02" },
-  { tag: "1F-37", qty: 1, size: '32-3/4 × 83-3/4',  order: "J01" },
-  { tag: "1F-38", qty: 1, size: '83-3/4 × 120-5/8', order: "J03" },
-  { tag: "1F-39", qty: 1, size: '32-3/4 × 34-3/4',  order: "J01" },
-  { tag: "1F-40", qty: 1, size: '34-3/4 × 120-5/8', order: "J03" },
-  { tag: "1F-41", qty: 1, size: '32-3/4 × 46-3/4',  order: "J01" },
-  { tag: "1F-42", qty: 1, size: '46-3/4 × 120-1/2', order: "J03" },
-  { tag: "1F-43", qty: 1, size: '32-3/4 × 46-1/2',  order: "J01" },
-  { tag: "1F-44", qty: 1, size: '46-1/2 × 120-1/2', order: "J03" },
-  { tag: "13F-01", qty: 3, size: '49-1/4 × 78',     order: "J05" },
-  { tag: "13F-02", qty: 2, size: '31-5/8 × 78',     order: "J05" },
-  { tag: "SD-19/21", qty: 2, size: '28-5/16 × 77-1/2', order: "J05" },
+  // `facade` is the canonical destination per CSV "OBE_Order_69404JOB_GL01(READY)".
+  // Numbers carry the SF prefix; multi-piece marks list every destination, comma-separated.
+  { tag: "1F-01", qty: 4, size: '67-1/4 × 122-1/2', order: "J04", facade: "SF21B, SF21B, SF21B, SF21A" },
+  { tag: "1F-02", qty: 5, size: '32-3/4 × 75-1/4',  order: "J01", facade: "SF03, SF03, SF03, SF04, SF04" },
+  { tag: "1F-03", qty: 2, size: '75-1/4 × 120-3/4', order: "J03", facade: "SF04, SF04" },
+  { tag: "1F-04", qty: 2, size: '47 × 67-1/4',      order: "J04", facade: "SF20B, SF20A (north side)" },
+  { tag: "1F-05", qty: 2, size: '67-1/4 × 90-1/8',  order: "J04", facade: "SF20B, SF21A (north side)" },
+  { tag: "1F-06", qty: 3, size: '47 × 67-1/2',      order: "J04", facade: "SF20B1, SF20A1, SF20A1" },
+  { tag: "1F-07", qty: 3, size: '67-1/2 × 90-1/8',  order: "J04", facade: "SF20B1, SF20A1, SF20A1" },
+  { tag: "1F-08", qty: 3, size: '75-1/4 × 108-5/8', order: "J02", facade: "SF03, SF03, SF03" },
+  { tag: "1F-09", qty: 1, size: '32-3/4 × 67',      order: "J01", facade: "SF01L" },
+  { tag: "1F-10", qty: 1, size: '67 × 120-5/8',     order: "J03", facade: "SF01L" },
+  { tag: "1F-11", qty: 1, size: '32-3/4 × 67-1/4',  order: "J01", facade: "SF01R" },
+  { tag: "1F-12", qty: 1, size: '67-1/4 × 120-5/8', order: "J03", facade: "SF01R" },
+  { tag: "1F-13", qty: 1, size: '32-3/4 × 67-1/2',  order: "J01", facade: "SF02" },
+  { tag: "1F-14", qty: 1, size: '67-1/2 × 108-1/2', order: "J02", facade: "SF02" },
+  { tag: "1F-15", qty: 1, size: '67-3/4 × 108-1/2', order: "J02", facade: "SF22B" },
+  { tag: "1F-27", qty: 7, size: '47 × 67-1/4',      order: "J04", facade: "SF11A, SF11B, SF11A, SF11A, SF20A, SF20A, SF10A (south side)" },
+  { tag: "1F-28", qty: 7, size: '67-1/4 × 90-3/4',  order: "J04", facade: "SF11A, SF11B, SF11A, SF11A, SF20A, SF20A, SF10A (south side)" },
+  { tag: "1F-29", qty: 1, size: '32-3/4 × 38-1/8',  order: "J01", facade: "SF08E" },
+  { tag: "1F-30", qty: 1, size: '38-1/8 × 108-3/4', order: "J02", facade: "SF08E" },
+  { tag: "1F-31", qty: 1, size: '32-3/4 × 78-3/4',  order: "J01", facade: "SF08N" },
+  { tag: "1F-32", qty: 1, size: '78-3/4 × 108-3/4', order: "J02", facade: "SF08N" },
+  { tag: "1F-33", qty: 1, size: '32-3/4 × 78-1/8',  order: "J01", facade: "SF09N" },
+  { tag: "1F-34", qty: 1, size: '78-1/8 × 108-1/2', order: "J02", facade: "SF09N" },
+  { tag: "1F-35", qty: 1, size: '32-3/4 × 34-1/2',  order: "J01", facade: "SF09W" },
+  { tag: "1F-36", qty: 1, size: '34-1/2 × 108-1/2', order: "J02", facade: "SF09W" },
+  { tag: "1F-37", qty: 1, size: '32-3/4 × 83-3/4',  order: "J01", facade: "SF07N" },
+  { tag: "1F-38", qty: 1, size: '83-3/4 × 120-5/8', order: "J03", facade: "SF07N" },
+  { tag: "1F-39", qty: 1, size: '32-3/4 × 34-3/4',  order: "J01", facade: "SF07W" },
+  { tag: "1F-40", qty: 1, size: '34-3/4 × 120-5/8', order: "J03", facade: "SF07W" },
+  { tag: "1F-41", qty: 1, size: '32-3/4 × 46-3/4',  order: "J01", facade: "SF06E" },
+  { tag: "1F-42", qty: 1, size: '46-3/4 × 120-1/2', order: "J03", facade: "SF06E" },
+  { tag: "1F-43", qty: 1, size: '32-3/4 × 46-1/2',  order: "J01", facade: "SF06N" },
+  { tag: "1F-44", qty: 1, size: '46-1/2 × 120-1/2', order: "J03", facade: "SF06N" },
+  { tag: "13F-01", qty: 3, size: '49-1/4 × 78',     order: "J05", facade: "SF70, SF70, SF70" },
+  { tag: "13F-02", qty: 2, size: '31-5/8 × 78',     order: "J05", facade: "SF71, SF71" },
+  { tag: "SD-19/21", qty: 2, size: '28-5/16 × 77-1/2', order: "J05", facade: "SD19/21" },
 ];
 
 const ORDER_LABELS = {
@@ -845,6 +847,7 @@ function cardHTML(piece, row) {
     <article class="glass-card s-${row.status}"
              data-tag="${escapeAttr(piece.tag)}"
              data-zone="${escapeAttr(row.zone)}"
+             data-facade="${escapeAttr(row.facade || piece.facade || '')}"
              data-status="${row.status}">
       <div class="row-top">
         <div class="tag-block">
@@ -871,7 +874,7 @@ function cardHTML(piece, row) {
             </svg>
             Final facade
           </div>
-          <div class="info-value ${row.facade ? '' : 'empty'}">${escapeHtml(row.facade || 'Tap to set…')}</div>
+          <div class="info-value ${(row.facade || piece.facade) ? '' : 'empty'}">${escapeHtml(row.facade || piece.facade || 'Tap to set…')}</div>
         </div>
       </div>
 
@@ -919,9 +922,13 @@ function applyFilters() {
     const status = card.dataset.status;
     const tag    = (card.dataset.tag || "").toLowerCase();
     const zone   = card.dataset.zone || "";
+    const facade = (card.dataset.facade || "").toLowerCase();
     let ok = true;
     if (currentFilter !== "all" && status !== currentFilter) ok = false;
-    if (searchTerm && !tag.includes(searchTerm) && !zone.toLowerCase().includes(searchTerm)) ok = false;
+    if (searchTerm &&
+        !tag.includes(searchTerm) &&
+        !zone.toLowerCase().includes(searchTerm) &&
+        !facade.includes(searchTerm)) ok = false;
     if (zoneFilter && zone !== zoneFilter) ok = false;
     card.hidden = !ok;
     if (ok) shown++;
