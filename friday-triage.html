@@ -444,6 +444,21 @@
     font-size: 22px; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
   }
+  .photo-viewer .delete {
+    position: absolute; top: 16px; left: 16px;
+    background: rgba(248,81,73,0.85); color: #fff;
+    border: none; padding: 8px 14px; border-radius: 18px;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .photo-viewer .delete:hover { background: rgba(248,81,73,1); }
+  .photo-viewer .delete:disabled { opacity: 0.4; cursor: not-allowed; }
+  .photo-viewer .counter {
+    position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.6); color: #fff;
+    padding: 4px 12px; border-radius: 12px;
+    font-size: 12px;
+  }
 
   /* Toast */
   .toast {
@@ -547,8 +562,15 @@
 
 <!-- Photo viewer -->
 <div class="photo-viewer" id="photo-viewer">
-  <button class="close" id="photo-close">×</button>
+  <button class="delete" id="photo-delete" type="button" title="Delete this photo">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 5h10M6 5V3h4v2M5 5l1 9h4l1-9M7 8v4M9 8v4"></path>
+    </svg>
+    Delete
+  </button>
+  <button class="close" id="photo-close" type="button">×</button>
   <img id="photo-viewer-img" alt="">
+  <div class="counter" id="photo-counter"></div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -993,8 +1015,21 @@ root.addEventListener("click", e => {
   // open photo full
   const thumb = e.target.closest(".photo-thumb");
   if (thumb) {
+    const card  = thumb.closest(".glass-card");
+    const tag   = card ? card.dataset.tag : "";
+    const pidx  = thumb.dataset.pidx || "0";
+    const total = (ensureRow(tag).photos || []).length;
+    const viewer = document.getElementById("photo-viewer");
+    viewer.dataset.tag  = tag;
+    viewer.dataset.pidx = pidx;
     document.getElementById("photo-viewer-img").src = thumb.src;
-    document.getElementById("photo-viewer").classList.add("show");
+    document.getElementById("photo-counter").textContent =
+      total > 1 ? `${(+pidx) + 1} / ${total}` : "";
+    // Disable delete button in viewer mode (read-only)
+    const delBtn = document.getElementById("photo-delete");
+    delBtn.disabled = (mode === "viewer");
+    delBtn.style.display = (mode === "viewer") ? "none" : "";
+    viewer.classList.add("show");
     return;
   }
 });
@@ -1004,6 +1039,25 @@ document.getElementById("photo-close").addEventListener("click", () => {
 });
 document.getElementById("photo-viewer").addEventListener("click", e => {
   if (e.target.id === "photo-viewer") e.currentTarget.classList.remove("show");
+});
+
+// Delete the currently-viewed photo
+document.getElementById("photo-delete").addEventListener("click", e => {
+  e.stopPropagation();
+  if (mode === "viewer") { toast("View-only mode"); return; }
+  const viewer = document.getElementById("photo-viewer");
+  const tag  = viewer.dataset.tag;
+  const pidx = parseInt(viewer.dataset.pidx, 10);
+  if (!tag || Number.isNaN(pidx)) return;
+  if (!confirm("Delete this photo? This cannot be undone.")) return;
+  const row = ensureRow(tag);
+  if (!Array.isArray(row.photos) || pidx < 0 || pidx >= row.photos.length) return;
+  row.photos.splice(pidx, 1);
+  queueWrite(tag);
+  saveLocal();
+  viewer.classList.remove("show");
+  render();
+  toast("Photo deleted");
 });
 
 // note input — save on blur or Enter
