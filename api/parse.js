@@ -16,6 +16,24 @@
 // Override with CLAUDE_MODEL env var if you want to try a different snapshot.
 const MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-4-5-20250929';
 
+// Q&A tool — Claude returns a plain-text answer when the user is asking a question
+// (not describing a change). Letting Claude pick between the two tools is what
+// makes the chat actually answer "which louvers need shipping today?" style queries.
+const ANSWER_QUESTION_TOOL = {
+  name: 'answer_question',
+  description: 'Use this tool when the user is ASKING about existing data (status, who/what/when, log content, shipping lists, counts, etc.) rather than describing a site change. Answer using only the data provided in the system prompt (units + log). If the data does not contain what they asked, say so plainly.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      answer: {
+        type: 'string',
+        description: 'Plain-text answer in the user input language (English, Chinese, or Korean). Be concise. If quoting specific items from the log, quote them verbatim. If the log does not contain the requested info, say so.'
+      }
+    },
+    required: ['answer']
+  }
+};
+
 // Tool schema — Claude must return changes through this tool.
 const APPLY_CHANGES_TOOL = {
   name: 'apply_changes',
@@ -67,11 +85,18 @@ const APPLY_CHANGES_TOOL = {
 
 function buildSystemPrompt(state, today) {
   const units = (state && state.units) || [];
-  const lines = units.map(u =>
-    `${u.key}\t${u.id}\t${u.zone || '-'}\t${u.status || 'pending'}${u.date ? ' ('+u.date+')' : ''}`
+  const logs  = (state && state.log)   || [];
+  const unitLines = units.map(u =>
+    `${u.key}\t${u.id}\t${u.zone || '-'}\t${u.status || 'pending'}${u.date ? ' ('+u.date+')' : ''}${u.louver === 'yes' ? ' [louver]' : ''}${u.note ? ' · note: '+u.note : ''}`
   ).join('\n');
+  // Include FULL log so Q&A can quote it. Sorted oldest→newest for natural reading.
+  const sortedLogs = logs.slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  const logLines = sortedLogs.map(l => {
+    const cats = Array.isArray(l.categories) ? l.categories.join(',') : (l.category || '-');
+    return `${l.date || '?'}\t[${cats}]${l.planned ? ' (planned)' : ''}\t${l.content || ''}`;
+  }).join('\n');
 
-  return `You are the install-progress assistant for the Cooper Park 2 construction site. Users describe daily site activity in natural language (English, Chinese, or Korean). Parse their message into structured changes and return them via the apply_changes tool.
+  return `You are the install-progress assistant for the Cooper Park 2 construction site. Users either DESCRIBE site activity (in which case parse it into apply_changes) or ASK questions about existing data (in which case use answer_question). Users write in English, Chinese, or Korean.
 
 Today's date: ${today}
 
@@ -81,10 +106,18 @@ Today's date: ${today}
 - louver: yes / no (whether the louver has been installed)
 - Log categories: framing / louver / caulking / issue / glass / other
 
-## Current units (key / id / zone / status)
-${lines}
+## Current units (key / id / zone / status / louver / note)
+${unitLines}
 
-## Parsing rules
+## Daily log entries (date / categories / content)
+${logLines || '(none)'}
+
+## How to decide which tool to call
+- If the user is asking ABOUT the data ("what / which / when / how many / who / list / show / 哪些 / 什么时候 / 多少 / 어떤 / 언제 / 몇 개", or any question mark) → use answer_question. Answer using the units + log above. Quote log content verbatim when relevant (e.g. if user asks "which louvers go to site Tuesday", look for log entries on Tuesday's date with category 'louver' and quote their content). If the data doesn't contain the answer, say so plainly.
+- If the user is REPORTING a site change ("installed X today", "X has issue", "added louver", etc.) → use apply_changes.
+- When in doubt and the message is a question, prefer answer_question.
+
+## Parsing rules (for apply_changes only)
 1. "Installed X today" → find the pending key matching X, set status=installed, date=today, note="Framing ${today.slice(5)}".
 2. "Added louver to X" → set that key louver=yes, append "Louver" to note.
 3. "X has an issue" / "opening error on X" → set status=issue.
@@ -92,8 +125,8 @@ ${lines}
 5. "Planning X tomorrow" → add a planned:true log_entry with that future date, DO NOT modify any unit.
 6. Whenever unit_updates is non-empty, also add a matching log_entry. date = change date. content = affected ids joined with " · ".
 7. If you cannot parse the message at all, set needs_clarification to a short question and leave unit_updates and log_entries as empty arrays.
-8. summary and needs_clarification should be written in the SAME language the user used.
-9. Reply ONLY via the apply_changes tool — no plain text.`;
+8. summary, needs_clarification, and answer must be in the SAME language the user used.
+9. Reply ONLY via one of the two tools — no plain text.`;
 }
 
 export default async function handler(req, res) {
@@ -130,8 +163,9 @@ export default async function handler(req, res) {
         model: MODEL,
         max_tokens: 2048,
         system: buildSystemPrompt(state, todayStr),
-        tools: [APPLY_CHANGES_TOOL],
-        tool_choice: { type: 'tool', name: 'apply_changes' },
+        tools: [APPLY_CHANGES_TOOL, ANSWER_QUESTION_TOOL],
+        // 'any' lets Claude pick between updating data and answering a question.
+        tool_choice: { type: 'any' },
         messages: [{ role: 'user', content: message }],
       }),
     });
@@ -143,17 +177,33 @@ export default async function handler(req, res) {
     }
 
     const data = await r.json();
-    const toolUse = (data.content || []).find(b => b.type === 'tool_use' && b.name === 'apply_changes');
+    const toolUse = (data.content || []).find(b => b.type === 'tool_use' &&
+      (b.name === 'apply_changes' || b.name === 'answer_question'));
     if (!toolUse) {
       return res.status(502).json({ error: 'Claude did not return a tool_use block', raw: data });
     }
     const parsed = toolUse.input || {};
+    if (toolUse.name === 'answer_question') {
+      // Q&A path — no updates, just a textual answer.
+      return res.status(200).json({
+        answer: parsed.answer || '',
+        summary: '',
+        needs_clarification: '',
+        unit_updates: [],
+        log_entries: [],
+        _model: MODEL,
+        _tool: 'answer_question',
+        _usage: data.usage || null,
+      });
+    }
     return res.status(200).json({
+      answer: '',
       summary: parsed.summary || '',
       needs_clarification: parsed.needs_clarification || '',
       unit_updates: Array.isArray(parsed.unit_updates) ? parsed.unit_updates : [],
       log_entries:  Array.isArray(parsed.log_entries)  ? parsed.log_entries  : [],
       _model: MODEL,
+      _tool: 'apply_changes',
       _usage: data.usage || null,
     });
   } catch (e) {
