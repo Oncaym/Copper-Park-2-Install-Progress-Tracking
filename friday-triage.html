@@ -910,12 +910,21 @@ function cardHTML(piece, row) {
         <input class="note-input" type="text" inputmode="text"
                placeholder="Note (damage, handler, etc.)"
                value="${escapeAttr(row.note || '')}">
-        <label class="photo-btn ${photoCls}">
+        <label class="photo-btn ${photoCls}" title="Take photo with camera">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
             <path d="M2 5h2l1-2h6l1 2h2v8H2z"></path><circle cx="8" cy="9" r="2.5"></circle>
           </svg>
-          <span>Photo</span>${photoBadge}
+          <span>Camera</span>${photoBadge}
           <input type="file" accept="image/*" capture="environment" multiple>
+        </label>
+        <label class="photo-btn" title="Pick from photo library">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="1.5" y="3" width="13" height="10" rx="1.5"></rect>
+            <path d="M3 11l3-3 2.5 2.5L11 7l3 3"></path>
+            <circle cx="5" cy="6" r="1"></circle>
+          </svg>
+          <span>Album</span>
+          <input type="file" accept="image/*" multiple>
         </label>
       </div>
 

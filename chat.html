@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CP2 Chat Updater</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E📋%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E💬%3C/text%3E%3C/svg%3E">
 <style>
   :root {
     --bg: #0f1115;
@@ -29,7 +29,49 @@
     line-height: 1.5;
     overflow: hidden;
   }
-  /* ---------- Auth gate (handled by cloud-sync.js — styles live there) ---------- */
+  /* ---------- Auth gate ---------- */
+  #gate {
+    position: fixed; inset: 0; z-index: 999;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .gate-card {
+    width: min(380px, 92vw);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 28px 26px;
+  }
+  .gate-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .gate-logo {
+    width: 40px; height: 40px;
+    background: var(--accent); color: #fff;
+    border-radius: 9px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .gate-title { font-size: 17px; font-weight: 600; }
+  .gate-sub { font-size: 12px; color: var(--muted); }
+  .gate-card label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+  .gate-card input {
+    width: 100%; padding: 10px 12px;
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px;
+    font-size: 14px; outline: none;
+  }
+  .gate-card input:focus { border-color: var(--accent); }
+  .gate-card button {
+    width: 100%; padding: 11px;
+    margin-top: 14px;
+    background: var(--accent); color: white;
+    border: none; border-radius: 8px;
+    font-size: 14px; font-weight: 600;
+    cursor: pointer;
+  }
+  .gate-card button:hover { background: var(--accent-2); }
+  .gate-card button:disabled { opacity: .5; cursor: not-allowed; }
+  .gate-err { color: var(--bad); font-size: 12px; min-height: 16px; margin-top: 8px; }
+  .gate-foot { font-size: 11px; color: var(--muted); text-align: center; margin-top: 16px; }
+  .gate-foot a { color: var(--accent); text-decoration: none; }
 
   /* ---------- App layout ---------- */
   #app { display: none; flex-direction: column; height: 100vh; }
@@ -199,25 +241,37 @@
     font-size: 11px; color: var(--muted);
     text-align: center;
   }
-  /* Header role badge */
-  .role-badge {
-    font-size: 11px; font-weight: 600;
-    padding: 3px 8px; border-radius: 10px;
-    text-transform: uppercase; letter-spacing: 0.4px;
-  }
-  .role-badge.editor { background: rgba(52, 199, 122, 0.15); color: var(--good); }
-  .role-badge.viewer { background: rgba(245, 165, 36, 0.15); color: var(--warn); }
-
-  /* Read-only notice inside preview */
-  .readonly-note {
-    flex: 1; font-size: 12px; color: var(--warn);
-    display: flex; align-items: center; gap: 6px;
+  #hints kbd {
+    background: var(--panel-2); border: 1px solid var(--line);
+    padding: 1px 5px; border-radius: 3px; font-family: inherit;
   }
 </style>
 </head>
 <body>
 
-<!-- Auth gate is provided by cloud-sync.js (#cs-auth-gate) for a unified login UX with the main tracker. -->
+<!-- Auth gate -->
+<div id="gate">
+  <div class="gate-card">
+    <div class="gate-brand">
+      <div class="gate-logo">CP2</div>
+      <div>
+        <div class="gate-title">Chat Updater</div>
+        <div class="gate-sub">Cooper Park 2 · Natural-language progress</div>
+      </div>
+    </div>
+    <form id="gate-form">
+      <label>Email</label>
+      <input type="email" id="email" autocomplete="email" required placeholder="you@advfacade.com">
+      <label>Password</label>
+      <input type="password" id="password" autocomplete="current-password" required>
+      <div class="gate-err" id="gate-err"></div>
+      <button type="submit" id="signin">Sign in</button>
+    </form>
+    <div class="gate-foot">
+      Accounts are created by your admin in Firebase Console · <a href="/">Back to dashboard</a>
+    </div>
+  </div>
+</div>
 
 <!-- App -->
 <div id="app">
@@ -227,8 +281,7 @@
       <div class="h-sub" id="user-label">—</div>
     </div>
     <div class="h-spacer"></div>
-    <span class="role-badge" id="role-badge" style="display:none"></span>
-    <a class="h-link" href="index.html" title="Back to main tracker">📋 Tracker</a>
+    <a class="h-link" href="/" title="Back to main tracker">📋 Dashboard</a>
     <a class="h-link" href="#" id="logout">Sign out</a>
   </header>
 
@@ -236,11 +289,11 @@
 
   <div id="composer">
     <div id="composer-inner">
-      <textarea id="input" rows="1" placeholder="e.g.: Installed SF11A and SF11B framing today, 11A.2 had an issue …"></textarea>
+      <textarea id="input" rows="1" placeholder="e.g. Installed SF11A and SF11B framing today, 11A.2 has an issue …"></textarea>
       <button id="send">Send</button>
     </div>
     <div id="hints">
-      <kbd>Enter</kbd> to send · <kbd>Shift+Enter</kbd> for newline · You'll preview before changes are saved
+      <kbd>Enter</kbd> send · <kbd>Shift+Enter</kbd> new line · You'll preview each change before it's written
     </div>
   </div>
 </div>
@@ -250,8 +303,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <script src="firebase-config.js"></script>
-<!-- Shared auth gate + cloud sync (provides #cs-auth-gate login UI with Forgot password) -->
-<script src="cloud-sync.js"></script>
 
 <script>
 /* ============================================================
@@ -264,14 +315,28 @@
   let currentUser = null;
   let cachedState = null;   // last snapshot loaded from /state
   let pendingPreview = null; // currently shown preview {parsed, msgEl}
-  let isEditor = false;     // whether the current user is in /allowlist
 
-  // ---------- Firebase init via shared CloudSync (gives us the unified auth gate with Forgot password) ----------
-  CloudSync.init(window.FIREBASE_CONFIG);
+  // ---------- Firebase init ----------
+  firebase.initializeApp(window.FIREBASE_CONFIG);
   const auth = firebase.auth();
   const db = firebase.database();
 
   // ---------- Auth ----------
+  $('gate-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = $('email').value.trim();
+    const pw = $('password').value;
+    $('gate-err').textContent = '';
+    $('signin').disabled = true;
+    try {
+      await auth.signInWithEmailAndPassword(email, pw);
+    } catch (err) {
+      $('gate-err').textContent = humanAuthError(err);
+    } finally {
+      $('signin').disabled = false;
+    }
+  });
+
   $('logout').addEventListener('click', (e) => {
     e.preventDefault();
     auth.signOut();
@@ -281,77 +346,43 @@
     if (user) {
       currentUser = user;
       $('user-label').textContent = user.email;
+      $('gate').style.display = 'none';
       $('app').classList.add('ready');
-      await checkEditorStatus();
       await loadState();
       // Subscribe to state changes so multi-tab edits keep us fresh
       db.ref('state').on('value', (snap) => {
         const v = snap.val();
         if (v) cachedState = v;
       });
-      const roleLabel = isEditor ? 'editor' : 'view-only';
-      pushSystem(`Signed in as ${user.email.split('@')[0]} (${roleLabel}) · loaded ${cachedState?.units?.length || 0} units`);
-      if (isEditor) {
-        pushBot('Hi! Tell me what was installed today. I\'ll parse it, show a preview, and only write to the database after you confirm.\n\nExamples:\n• "Installed framing for SF11A and SF11B today"\n• "SF12A.3 had an issue — wrong cutout"\n• "Added louver to 20A.1"\n• "Planning to install the SF03 row tomorrow"');
-      } else {
-        pushBot('Hi! You\'re signed in as **view only** — ask me anything about the current install state and I\'ll answer, but I can\'t save changes from your account. To save changes, ask an admin to add your email to the editor allowlist.\n\nExamples:\n• "What\'s the status of SF20A?"\n• "List all units with issues"\n• "How many framings are installed in the North zone?"');
-      }
+      pushSystem(`Signed in as ${user.email.split('@')[0]} · loaded ${cachedState?.units?.length || 0} units`);
+      pushBot('Hi. Tell me what got installed today and I\'ll show you a preview before writing anything to the database.\n\nFor example:\n• "Installed SF11A and SF11B framing today"\n• "SF12A.3 has an opening error"\n• "Added louver to SF20A.1"\n• "Planning the SF03 row tomorrow"\n\nYou can write in English, 中文, or 한국어 — Claude will figure it out.');
     } else {
       currentUser = null;
       cachedState = null;
-      isEditor = false;
-      updateRoleBadge();
+      $('gate').style.display = 'flex';
       $('app').classList.remove('ready');
     }
   });
-
-  async function checkEditorStatus() {
-    isEditor = false;
-    try {
-      const emailKey = currentUser.email.replace(/\./g, ',');
-      const snap = await db.ref('allowlist/' + emailKey).once('value');
-      isEditor = snap.exists();
-    } catch (err) {
-      // If we can't even read our own allowlist entry, treat as non-editor.
-      console.warn('Allowlist check failed:', err);
-      isEditor = false;
-    }
-    updateRoleBadge();
-  }
-
-  function updateRoleBadge() {
-    const b = $('role-badge');
-    if (!currentUser) { b.style.display = 'none'; return; }
-    b.style.display = '';
-    if (isEditor) {
-      b.textContent = 'Editor';
-      b.className = 'role-badge editor';
-    } else {
-      b.textContent = 'View only';
-      b.className = 'role-badge viewer';
-    }
-  }
 
   async function loadState() {
     try {
       const snap = await db.ref('state').once('value');
       cachedState = snap.val();
       if (!cachedState || !cachedState.units) {
-        pushError('Database has no state yet — open the main tracker once to initialize it.');
+        pushError('No state in database yet — open the main tracker once to save an initial snapshot.');
       }
     } catch (err) {
-      pushError('Failed to load data: ' + (err.message || err));
+      pushError('Failed to read state: ' + (err.message || err));
     }
   }
 
   function humanAuthError(err) {
-    // Auth errors surface in the shared gate (cloud-sync.js). Kept here as a defensive fallback only.
     const code = err && err.code;
     if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') return 'Wrong email or password';
     if (code === 'auth/user-not-found') return 'Account not found';
     if (code === 'auth/too-many-requests') return 'Too many attempts — try again later';
     if (code === 'auth/network-request-failed') return 'Network error';
-    return err.message || 'Sign in failed';
+    return err.message || 'Sign-in failed';
   }
 
   // ---------- Messages ----------
@@ -403,9 +434,9 @@
   async function sendMessage() {
     const text = input.value.trim();
     if (!text) return;
-    if (!cachedState) { pushError('Data still loading, hang on'); return; }
+    if (!cachedState) { pushError('State not loaded yet — wait a moment'); return; }
     if (pendingPreview) {
-      pushSystem('Your previous change is still pending — confirm or cancel it first');
+      pushSystem('You have a pending change — confirm or cancel it first');
       return;
     }
 
@@ -426,6 +457,17 @@
           state: {
             units: (cachedState.units || []).map(u => ({
               key: u.key, id: u.id, zone: u.zone, status: u.status, date: u.date,
+              louver: u.louver, note: u.note,
+            })),
+            // Include the full daily log so the bot can answer questions like
+            // "which louvers ship to site on Tuesday?". Slimmed to the fields
+            // the bot actually needs.
+            log: (cachedState.log || []).map(l => ({
+              date: l.date,
+              category: l.category,
+              categories: l.categories,
+              content: l.content,
+              planned: l.planned,
             })),
           },
         }),
@@ -448,6 +490,12 @@
 
   // ---------- Preview / confirm ----------
   function handleParsed(parsed) {
+    // Q&A path — bot is answering a question, no preview/confirm.
+    if (parsed.answer && parsed.answer.trim()) {
+      pushBot(parsed.answer);
+      return;
+    }
+
     const hasUpdates = (parsed.unit_updates && parsed.unit_updates.length) || (parsed.log_entries && parsed.log_entries.length);
 
     if (parsed.needs_clarification && !hasUpdates) {
@@ -455,7 +503,7 @@
       return;
     }
     if (!hasUpdates) {
-      pushBot('I didn\'t catch that — could you rephrase? For example: "SF11A installed today"');
+      pushBot('I didn\'t catch that — could you rephrase? Try "SF11A installed today" to update, or ask a question like "which louvers ship to site on Friday?"');
       return;
     }
 
@@ -505,25 +553,19 @@
       </div>`).join('');
 
     card.innerHTML = `
-      <div class="preview-head">📋 Preview changes${parsed.summary ? ' — ' + escapeHtml(parsed.summary) : ''}</div>
+      <div class="preview-head">📋 Preview${parsed.summary ? ' — ' + escapeHtml(parsed.summary) : ''}</div>
       <div class="preview-body">
         ${unitRows.length ? `<div class="preview-section"><h4>Units (${unitRows.length})</h4>${unitRows.join('')}</div>` : ''}
         ${logRows ? `<div class="preview-section"><h4>Log</h4>${logRows}</div>` : ''}
         ${parsed.needs_clarification ? `<div class="preview-section"><h4>Note</h4><div style="color:var(--warn);font-size:12px;">${escapeHtml(parsed.needs_clarification)}</div></div>` : ''}
       </div>
       <div class="preview-actions">
-        ${isEditor ? `
-          <button class="btn btn-cancel" data-action="cancel">Cancel</button>
-          <button class="btn btn-confirm" data-action="confirm">Confirm</button>
-        ` : `
-          <span class="readonly-note">⚠ View-only mode — ask an editor to save these changes</span>
-          <button class="btn btn-cancel" data-action="cancel">Dismiss</button>
-        `}
+        <button class="btn btn-cancel" data-action="cancel">Cancel</button>
+        <button class="btn btn-confirm" data-action="confirm">Confirm &amp; write</button>
       </div>
     `;
     card.querySelector('[data-action="cancel"]').addEventListener('click', () => cancelPreview(card));
-    const confirmBtn = card.querySelector('[data-action="confirm"]');
-    if (confirmBtn) confirmBtn.addEventListener('click', () => confirmPreview(card));
+    card.querySelector('[data-action="confirm"]').addEventListener('click', () => confirmPreview(card));
     return card;
   }
 
@@ -540,7 +582,7 @@
     const btns = card.querySelectorAll('.btn');
     btns.forEach(b => b.disabled = true);
     const confirmBtn = card.querySelector('[data-action="confirm"]');
-    confirmBtn.innerHTML = '<span class="loader"></span> Saving…';
+    confirmBtn.innerHTML = '<span class="loader"></span> Writing…';
 
     try {
       // Build new state — fresh snapshot from server first to avoid clobbering
@@ -598,15 +640,15 @@
       cachedState = next;
       card.querySelector('.preview-actions').innerHTML = '<span style="color:var(--good);font-size:13px;">✓ Saved</span>';
       pendingPreview = null;
-      pushBot('✅ ' + desc + '\n\nThe main tracker will refresh automatically if it\'s open.');
+      pushBot('✅ ' + desc + '\n\nThe main dashboard will auto-refresh within ~1 second if it\'s open in another tab.');
     } catch (err) {
       console.error(err);
       btns.forEach(b => b.disabled = false);
-      confirmBtn.textContent = 'Confirm';
+      confirmBtn.textContent = 'Confirm & write';
       const code = err && err.code;
       let msg = err.message || String(err);
       if (code === 'PERMISSION_DENIED' || /permission/i.test(msg)) {
-        msg = 'Your account has no write permission — ask an admin to add your email to /allowlist';
+        msg = 'Your account does not have write permission — ask the admin to add your email to /allowlist';
       }
       pushError('Save failed: ' + msg);
     }
