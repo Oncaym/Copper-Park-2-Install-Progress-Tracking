@@ -134,7 +134,16 @@ const I18N = {
     pie_issue_tooltip_title: "ISSUE units",
     pie_click_hint: "Click to view details",
     btn_close: "Close",
-    btn_glass_triage: "🪟 Glass Triage"
+    btn_glass_triage: "🪟 Glass Triage",
+    btn_drawings: "📐 Drawings",
+    drawings_title: "Drawings",
+    drawings_empty: "No drawings yet. Click + Add Drawing to attach a OneDrive link.",
+    drawing_add: "+ Add Drawing",
+    drawing_name_prompt: "Drawing name (e.g. \"Ground Floor Plan A-101\"):",
+    drawing_url_prompt: "Paste the OneDrive / web link (make sure it's \"Anyone with the link\"):",
+    drawing_remove_confirm: "Remove this drawing from the list?",
+    drawing_open: "Open",
+    drawing_invalid_url: "URL must start with http:// or https://"
   },
   zh: {
     header_sub: "Broadway Builder · 一层 · 框架与百叶安装追踪",
@@ -264,7 +273,16 @@ const I18N = {
     pie_issue_tooltip_title: "ISSUE 单元",
     pie_click_hint: "点击查看明细",
     btn_close: "关闭",
-    btn_glass_triage: "🪟 玻璃巡检"
+    btn_glass_triage: "🪟 玻璃巡检",
+    btn_drawings: "📐 图纸",
+    drawings_title: "图纸",
+    drawings_empty: "暂无图纸。点击 + 添加图纸，把 OneDrive 链接贴进来。",
+    drawing_add: "+ 添加图纸",
+    drawing_name_prompt: "图纸名称（例如 \"一层平面图 A-101\"）：",
+    drawing_url_prompt: "粘贴 OneDrive / 网页链接（请确认分享权限是\"任何拥有链接的人\"）：",
+    drawing_remove_confirm: "从列表中移除这张图纸?",
+    drawing_open: "打开",
+    drawing_invalid_url: "链接必须以 http:// 或 https:// 开头"
   },
   ko: {
     header_sub: "Broadway Builder · 1층 · 프레임 및 루버 설치 추적",
@@ -394,7 +412,16 @@ const I18N = {
     pie_issue_tooltip_title: "ISSUE 유닛",
     pie_click_hint: "클릭하여 상세 보기",
     btn_close: "닫기",
-    btn_glass_triage: "🪟 유리 점검"
+    btn_glass_triage: "🪟 유리 점검",
+    btn_drawings: "📐 도면",
+    drawings_title: "도면",
+    drawings_empty: "아직 도면이 없습니다. + 도면 추가를 눌러 OneDrive 링크를 첨부하세요.",
+    drawing_add: "+ 도면 추가",
+    drawing_name_prompt: "도면 이름 (예: \"1층 평면도 A-101\"):",
+    drawing_url_prompt: "OneDrive / 웹 링크를 붙여넣으세요 (공유 설정이 \"링크가 있는 모든 사람\"인지 확인):",
+    drawing_remove_confirm: "이 도면을 목록에서 제거하시겠습니까?",
+    drawing_open: "열기",
+    drawing_invalid_url: "링크는 http:// 또는 https://로 시작해야 합니다"
   }
 };
 const WEEKDAYS = {
@@ -1654,6 +1681,67 @@ function openKpiDetail(kind) {
 function closeKpiDetail() {
   const m = document.getElementById('kpiDetailModal');
   if (m) m.classList.remove('show');
+}
+
+/* ======================================================
+   DRAWINGS — list of OneDrive / web links to project drawings
+   ====================================================== */
+function openDrawings() {
+  renderDrawingsList();
+  const m = document.getElementById('drawingsModal');
+  if (m) m.classList.add('show');
+}
+function closeDrawingsModal() {
+  const m = document.getElementById('drawingsModal');
+  if (m) m.classList.remove('show');
+}
+function renderDrawingsList() {
+  if (!state.drawings) state.drawings = [];
+  const wrap = document.getElementById('drawingsList');
+  if (!wrap) return;
+  const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  if (!state.drawings.length) {
+    wrap.innerHTML = `<div class="drawings-empty">${esc(t('drawings_empty'))}</div>`;
+    return;
+  }
+  wrap.innerHTML = state.drawings.map((d, i) => `
+    <div class="drawing-row">
+      <a class="drawing-link" href="${esc(d.url)}" target="_blank" rel="noopener noreferrer" title="${esc(d.url)}">
+        <span class="drawing-icon">📄</span>
+        <span class="drawing-name">${esc(d.name || d.url)}</span>
+        <span class="drawing-open">${esc(t('drawing_open'))} ↗</span>
+      </a>
+      <button class="drawing-remove" type="button" onclick="removeDrawing(${i})" title="remove" aria-label="remove">×</button>
+    </div>`).join('');
+}
+function addDrawing() {
+  const name = prompt(t('drawing_name_prompt'));
+  if (name == null) return;
+  const trimmedName = name.trim();
+  if (!trimmedName) return;
+  const url = prompt(t('drawing_url_prompt'));
+  if (url == null) return;
+  const trimmedUrl = url.trim();
+  if (!/^https?:\/\//i.test(trimmedUrl)) {
+    toast(t('drawing_invalid_url'));
+    return;
+  }
+  if (!state.drawings) state.drawings = [];
+  state.drawings.push({
+    id: 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2,5),
+    name: trimmedName,
+    url: trimmedUrl,
+    addedAt: new Date().toISOString().slice(0,10)
+  });
+  renderDrawingsList();
+  saveState();
+}
+function removeDrawing(idx) {
+  if (!state.drawings || idx < 0 || idx >= state.drawings.length) return;
+  if (!confirm(t('drawing_remove_confirm'))) return;
+  state.drawings.splice(idx, 1);
+  renderDrawingsList();
+  saveState();
 }
 
 function renderGlassChart() {
