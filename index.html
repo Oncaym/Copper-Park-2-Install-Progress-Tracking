@@ -2555,9 +2555,12 @@
     <div class="form-row log-photo-row">
       <label data-i18n="form_photos">Site Photos</label>
       <div class="log-photo-controls">
-        <input type="file" id="l-photo-input" accept="image/*" capture="environment" multiple
+        <input type="file" id="l-photo-camera" accept="image/*" capture="environment" multiple
                style="display:none" onchange="handleLogPhotoFiles(this.files); this.value='';">
-        <button type="button" class="btn" onclick="document.getElementById('l-photo-input').click()" data-i18n="btn_add_photo">📷 Add Photos</button>
+        <input type="file" id="l-photo-album" accept="image/*" multiple
+               style="display:none" onchange="handleLogPhotoFiles(this.files); this.value='';">
+        <button type="button" class="btn" onclick="document.getElementById('l-photo-camera').click()" data-i18n="btn_camera" title="Take photo with camera">📷 Camera</button>
+        <button type="button" class="btn" onclick="document.getElementById('l-photo-album').click()" data-i18n="btn_album" title="Pick from photo library">🖼 Album</button>
         <span class="log-photo-status" id="l-photo-status"></span>
       </div>
       <div class="log-photo-hint" data-i18n="photo_hint">Take / select photos. Auto-compressed and saved with this log.</div>

@@ -143,7 +143,9 @@ const I18N = {
     drawing_url_prompt: "Paste the OneDrive / web link (make sure it's \"Anyone with the link\"):",
     drawing_remove_confirm: "Remove this drawing from the list?",
     drawing_open: "Open",
-    drawing_invalid_url: "URL must start with http:// or https://"
+    drawing_invalid_url: "URL must start with http:// or https://",
+    btn_camera: "📷 Camera",
+    btn_album: "🖼 Album"
   },
   zh: {
     header_sub: "Broadway Builder · 一层 · 框架与百叶安装追踪",
@@ -282,7 +284,9 @@ const I18N = {
     drawing_url_prompt: "粘贴 OneDrive / 网页链接（请确认分享权限是\"任何拥有链接的人\"）：",
     drawing_remove_confirm: "从列表中移除这张图纸?",
     drawing_open: "打开",
-    drawing_invalid_url: "链接必须以 http:// 或 https:// 开头"
+    drawing_invalid_url: "链接必须以 http:// 或 https:// 开头",
+    btn_camera: "📷 拍照",
+    btn_album: "🖼 相册"
   },
   ko: {
     header_sub: "Broadway Builder · 1층 · 프레임 및 루버 설치 추적",
@@ -421,7 +425,9 @@ const I18N = {
     drawing_url_prompt: "OneDrive / 웹 링크를 붙여넣으세요 (공유 설정이 \"링크가 있는 모든 사람\"인지 확인):",
     drawing_remove_confirm: "이 도면을 목록에서 제거하시겠습니까?",
     drawing_open: "열기",
-    drawing_invalid_url: "링크는 http:// 또는 https://로 시작해야 합니다"
+    drawing_invalid_url: "링크는 http:// 또는 https://로 시작해야 합니다",
+    btn_camera: "📷 카메라",
+    btn_album: "🖼 앨범"
   }
 };
 const WEEKDAYS = {
