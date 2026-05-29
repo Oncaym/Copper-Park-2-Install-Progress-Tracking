@@ -145,7 +145,8 @@ const I18N = {
     drawing_open: "Open",
     drawing_invalid_url: "URL must start with http:// or https://",
     btn_camera: "📷 Camera",
-    btn_album: "🖼 Album"
+    btn_album: "🖼 Album",
+    btn_edit_log: "✎ Edit log"
   },
   zh: {
     header_sub: "Broadway Builder · 一层 · 框架与百叶安装追踪",
@@ -286,7 +287,8 @@ const I18N = {
     drawing_open: "打开",
     drawing_invalid_url: "链接必须以 http:// 或 https:// 开头",
     btn_camera: "📷 拍照",
-    btn_album: "🖼 相册"
+    btn_album: "🖼 相册",
+    btn_edit_log: "✎ 编辑日志"
   },
   ko: {
     header_sub: "Broadway Builder · 1층 · 프레임 및 루버 설치 추적",
@@ -427,7 +429,8 @@ const I18N = {
     drawing_open: "열기",
     drawing_invalid_url: "링크는 http:// 또는 https://로 시작해야 합니다",
     btn_camera: "📷 카메라",
-    btn_album: "🖼 앨범"
+    btn_album: "🖼 앨범",
+    btn_edit_log: "✎ 일지 편집"
   }
 };
 const WEEKDAYS = {
@@ -1465,16 +1468,12 @@ function renderTimeline() {
       const tags = cats.map(c => `<span class="tag ${c}">${categoryLabel(c)}</span>`).join('');
       const photos = Array.isArray(l.photos) ? l.photos : [];
       const isIssue = cats.includes('issue');
-      // ISSUE logs with photos -> opening the entry pops the photo gallery directly.
-      // Everything else falls back to the existing edit modal.
-      const onClick = (isIssue && photos.length)
-        ? `openPhotoGallery(${i},0)`
-        : `editLog(${i})`;
-      const title = (isIssue && photos.length)
-        ? esc(t('photo_open'))
-        : esc(t('log_click_edit'));
+      // Tapping the entry ALWAYS opens edit (consistent across logs).
+      // Photo gallery is reached via the camera badge or any thumbnail.
+      const onClick = `editLog(${i})`;
+      const title = esc(t('log_click_edit'));
       const camBadge = photos.length
-        ? `<span class="tag photo-badge" title="${esc(t('photo_count').replace('{n}', photos.length))}">${t('badge_photo')} ${photos.length}</span>`
+        ? `<span class="tag photo-badge" onclick="event.stopPropagation();openPhotoGallery(${i},0)" style="cursor:pointer" title="${esc(t('photo_open'))}">${t('badge_photo')} ${photos.length}</span>`
         : '';
       const thumbs = photos.length
         ? `<div class="timeline-photos">${photos.slice(0,6).map((p, pi) =>
@@ -2219,9 +2218,11 @@ function saveLog() {
 /* -------- Photo gallery viewer (ISSUE logs) -------- */
 let _galleryPhotos = [];
 let _galleryIdx = 0;
+let _galleryLogIdx = null;
 function openPhotoGallery(logIdx, startIdx) {
   const entry = state.log[logIdx];
   if (!entry || !Array.isArray(entry.photos) || !entry.photos.length) return;
+  _galleryLogIdx = logIdx;
   _galleryPhotos = entry.photos.slice();
   _galleryIdx = Math.max(0, Math.min(startIdx|0, _galleryPhotos.length - 1));
   const title = document.getElementById('photoGalleryTitle');
@@ -2236,7 +2237,14 @@ function openPhotoGallery(logIdx, startIdx) {
 }
 function closePhotoGallery() {
   document.getElementById('photoGalleryModal').classList.remove('show');
-  _galleryPhotos = []; _galleryIdx = 0;
+  _galleryPhotos = []; _galleryIdx = 0; _galleryLogIdx = null;
+}
+// Bridge: switch from photo gallery into the edit modal for the same log.
+function editLogFromGallery() {
+  if (_galleryLogIdx == null) return;
+  const idx = _galleryLogIdx;
+  closePhotoGallery();
+  editLog(idx);
 }
 function renderGalleryView() {
   const img = document.getElementById('photoGalleryImg');
