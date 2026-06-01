@@ -2056,6 +2056,34 @@ function isUnitAutoEntry(l) {
   return l && l.auto === true && Array.isArray(l.categories) && (!l.kind || l.kind === 'unit');
 }
 
+// Firebase Realtime DB rejects '.', '#', '$', '/', '[', ']' in object keys.
+// Unit IDs like 'SF20A.1' must be sanitized before being used as autoUnits keys.
+function safeKey(s) { return String(s == null ? '' : s).replace(/[.#$\/\[\]]/g, '_'); }
+
+// Normalize an autoUnits entry to the new {id,status} shape.
+// Legacy entries stored a plain string (status, or '' for installed/unit) with
+// the unsanitized id as the key — handle both forms.
+function autoUnitNorm(k, v) {
+  if (v && typeof v === 'object' && 'id' in v) return { id: v.id, status: v.status || '' };
+  return { id: k, status: (typeof v === 'string') ? v : '' };
+}
+function autoUnitDisplay(v) { return v.status ? v.id + ' (' + v.status + ')' : v.id; }
+
+// Re-keys autoUnits to Firebase-safe keys + object values, then rebuilds content.
+// Idempotent and backwards-compatible. Call after every mutation.
+function rebuildAutoUnitsContent(entry) {
+  if (!entry) return;
+  const cur = entry.autoUnits || {};
+  const fresh = {};
+  Object.entries(cur).forEach(function(kv) {
+    const norm = autoUnitNorm(kv[0], kv[1]);
+    if (!norm.id) return;
+    fresh[safeKey(norm.id)] = norm;
+  });
+  entry.autoUnits = fresh;
+  entry.content = Object.values(fresh).map(autoUnitDisplay).join(' · ');
+}
+
 function upsertUnitLog(date, category, unitId) {
   let entry = state.log.find(l =>
     isUnitAutoEntry(l) && l.date === date &&
@@ -2084,11 +2112,12 @@ function upsertUnitLog(date, category, unitId) {
       });
     }
   }
-  entry.autoUnits[unitId] = '';
-  entry.content = Object.keys(entry.autoUnits).join(' · ');
+  entry.autoUnits[safeKey(unitId)] = { id: unitId, status: '' };
+  rebuildAutoUnitsContent(entry);
 }
 
 function removeUnitFromUnitLogs(unitId) {
+  const sk = safeKey(unitId);
   for (let i = state.log.length - 1; i >= 0; i--) {
     const l = state.log[i];
     if (!isUnitAutoEntry(l)) continue;
@@ -2102,20 +2131,21 @@ function removeUnitFromUnitLogs(unitId) {
         });
       }
     }
-    if (unitId in l.autoUnits) {
-      delete l.autoUnits[unitId];
-      const keys = Object.keys(l.autoUnits);
-      if (keys.length === 0) {
-        state.log.splice(i, 1);
-      } else {
-        l.content = keys.join(' · ');
-      }
+    let removed = false;
+    if (sk in l.autoUnits) { delete l.autoUnits[sk]; removed = true; }
+    // Also handle pre-existing in-memory dotted keys
+    if (unitId !== sk && unitId in l.autoUnits) { delete l.autoUnits[unitId]; removed = true; }
+    if (!removed) continue;
+    if (Object.keys(l.autoUnits).length === 0) {
+      state.log.splice(i, 1);
+    } else {
+      rebuildAutoUnitsContent(l);
     }
   }
 }
 
 /* Glass-batch entries — separate kind='glass' so unit-modal sweeps leave them alone.
-   Keys are "unitId panel" (e.g. "12A 1F-3") so the same unit can have multiple panels. */
+   Display id is "unitId panel" (e.g. "12A 1F-3"); safeKey() sanitizes the dot. */
 function upsertGlassLog(date, category, unitId, panel, status) {
   let entry = state.log.find(l =>
     l && l.auto === true && l.kind === 'glass' && l.date === date &&
@@ -2134,11 +2164,12 @@ function upsertGlassLog(date, category, unitId, panel, status) {
     state.log.push(entry);
   }
   if (!entry.autoUnits) entry.autoUnits = {};
-  const key = unitId + (panel ? ' ' + panel : '');
-  entry.autoUnits[key] = (status && status !== 'installed') ? status : '';
-  entry.content = Object.entries(entry.autoUnits)
-    .map(([k, s]) => s ? `${k} (${s})` : k)
-    .join(' · ');
+  const displayId = unitId + (panel ? ' ' + panel : '');
+  entry.autoUnits[safeKey(displayId)] = {
+    id: displayId,
+    status: (status && status !== 'installed') ? status : ''
+  };
+  rebuildAutoUnitsContent(entry);
 }
 
 let editingLogIdx = null;
