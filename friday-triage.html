@@ -200,6 +200,22 @@
   }
   .show-on-map-btn:hover { border-color: var(--accent); color: var(--accent); }
   .show-on-map-btn:active { background: var(--bg); }
+  .installed-badge {
+    background: rgba(63,185,80,0.15); color: var(--green);
+    border: 1px solid rgba(63,185,80,0.35);
+    padding: 2px 8px; border-radius: 999px;
+    font-size: 10px; font-weight: 700;
+    margin-left: 6px; white-space: nowrap;
+  }
+  .piece-idx {
+    font-size: 10px; font-weight: 500; color: var(--text-dim);
+    margin-left: 4px;
+  }
+  .qty-pill.dest-pill {
+    background: rgba(68,147,248,0.16); color: var(--accent);
+    border: 1px solid rgba(68,147,248,0.4);
+    font-weight: 700; font-size: 12px;
+  }
 
   /* Glass cards */
   .glass-card {
@@ -664,8 +680,39 @@ const STORAGE_KEY = "cp2_friday_triage_v2";
 // Firebase node — independent from /state so we don't risk corrupting the main app
 const FB_PATH = "triage/friday";
 
-let state = {};           // { [tag]: { status, zone, facade, note, photos:[], updatedAt, updatedBy } }
-let pieces = ROSTER.map(p => p.tag);
+// State is now keyed by pieceKey = `${tag}#${idx}` (e.g. "1F-01#0", "1F-01#1" …)
+// so each individual piece of a multi-qty mark can be tracked independently.
+let state = {};           // { [pieceKey]: { status, zone, facade, note, photos:[], updatedAt, updatedBy } }
+let pieces = [];          // flat list of pieceKeys, populated by expandedPieces()
+
+// Parse a facade string like "SF21B, SF21B, SF20A (north side)" into an array of destinations.
+function parseDests(facadeStr) {
+  if (!facadeStr) return [];
+  return facadeStr.split(',').map(s => s.trim()).filter(Boolean);
+}
+
+// Expand ROSTER into one entry per physical piece. Each gets:
+//   - pieceKey: unique key used in state[]
+//   - dest:    its SF destination (from the i-th comma-separated value in facade)
+//   - pieceIdx: 0-based index within its mark
+//   - everything else inherited from the parent ROSTER entry
+function expandedPieces() {
+  const out = [];
+  ROSTER.forEach(p => {
+    const dests = parseDests(p.facade);
+    for (let i = 0; i < p.qty; i++) {
+      out.push({
+        ...p,
+        pieceIdx: i,
+        pieceKey: `${p.tag}#${i}`,
+        dest: dests[i] || dests[0] || '',
+      });
+    }
+  });
+  return out;
+}
+// Initialize pieces[] from ROSTER once.
+pieces = expandedPieces().map(p => p.pieceKey);
 let mode = "local";       // "local" | "live" | "viewer"
 let fbDb = null;
 let fbAuth = null;
@@ -674,14 +721,17 @@ let isEditor = false;
 let suppressEcho = false;
 let writeTimer = null;
 let pendingWrites = {};
+// Read-only cache of the main tracker's state. Used to show "X/Y installed"
+// badges on triage cards and to compute deep-path writes back to main glass panels.
+let mainState = null;
 
 // Initialize state from roster, then overlay any saved
-function defaultsFor(tag) {
+function defaultsFor(pieceKey) {
   return { status: "pending", zone: "", facade: "", note: "", photos: [], updatedAt: 0, updatedBy: "" };
 }
-function ensureRow(tag) {
-  if (!state[tag]) state[tag] = defaultsFor(tag);
-  return state[tag];
+function ensureRow(pieceKey) {
+  if (!state[pieceKey]) state[pieceKey] = defaultsFor(pieceKey);
+  return state[pieceKey];
 }
 
 function loadLocal() {
@@ -784,20 +834,24 @@ function subscribeToTriage() {
     const remote = snap.val() || {};
     suppressEcho = true;
     try {
-      for (const tag of pieces) {
-        const key = tag.replace(/[.#$\[\]\/]/g, "_");
-        if (remote[key]) {
-          state[tag] = {
-            status:    remote[key].status || "pending",
-            zone:      remote[key].zone || "",
-            facade:    remote[key].facade || "",
-            note:      remote[key].note || "",
-            photos:    remote[key].photos || [],
-            updatedAt: remote[key].updatedAt || 0,
-            updatedBy: remote[key].updatedBy || "",
+      // Hydrate per-piece state. Migration: if a legacy entry exists keyed by the
+      // bare tag (e.g. "1F-01"), use it as the seed for every sub-piece of that mark.
+      for (const piece of expandedPieces()) {
+        const safe = piece.pieceKey.replace(/[.#$\[\]\/]/g, "_");
+        const legacySafe = piece.tag.replace(/[.#$\[\]\/]/g, "_");
+        const remoteRow = remote[safe] || remote[legacySafe];
+        if (remoteRow) {
+          state[piece.pieceKey] = {
+            status:    remoteRow.status || "pending",
+            zone:      remoteRow.zone || "",
+            facade:    remoteRow.facade || "",
+            note:      remoteRow.note || "",
+            photos:    remoteRow.photos || [],
+            updatedAt: remoteRow.updatedAt || 0,
+            updatedBy: remoteRow.updatedBy || "",
           };
         } else {
-          state[tag] = state[tag] || defaultsFor(tag);
+          state[piece.pieceKey] = state[piece.pieceKey] || defaultsFor(piece.pieceKey);
         }
       }
       render();
@@ -808,6 +862,72 @@ function subscribeToTriage() {
     setConn("local", "Local only");
     mode = "local";
   });
+
+  // Subscribe to the main tracker state (read-only) so triage cards can show
+  // "X/Y installed" badges and write-backs know panel indices.
+  fbDb.ref("state").on("value", snap => {
+    mainState = snap.val() || null;
+    render();
+  }, err => { console.warn("fb main state read failed", err); });
+}
+
+// Count installed glass pieces for a triage tag by walking mainState.units.
+function countInstalledForTag(tag) {
+  if (!mainState || !Array.isArray(mainState.units)) return 0;
+  let n = 0;
+  mainState.units.forEach(u => {
+    (u.glassPanels || []).forEach(p => {
+      if (p.panel === tag && p.status === "installed") n++;
+    });
+  });
+  return n;
+}
+
+// Map triage status to a main-tracker glass panel status.
+// Returns null if we shouldn't overwrite (e.g. main is already installed/issue).
+function triageStatusToMain(triageStatus, currentPanelStatus) {
+  if (currentPanelStatus === "installed" || currentPanelStatus === "issue") return null;
+  if (triageStatus === "staged" || triageStatus === "unloaded") return "ready";
+  if (triageStatus === "pending") return "";  // unknown / not yet on site
+  return null;
+}
+
+// For a given base tag, find the "highest" piece status across all sub-pieces.
+// Used when propagating to main tracker — we want main to reflect the most
+// advanced status among any of this mark's pieces (e.g. if 1 of 4 is staged,
+// main panels become ready).
+function aggregateStatusForBaseTag(baseTag) {
+  const rank = { pending: 0, unloaded: 1, staged: 2 };
+  let best = "pending", bestR = 0;
+  const piece = ROSTER.find(p => p.tag === baseTag);
+  if (!piece) return best;
+  for (let i = 0; i < piece.qty; i++) {
+    const pk = `${baseTag}#${i}`;
+    const s = (state[pk] || {}).status || "pending";
+    const r = rank[s] || 0;
+    if (r > bestR) { bestR = r; best = s; }
+  }
+  return best;
+}
+
+// One-way write-back: after the user changes a triage row's status,
+// push the mapped status into all matching main-tracker glassPanels.
+function propagateTriageStatusToMain(tag, triageStatus) {
+  if (mode !== "live" || !fbDb || !mainState || !Array.isArray(mainState.units)) return;
+  const updates = {};
+  mainState.units.forEach((u, ui) => {
+    (u.glassPanels || []).forEach((p, pi) => {
+      if (p.panel !== tag) return;
+      const newStatus = triageStatusToMain(triageStatus, p.status);
+      if (newStatus === null || newStatus === p.status) return;
+      updates[`state/units/${ui}/glassPanels/${pi}/status`] = newStatus;
+    });
+  });
+  if (Object.keys(updates).length) {
+    fbDb.ref().update(updates).catch(err => {
+      console.warn("write-back to main failed", err);
+    });
+  }
 }
 
 // ============ 4. Rendering ============
@@ -818,12 +938,13 @@ let searchTerm = "";
 let zoneFilter = "";
 
 function render() {
-  // KPIs (count by total pieces, not rows)
+  // KPIs — count per piece (each is independent now)
+  const allPieces = expandedPieces();
   const counts = { pending: 0, unloaded: 0, staged: 0, total: 0 };
-  for (const p of ROSTER) {
-    const row = state[p.tag] || defaultsFor(p.tag);
-    counts[row.status] += p.qty;
-    counts.total += p.qty;
+  for (const piece of allPieces) {
+    const row = state[piece.pieceKey] || defaultsFor(piece.pieceKey);
+    counts[row.status] = (counts[row.status] || 0) + 1;
+    counts.total += 1;
   }
   document.getElementById("num-pending").firstChild.textContent  = counts.pending;
   document.getElementById("num-unloaded").firstChild.textContent = counts.unloaded;
@@ -832,35 +953,37 @@ function render() {
   document.getElementById("of-unloaded").textContent = " / " + counts.total;
   document.getElementById("of-staged").textContent   = " / " + counts.total;
 
-  // Zone filter options
-  const zones = [...new Set(ROSTER.map(p => (state[p.tag] || {}).zone).filter(Boolean))].sort();
+  // Zone filter options — gathered from all per-piece state rows
+  const zones = [...new Set(allPieces.map(p => (state[p.pieceKey] || {}).zone).filter(Boolean))].sort();
   const zSel = document.getElementById("filter-zone");
   const prev = zSel.value;
   zSel.innerHTML = '<option value="">All zones</option>' +
     zones.map(z => `<option value="${escapeAttr(z)}">${escapeHtml(z)}</option>`).join("");
   zSel.value = zones.includes(prev) ? prev : "";
 
-  // Group by order
+  // Group by order — one card per piece
   const groups = {};
-  for (const p of ROSTER) {
-    if (!groups[p.order]) groups[p.order] = [];
-    groups[p.order].push(p);
+  for (const piece of allPieces) {
+    if (!groups[piece.order]) groups[piece.order] = [];
+    groups[piece.order].push(piece);
   }
   let html = "";
   for (const orderKey of Object.keys(groups).sort()) {
     const grp = groups[orderKey];
-    const totalPieces = grp.reduce((s, p) => s + p.qty, 0);
-    const stagedPieces = grp.reduce((s, p) =>
-      s + ((state[p.tag] || {}).status === "staged" ? p.qty : 0), 0);
+    const totalPieces = grp.length;
+    const stagedPieces = grp.reduce((s, piece) =>
+      s + ((state[piece.pieceKey] || {}).status === "staged" ? 1 : 0), 0);
+    // Marks (unique mark count in this crate)
+    const markCount = new Set(grp.map(p => p.tag)).size;
     html += `
       <div class="group-head">
         <span>${escapeHtml(ORDER_LABELS[orderKey] || orderKey)}</span>
-        <span class="count">${grp.length} marks · ${totalPieces} pcs</span>
+        <span class="count">${markCount} marks · ${totalPieces} pcs</span>
         <span class="progress">${stagedPieces}/${totalPieces} staged</span>
         <button class="show-on-map-btn" type="button" onclick="showCrateOnMap('${orderKey}')" title="Show this crate's destinations on the floor plan">📍 Map</button>
       </div>
       <div class="glass-cards">
-        ${grp.map(p => cardHTML(p, state[p.tag] || defaultsFor(p.tag))).join("")}
+        ${grp.map(p => cardHTML(p, state[p.pieceKey] || defaultsFor(p.pieceKey))).join("")}
       </div>
     `;
   }
@@ -874,18 +997,29 @@ function cardHTML(piece, row) {
   const photoBadge = photoCount ? `<span class="photo-count">${photoCount}</span>` : "";
   const lastUpd = row.updatedAt && row.updatedBy ?
     `Last updated ${timeAgo(row.updatedAt)} by ${escapeHtml(row.updatedBy.split('@')[0])}` : "";
+  // Per-piece dest (e.g. "SF21B" or "SF20A (north side)"); overridden by row.facade if user edited it.
+  const destLabel = row.facade || piece.dest || '';
+  // Cross-reference: count how many of this mark the main tracker says are installed.
+  const installedN = countInstalledForTag(piece.tag);
+  const installedBadge = installedN > 0
+    ? `<span class="installed-badge" title="From main tracker">✓ ${installedN}/${piece.qty} installed total</span>`
+    : "";
+  // Show piece index within the mark (e.g. "#3 of 4") only when qty > 1
+  const pieceLabel = piece.qty > 1 ? ` <span class="piece-idx">#${piece.pieceIdx + 1}/${piece.qty}</span>` : "";
   return `
     <article class="glass-card s-${row.status}"
+             data-piece-key="${escapeAttr(piece.pieceKey)}"
              data-tag="${escapeAttr(piece.tag)}"
              data-zone="${escapeAttr(row.zone)}"
-             data-facade="${escapeAttr(row.facade || piece.facade || '')}"
+             data-facade="${escapeAttr(destLabel)}"
              data-status="${row.status}">
       <div class="row-top">
         <div class="tag-block">
-          <div class="tag">${escapeHtml(piece.tag)}</div>
+          <div class="tag">${escapeHtml(piece.tag)}${pieceLabel}</div>
           <div class="tag-meta">${escapeHtml(piece.size)}</div>
         </div>
-        <div class="qty-pill"><strong>${piece.qty}</strong>${piece.qty > 1 ? ' pcs' : ' pc'}</div>
+        <div class="qty-pill dest-pill" title="Destination SF">${escapeHtml(destLabel || '—')}</div>
+        ${installedBadge}
       </div>
 
       <div class="info-grid">
@@ -905,7 +1039,7 @@ function cardHTML(piece, row) {
             </svg>
             Final facade
           </div>
-          <div class="info-value ${(row.facade || piece.facade) ? '' : 'empty'}">${escapeHtml(row.facade || piece.facade || 'Tap to set…')}</div>
+          <div class="info-value ${destLabel ? '' : 'empty'}">${escapeHtml(destLabel || 'Tap to set…')}</div>
         </div>
       </div>
 
@@ -1008,16 +1142,19 @@ document.getElementById("filter-zone").addEventListener("change", e => {
 root.addEventListener("click", e => {
   const card = e.target.closest(".glass-card");
   if (!card) return;
-  const tag = card.dataset.tag;
-  const row = ensureRow(tag);
+  const pieceKey = card.dataset.pieceKey || card.dataset.tag; // legacy fallback
+  const baseTag  = card.dataset.tag;
+  const row = ensureRow(pieceKey);
 
   // status segmented
   const seg = e.target.closest(".seg-btn");
   if (seg) {
     if (mode === "viewer") { toast("View-only mode"); return; }
     row.status = seg.dataset.s;
-    queueWrite(tag);
+    queueWrite(pieceKey);
     saveLocal();
+    // Propagate aggregate status (highest across this mark's pieces) to main tracker glass panels.
+    propagateTriageStatusToMain(baseTag, aggregateStatusForBaseTag(baseTag));
     render();
     return;
   }
@@ -1026,19 +1163,19 @@ root.addEventListener("click", e => {
   const editable = e.target.closest("[data-edit]");
   if (editable) {
     if (mode === "viewer") { toast("View-only mode"); return; }
-    openEdit(tag, editable.dataset.edit);
+    openEdit(pieceKey, editable.dataset.edit);
     return;
   }
 
   // open photo full
   const thumb = e.target.closest(".photo-thumb");
   if (thumb) {
-    const card  = thumb.closest(".glass-card");
-    const tag   = card ? card.dataset.tag : "";
-    const pidx  = thumb.dataset.pidx || "0";
-    const total = (ensureRow(tag).photos || []).length;
+    const card2  = thumb.closest(".glass-card");
+    const pk     = card2 ? (card2.dataset.pieceKey || card2.dataset.tag) : "";
+    const pidx   = thumb.dataset.pidx || "0";
+    const total  = (ensureRow(pk).photos || []).length;
     const viewer = document.getElementById("photo-viewer");
-    viewer.dataset.tag  = tag;
+    viewer.dataset.tag  = pk;  // photo viewer continues to use generic 'tag' field
     viewer.dataset.pidx = pidx;
     document.getElementById("photo-viewer-img").src = thumb.src;
     document.getElementById("photo-counter").textContent =
@@ -1083,9 +1220,9 @@ root.addEventListener("change", e => {
   if (!e.target.matches(".note-input")) return;
   if (mode === "viewer") { toast("View-only mode"); render(); return; }
   const card = e.target.closest(".glass-card");
-  const tag = card.dataset.tag;
-  ensureRow(tag).note = e.target.value;
-  queueWrite(tag);
+  const pieceKey = card.dataset.pieceKey || card.dataset.tag;
+  ensureRow(pieceKey).note = e.target.value;
+  queueWrite(pieceKey);
   saveLocal();
 });
 root.addEventListener("keydown", e => {
@@ -1097,8 +1234,8 @@ root.addEventListener("change", async e => {
   if (!e.target.matches('.photo-btn input[type="file"]')) return;
   if (mode === "viewer") { toast("View-only mode"); e.target.value = ""; return; }
   const card = e.target.closest(".glass-card");
-  const tag = card.dataset.tag;
-  const row = ensureRow(tag);
+  const pieceKey = card.dataset.pieceKey || card.dataset.tag;
+  const row = ensureRow(pieceKey);
   const files = [...e.target.files];
   for (const f of files) {
     if ((row.photos || []).length >= 3) {
@@ -1110,7 +1247,7 @@ root.addEventListener("change", async e => {
       row.photos.push(b64);
     } catch (err) { console.warn(err); }
   }
-  queueWrite(tag);
+  queueWrite(pieceKey);
   saveLocal();
   render();
   e.target.value = "";
@@ -1180,29 +1317,6 @@ document.getElementById("modal-save").addEventListener("click", () => {
 modalInput.addEventListener("keydown", e => {
   if (e.key === "Enter") document.getElementById("modal-save").click();
 });
-
-// ============ 7b. Crate → Map navigation ============
-// Tap "📍 Map" on a crate header → navigate to the main tracker with all of
-// that crate's SF destinations highlighted on the floor plan.
-function showCrateOnMap(orderKey) {
-  const panels = ROSTER.filter(p => p.order === orderKey);
-  const ids = new Set();
-  panels.forEach(p => {
-    const facade = (state[p.tag] || {}).facade || p.facade || '';
-    // Match SF followed by digits + optional letter + optional digit suffix.
-    // Captures SF03, SF20A, SF20A1, SF11B etc. (stops at spaces / parens)
-    (facade.match(/SF[A-Z0-9]+/gi) || []).forEach(id => ids.add(id.toUpperCase()));
-  });
-  if (!ids.size) {
-    toast("No SF destinations set for this crate yet");
-    return;
-  }
-  const params = new URLSearchParams({
-    highlight: [...ids].join(','),
-    order: orderKey
-  });
-  window.location.href = 'index.html?' + params.toString();
-}
 
 // ============ 8. Utils ============
 function escapeHtml(s) {

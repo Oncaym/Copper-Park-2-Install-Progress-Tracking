@@ -1884,13 +1884,27 @@ function glassStatusOptions(selected) {
 
 function renderGlassPanelList(panels) {
   const list = document.getElementById('glass-panels-list');
-  list.innerHTML = panels.map((p, i) => `
+  const triage = window._triageCache || {};
+  list.innerHTML = panels.map((p, i) => {
+    // Cross-reference Glass Triage: show triage status next to the panel.
+    const tag = (p.panel || '').trim();
+    const key = tag.replace(/[.#$\[\]\/]/g, '_');
+    const triageRow = triage[key];
+    let triageBadge = '';
+    if (triageRow && triageRow.status && triageRow.status !== 'pending') {
+      const cls = `triage-${triageRow.status}`;
+      const label = ({pending:'pending', unloaded:'on-site', staged:'staged'})[triageRow.status] || triageRow.status;
+      triageBadge = `<span class="triage-badge ${cls}" title="From Glass Triage">📦 ${label}</span>`;
+    }
+    return `
     <div class="glass-panel-row" data-idx="${i}">
       <input type="text" value="${p.panel||''}" placeholder="e.g. 1F-27" autocomplete="off">
       <select>${glassStatusOptions(p.status||'')}</select>
       <input type="date" value="${p.date||''}">
+      ${triageBadge}
       <button type="button" class="btn-remove" onclick="removeGlassPanel(${i})" title="Remove">×</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function addGlassPanel() {
@@ -2613,6 +2627,15 @@ function initApp() {
   render();
   // Pick up ?highlight=SF03,SF20A&order=J04 from Glass Triage "📍 Map" deep-link
   if (typeof applyMapHighlightFromUrl === 'function') applyMapHighlightFromUrl();
+  // Subscribe (read-only) to Glass Triage pieces so the unit modal can show
+  // shipping status (📦 on-site / staged) next to each glass panel.
+  try {
+    if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length) {
+      firebase.database().ref('triage/friday/pieces').on('value', snap => {
+        window._triageCache = snap.val() || {};
+      });
+    }
+  } catch (e) { console.warn('triage subscribe failed', e); }
   if (state._mergeNote) {
     setTimeout(() => toast(state._mergeNote + ' — see left margin / L2 tab'), 600);
     delete state._mergeNote;
