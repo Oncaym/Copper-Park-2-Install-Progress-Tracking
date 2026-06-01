@@ -192,6 +192,14 @@
     font-variant-numeric: tabular-nums;
     text-transform: none; letter-spacing: 0;
   }
+  .show-on-map-btn {
+    background: var(--panel-2); border: 1px solid var(--border);
+    color: var(--text); padding: 4px 9px; border-radius: 6px;
+    font-size: 11px; cursor: pointer;
+    font-family: inherit; text-transform: none; letter-spacing: 0;
+  }
+  .show-on-map-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .show-on-map-btn:active { background: var(--bg); }
 
   /* Glass cards */
   .glass-card {
@@ -849,6 +857,7 @@ function render() {
         <span>${escapeHtml(ORDER_LABELS[orderKey] || orderKey)}</span>
         <span class="count">${grp.length} marks · ${totalPieces} pcs</span>
         <span class="progress">${stagedPieces}/${totalPieces} staged</span>
+        <button class="show-on-map-btn" type="button" onclick="showCrateOnMap('${orderKey}')" title="Show this crate's destinations on the floor plan">📍 Map</button>
       </div>
       <div class="glass-cards">
         ${grp.map(p => cardHTML(p, state[p.tag] || defaultsFor(p.tag))).join("")}
@@ -1171,6 +1180,29 @@ document.getElementById("modal-save").addEventListener("click", () => {
 modalInput.addEventListener("keydown", e => {
   if (e.key === "Enter") document.getElementById("modal-save").click();
 });
+
+// ============ 7b. Crate → Map navigation ============
+// Tap "📍 Map" on a crate header → navigate to the main tracker with all of
+// that crate's SF destinations highlighted on the floor plan.
+function showCrateOnMap(orderKey) {
+  const panels = ROSTER.filter(p => p.order === orderKey);
+  const ids = new Set();
+  panels.forEach(p => {
+    const facade = (state[p.tag] || {}).facade || p.facade || '';
+    // Match SF followed by digits + optional letter + optional digit suffix.
+    // Captures SF03, SF20A, SF20A1, SF11B etc. (stops at spaces / parens)
+    (facade.match(/SF[A-Z0-9]+/gi) || []).forEach(id => ids.add(id.toUpperCase()));
+  });
+  if (!ids.size) {
+    toast("No SF destinations set for this crate yet");
+    return;
+  }
+  const params = new URLSearchParams({
+    highlight: [...ids].join(','),
+    order: orderKey
+  });
+  window.location.href = 'index.html?' + params.toString();
+}
 
 // ============ 8. Utils ============
 function escapeHtml(s) {

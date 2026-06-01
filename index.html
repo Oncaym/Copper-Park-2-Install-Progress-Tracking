@@ -393,6 +393,42 @@
   .plan-wrap.placing { cursor: crosshair; }
   .plan-wrap.placing .plan-marker { pointer-events: none; }
 
+  /* Highlighted / dimmed states driven by ?highlight=… query string */
+  .plan-marker.dimmed {
+    opacity: 0.18;
+    filter: grayscale(0.6);
+  }
+  .plan-marker.highlighted {
+    box-shadow: 0 0 0 3px var(--accent), 0 0 14px 4px rgba(88,166,255,0.55);
+    z-index: 5;
+    animation: hl-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes hl-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px var(--accent), 0 0 14px 4px rgba(88,166,255,0.55); }
+    50%      { box-shadow: 0 0 0 3px var(--accent), 0 0 22px 8px rgba(88,166,255,0.85); }
+  }
+
+  /* Highlight banner */
+  .highlight-banner {
+    display: none;
+    align-items: center; gap: 12px;
+    background: rgba(88,166,255,0.12);
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin: 12px 0 0;
+    font-size: 13px;
+  }
+  .highlight-banner .hl-icon { font-size: 16px; }
+  .highlight-banner .hl-text { flex: 1; color: var(--text); }
+  .highlight-banner .hl-clear {
+    background: transparent; border: 1px solid var(--border);
+    color: var(--text); border-radius: 6px;
+    padding: 4px 10px; font-size: 12px; cursor: pointer;
+    font-family: inherit;
+  }
+  .highlight-banner .hl-clear:hover { border-color: var(--accent); color: var(--accent); }
+
   /* Unit grid */
   .unit-grid {
     display: grid;

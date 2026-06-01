@@ -974,12 +974,17 @@ function renderPlan() {
     if (_gbBar) _gbBar.style.display = 'none';
   }
   const hidePending = document.getElementById('hidePendingChk').checked;
+  const hl = window._highlightedSfIds; // Set<string> or null
   state.units.forEach(u => {
     if ((u.level || 'GF') !== currentLevel) return;
     if (hidePending && u.status === 'pending') return;
     const pos = state.positions[u.key] || { x: 50, y: 50 };
     const m = document.createElement('div');
-    m.className = `plan-marker ${u.status}${u.louver === 'yes' ? ' has-louver' : ''}${isPlanned(u) ? ' planned' : ''}`;
+    let extra = '';
+    if (hl && hl.size) {
+      extra = hl.has((u.id || '').toUpperCase()) ? ' highlighted' : ' dimmed';
+    }
+    m.className = `plan-marker ${u.status}${u.louver === 'yes' ? ' has-louver' : ''}${isPlanned(u) ? ' planned' : ''}${extra}`;
     m.style.left = pos.x + '%';
     m.style.top  = pos.y + '%';
     {
@@ -1686,6 +1691,53 @@ function openKpiDetail(kind) {
 function closeKpiDetail() {
   const m = document.getElementById('kpiDetailModal');
   if (m) m.classList.remove('show');
+}
+
+/* ======================================================
+   MAP HIGHLIGHT — driven by ?highlight=SF03,SF20A&order=J04
+   Used by Glass Triage to show "where this crate's glass goes"
+   ====================================================== */
+function applyMapHighlightFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const highlight = params.get('highlight');
+  const orderLbl  = params.get('order') || '';
+  if (!highlight) {
+    window._highlightedSfIds = null;
+    return;
+  }
+  const ids = highlight.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+  if (!ids.length) { window._highlightedSfIds = null; return; }
+  window._highlightedSfIds = new Set(ids);
+  showHighlightBanner(orderLbl, ids);
+  // Re-render so markers pick up the new highlight/dim classes
+  if (typeof renderPlan === 'function') renderPlan();
+}
+function clearMapHighlight() {
+  window._highlightedSfIds = null;
+  const url = new URL(window.location.href);
+  url.searchParams.delete('highlight');
+  url.searchParams.delete('order');
+  history.replaceState(null, '', url.pathname + (url.search || ''));
+  const banner = document.getElementById('highlightBanner');
+  if (banner) banner.style.display = 'none';
+  if (typeof renderPlan === 'function') renderPlan();
+}
+function showHighlightBanner(orderLbl, ids) {
+  let banner = document.getElementById('highlightBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'highlightBanner';
+    banner.className = 'highlight-banner';
+    const main = document.querySelector('main');
+    if (main && main.firstChild) main.insertBefore(banner, main.firstChild);
+    else document.body.appendChild(banner);
+  }
+  const label = orderLbl ? `${orderLbl} · ` : '';
+  banner.innerHTML =
+    `<span class="hl-icon">📦</span>` +
+    `<span class="hl-text">${label}${ids.length} destination${ids.length>1?'s':''} highlighted on plan</span>` +
+    `<button class="hl-clear" type="button" onclick="clearMapHighlight()">Clear ×</button>`;
+  banner.style.display = 'flex';
 }
 
 /* ======================================================
@@ -2559,6 +2611,8 @@ function initApp() {
   }
   _appReady = true;
   render();
+  // Pick up ?highlight=SF03,SF20A&order=J04 from Glass Triage "📍 Map" deep-link
+  if (typeof applyMapHighlightFromUrl === 'function') applyMapHighlightFromUrl();
   if (state._mergeNote) {
     setTimeout(() => toast(state._mergeNote + ' — see left margin / L2 tab'), 600);
     delete state._mergeNote;
