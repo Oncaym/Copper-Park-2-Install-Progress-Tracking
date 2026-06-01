@@ -2029,7 +2029,8 @@ function saveUnit() {
    - Status reversal (installed → pending) removes the unit instead of stacking suffixes.
    - Same unit ID never appears twice in one entry.
    - Log date follows u.date (not "today").
-   - Glass changes are NOT logged here — they're managed by the Glass Batch tool. */
+   - Glass panel changes are also logged here — upsert-only (no sweep), so a
+     reverted panel may leave a stale entry, but historical data is never lost. */
 function autoLogUnitChanges(u, old) {
   const oldId = (old && old.id) || u.id;
   removeUnitFromUnitLogs(oldId);
@@ -2047,6 +2048,23 @@ function autoLogUnitChanges(u, old) {
   if (u.louver === 'yes') {
     upsertUnitLog(date, 'louver', u.id);
   }
+
+  // --- Glass panel diff: log on actual status/date change. No sweep on purpose —
+  //     historical glass log dates may not match the current panel.date, so a
+  //     blanket sweep would relocate/erase past records. Cost: panel reverted to
+  //     pending leaves a stale log entry that has to be cleaned manually.
+  const _oldGP = (old && old.glassPanels) || [];
+  const _newGP = u.glassPanels || [];
+  _newGP.forEach(function(np, i) {
+    const op = _oldGP[i] || {};
+    const oldSt = op.status || '', newSt = np.status || '';
+    const oldDt = op.date   || '', newDt = np.date   || '';
+    if (oldSt === newSt && oldDt === newDt) return;
+    if (!newSt || newSt === 'pending') return;
+    const pDate = newDt || u.date || new Date().toISOString().slice(0,10);
+    const cat   = newSt === 'issue' ? 'issue' : 'framing';
+    upsertGlassLog(pDate, cat, u.id, np.panel || '', newSt);
+  });
 }
 
 /* Treat both new kind='unit' entries AND legacy auto entries (no kind set)
@@ -2667,6 +2685,38 @@ function initApp() {
       });
     }
   } catch (e) { console.warn('triage subscribe failed', e); }
+  if (state._mergeNote) {
+    setTimeout(() => toast(state._mergeNote + ' — see left margin / L2 tab'), 600);
+    delete state._mergeNote;
+  }
+}
+
+// Fetch the team's baseline snapshot before running initApp.
+// localStorage / Firebase still win when they're newer; this just supplies
+// the "fresh visitor" / "stale localStorage discarded" fallback.
+async function bootstrap() {
+  try {
+    const res = await fetch('state.json', { cache: 'no-cache' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.units && data.log) {
+        window._embeddedStateJson = data;
+      }
+    } else {
+      console.warn('state.json fetch returned', res.status);
+    }
+  } catch (e) {
+    console.warn('state.json fetch failed — falling back to inline embedded_state', e);
+  }
+  initApp();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootstrap);
+} else {
+  bootstrap();
+}
+('triage subscribe failed', e); }
   if (state._mergeNote) {
     setTimeout(() => toast(state._mergeNote + ' — see left margin / L2 tab'), 600);
     delete state._mergeNote;
