@@ -2029,7 +2029,8 @@ function saveUnit() {
    - Status reversal (installed → pending) removes the unit instead of stacking suffixes.
    - Same unit ID never appears twice in one entry.
    - Log date follows u.date (not "today").
-   - Glass changes are NOT logged here — they're managed by the Glass Batch tool. */
+   - Glass panel changes (status/date) are logged into kind='glass' entries,
+     mirroring the same sweep-then-readd pattern. */
 function autoLogUnitChanges(u, old) {
   const oldId = (old && old.id) || u.id;
   removeUnitFromUnitLogs(oldId);
@@ -2046,6 +2047,45 @@ function autoLogUnitChanges(u, old) {
 
   if (u.louver === 'yes') {
     upsertUnitLog(date, 'louver', u.id);
+  }
+
+  // --- Glass panel auto-log (mirrors framing pattern) ---
+  const oldPanels = (old && old.glassPanels) || [];
+  const newPanels = u.glassPanels || [];
+  // Sweep prior keys under both old and new unit IDs (handles ID rename + panel relabel)
+  oldPanels.forEach(function(op) {
+    removeGlassPanelFromLogs(oldId, op.panel || '');
+    if (oldId !== u.id) removeGlassPanelFromLogs(u.id, op.panel || '');
+  });
+  newPanels.forEach(function(np) {
+    removeGlassPanelFromLogs(u.id, np.panel || '');
+    if (oldId !== u.id) removeGlassPanelFromLogs(oldId, np.panel || '');
+  });
+  // Re-add for current meaningful states (skip pending/empty)
+  newPanels.forEach(function(p) {
+    const st = p.status || '';
+    if (!st || st === 'pending') return;
+    const pDate = p.date || u.date || new Date().toISOString().slice(0,10);
+    const cat   = st === 'issue' ? 'issue' : 'framing';
+    upsertGlassLog(pDate, cat, u.id, p.panel || '', st);
+  });
+}
+
+function removeGlassPanelFromLogs(unitId, panel) {
+  const key = unitId + (panel ? ' ' + panel : '');
+  for (let i = state.log.length - 1; i >= 0; i--) {
+    const l = state.log[i];
+    if (!l || l.auto !== true || l.kind !== 'glass') continue;
+    if (!l.autoUnits || !(key in l.autoUnits)) continue;
+    delete l.autoUnits[key];
+    const keys = Object.keys(l.autoUnits);
+    if (keys.length === 0) {
+      state.log.splice(i, 1);
+    } else {
+      l.content = Object.entries(l.autoUnits)
+        .map(function(kv) { return kv[1] ? kv[0] + ' (' + kv[1] + ')' : kv[0]; })
+        .join(' · ');
+    }
   }
 }
 
@@ -2622,6 +2662,52 @@ function initApp() {
   if (window.__resources && window.__resources.planGF) {
     const _img = document.getElementById('planImg');
     if (_img) _img.src = window.__resources.planGF;
+  }
+  _appReady = true;
+  render();
+  // Pick up ?highlight=SF03,SF20A&order=J04 from Glass Triage "📍 Map" deep-link
+  if (typeof applyMapHighlightFromUrl === 'function') applyMapHighlightFromUrl();
+  // Subscribe (read-only) to Glass Triage pieces so the unit modal can show
+  // shipping status (📦 on-site / staged) next to each glass panel.
+  try {
+    if (typeof firebase !== 'undefined' && firebase.apps && firebase.apps.length) {
+      firebase.database().ref('triage/friday/pieces').on('value', snap => {
+        window._triageCache = snap.val() || {};
+      });
+    }
+  } catch (e) { console.warn('triage subscribe failed', e); }
+  if (state._mergeNote) {
+    setTimeout(() => toast(state._mergeNote + ' — see left margin / L2 tab'), 600);
+    delete state._mergeNote;
+  }
+}
+
+// Fetch the team's baseline snapshot before running initApp.
+// localStorage / Firebase still win when they're newer; this just supplies
+// the "fresh visitor" / "stale localStorage discarded" fallback.
+async function bootstrap() {
+  try {
+    const res = await fetch('state.json', { cache: 'no-cache' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.units && data.log) {
+        window._embeddedStateJson = data;
+      }
+    } else {
+      console.warn('state.json fetch returned', res.status);
+    }
+  } catch (e) {
+    console.warn('state.json fetch failed — falling back to inline embedded_state', e);
+  }
+  initApp();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootstrap);
+} else {
+  bootstrap();
+}
+ces.planGF;
   }
   _appReady = true;
   render();
