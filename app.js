@@ -2327,14 +2327,10 @@ function toggleGlassBatchMode() {
 function getPanelOffsets(n, zone) {
   // Fan glass markers OUTWARD from the SF marker along the wall's outward normal.
   // Direction by unit zone: North=up, South=down, East=right, West=left.
-  // Step is pixel-aware: scales up on small (mobile) viewports so markers don't
-  // stack and hide the labels underneath.
-  const wrap = document.getElementById('planWrap');
-  const W = (wrap && wrap.clientWidth)  || 800;
-  const H = (wrap && wrap.clientHeight) || 600;
-  const MARKER_PX = 28;       // approx glass-marker outer size + small gap
-  const stepX = Math.max(2.4, (MARKER_PX / W) * 100);
-  const stepY = Math.max(2.4, (MARKER_PX / H) * 100);
+  // Mobile: viewport < 700px gets a slightly bigger step so labels don't overlap.
+  //         Capped low enough that even SFs with many panels stay on the plan.
+  const isMobile = (typeof window !== 'undefined' && window.innerWidth < 700);
+  const step = isMobile ? 3.4 : 2.4;
   let ax = 0, ay = -1; // default to North
   switch ((zone || 'North').toLowerCase()) {
     case 'north': ax =  0; ay = -1; break;
@@ -2343,8 +2339,8 @@ function getPanelOffsets(n, zone) {
     case 'west':  ax = -1; ay =  0; break;
   }
   return Array.from({length: n}, (_, i) => ({
-    dx: ax * (i + 1) * stepX,
-    dy: ay * (i + 1) * stepY
+    dx: ax * (i + 1) * step,
+    dy: ay * (i + 1) * step
   }));
 }
 
