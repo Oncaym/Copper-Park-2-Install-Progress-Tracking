@@ -44,7 +44,7 @@ function autoLogUnitChanges(u, old) {
     if (oldSt === newSt && oldDt === newDt) return;
     if (!newSt || newSt === 'pending') return;
     const pDate = newDt || u.date || new Date().toISOString().slice(0,10);
-    const cat   = newSt === 'issue' ? 'issue' : 'framing';
+    const cat   = newSt === 'issue' ? 'issue' : 'glass';
     upsertGlassLog(pDate, cat, u.id, np.panel || '', newSt);
   });
 }
@@ -147,6 +147,15 @@ function removeUnitFromUnitLogs(unitId) {
 /* Glass-batch entries — separate kind='glass' so unit-modal sweeps leave them alone.
    Display id is "unitId panel" (e.g. "12A 1F-3"); safeKey() sanitizes the dot. */
 function upsertGlassLog(date, category, unitId, panel, status) {
+  // Migration: re-tag legacy kind='glass' entries that were stored as category 'framing'
+  // (before glass became its own daily-log category). Idempotent.
+  state.log.forEach(function(l) {
+    if (l && l.auto === true && l.kind === 'glass' && Array.isArray(l.categories) &&
+        l.categories.length === 1 && l.categories[0] === 'framing') {
+      l.categories = ['glass'];
+      l.category   = 'glass';
+    }
+  });
   let entry = state.log.find(l =>
     l && l.auto === true && l.kind === 'glass' && l.date === date &&
     Array.isArray(l.categories) && l.categories.length === 1 && l.categories[0] === category

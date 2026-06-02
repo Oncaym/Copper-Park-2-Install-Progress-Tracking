@@ -2457,7 +2457,7 @@ function applyGlassBatch() {
   // Log date follows the panel's date when the batch sets one, otherwise today.
   if (touched.length) {
     const logDate = date || new Date().toISOString().slice(0,10);
-    const cat     = status === 'issue' ? 'issue' : 'framing';
+    const cat     = status === 'issue' ? 'issue' : 'glass';
     touched.forEach(function(t) {
       upsertGlassLog(logDate, cat, t.unitId, t.panel, status);
     });
