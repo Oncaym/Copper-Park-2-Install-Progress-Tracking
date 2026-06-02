@@ -2319,8 +2319,14 @@ function toggleGlassBatchMode() {
 function getPanelOffsets(n, zone) {
   // Fan glass markers OUTWARD from the SF marker along the wall's outward normal.
   // Direction by unit zone: North=up, South=down, East=right, West=left.
-  // First panel sits adjacent to SF marker (no overlap with the SF dot).
-  const step = 2.4;
+  // Step is pixel-aware: scales up on small (mobile) viewports so markers don't
+  // stack and hide the labels underneath.
+  const wrap = document.getElementById('planWrap');
+  const W = (wrap && wrap.clientWidth)  || 800;
+  const H = (wrap && wrap.clientHeight) || 600;
+  const MARKER_PX = 28;       // approx glass-marker outer size + small gap
+  const stepX = Math.max(2.4, (MARKER_PX / W) * 100);
+  const stepY = Math.max(2.4, (MARKER_PX / H) * 100);
   let ax = 0, ay = -1; // default to North
   switch ((zone || 'North').toLowerCase()) {
     case 'north': ax =  0; ay = -1; break;
@@ -2329,8 +2335,8 @@ function getPanelOffsets(n, zone) {
     case 'west':  ax = -1; ay =  0; break;
   }
   return Array.from({length: n}, (_, i) => ({
-    dx: ax * (i + 1) * step,
-    dy: ay * (i + 1) * step
+    dx: ax * (i + 1) * stepX,
+    dy: ay * (i + 1) * stepY
   }));
 }
 
@@ -2369,6 +2375,7 @@ function renderGlassMarkers() {
         if (dragState && dragState.moved) { dragState = null; return; }
         if (mapGlassBatchMode) { toggleGlassPanelSelect(el, u.key, pi); return; }
         openUnit(u.key);
+        if (typeof switchModalTab === 'function') switchModalTab('glass');
       };
       if (editMode) {
         el.style.cursor = 'grab';
