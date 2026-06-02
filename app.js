@@ -35,6 +35,7 @@ const I18N = {
     tool_hint: "Click marker to edit status",
     sec_trend: "Daily Installation Trend",
     cat_framing: "Framing",
+    cat_glass: "Glass",
     cat_louver: "Louver",
     cat_caulking: "Caulking",
     sec_status_breakdown: "Status Breakdown",
@@ -81,6 +82,7 @@ const I18N = {
     form_date_only: "Date",
     form_category: "Category",
     cat_framing_long: "Framing Installation",
+    cat_glass_long: "Glass Installation",
     cat_louver_long: "Louver Installation",
     cat_issue_note: "Issue / Note",
     form_units_desc: "Units / Description",
@@ -177,6 +179,7 @@ const I18N = {
     tool_hint: "点击标记可编辑状态",
     sec_trend: "每日安装趋势",
     cat_framing: "框架",
+    cat_glass: "玻璃",
     cat_louver: "百叶",
     cat_caulking: "打胶",
     sec_status_breakdown: "状态分布",
@@ -223,6 +226,7 @@ const I18N = {
     form_date_only: "日期",
     form_category: "类别",
     cat_framing_long: "框架安装",
+    cat_glass_long: "玻璃安装",
     cat_louver_long: "百叶安装",
     cat_issue_note: "问题 / 备注",
     form_units_desc: "单元 / 描述",
@@ -319,6 +323,7 @@ const I18N = {
     tool_hint: "마커 클릭하여 상태 편집",
     sec_trend: "일일 설치 추이",
     cat_framing: "프레임",
+    cat_glass: "유리",
     cat_louver: "루버",
     cat_caulking: "코킹",
     sec_status_breakdown: "상태 분포",
@@ -365,6 +370,7 @@ const I18N = {
     form_date_only: "날짜",
     form_category: "카테고리",
     cat_framing_long: "프레임 설치",
+    cat_glass_long: "유리 설치",
     cat_louver_long: "루버 설치",
     cat_issue_note: "문제 / 메모",
     form_units_desc: "유닛 / 설명",
@@ -1455,7 +1461,7 @@ function renderTimeline() {
   });
   const dates = [...groups.keys()].sort((a, b) => b.localeCompare(a));
   // Dot color priority: issue > framing > louver > caulking
-  const dotPriority = ['issue', 'framing', 'louver', 'caulking'];
+  const dotPriority = ['issue', 'framing', 'glass', 'louver', 'caulking'];
   const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
   tl.innerHTML = dates.map(date => {
@@ -1506,6 +1512,7 @@ function renderCharts() {
   // Trend chart - by date, count by category
   const dates = [...new Set(state.log.map(l=>l.date))].sort();
   const framing = dates.map(d => countCategoryOnDate(d, 'framing'));
+  const glass   = dates.map(d => countCategoryOnDate(d, 'glass'));
   const louver  = dates.map(d => countCategoryOnDate(d, 'louver'));
   const caulk   = dates.map(d => countCategoryOnDate(d, 'caulking'));
 
@@ -1516,6 +1523,7 @@ function renderCharts() {
       labels: dates.map(d => formatDate(d)),
       datasets: [
         { label:'Framing',  data: framing, backgroundColor: '#3fb950' },
+        { label:'Glass',    data: glass,   backgroundColor: '#4493f8' },
         { label:'Louver',   data: louver,  backgroundColor: '#bc8cff' },
         { label:'Caulking', data: caulk,   backgroundColor: '#ff8c42' },
       ]
@@ -1940,7 +1948,7 @@ function formatStatus(s) {
   return { installed:t('status_installed'), 'in-progress':t('status_in_progress'), issue:t('status_issue'), pending:t('status_pending') }[s] || s;
 }
 function categoryLabel(c) {
-  return { framing:'Framing', louver:'Louver', caulking:'Caulking', issue:'Issue' }[c] || c;
+  return { framing:'Framing', glass:'Glass', louver:'Louver', caulking:'Caulking', issue:'Issue' }[c] || c;
 }
 
 /* -------- Modals -------- */

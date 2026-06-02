@@ -706,6 +706,7 @@
   .cat-chip input { display: none; }
   .cat-chip:hover { color: var(--text); border-color: #555; }
   .cat-chip.framing:has(input:checked)  { color: var(--green);  border-color: var(--green);  background: rgba(63,185,80,0.12); }
+  .cat-chip.glass:has(input:checked)    { color: var(--accent); border-color: var(--accent); background: rgba(68,147,248,0.12); }
   .cat-chip.louver:has(input:checked)   { color: var(--purple); border-color: var(--purple); background: rgba(188,140,255,0.12); }
   .cat-chip.caulking:has(input:checked) { color: var(--orange); border-color: var(--orange); background: rgba(255,140,66,0.12); }
   .cat-chip.issue:has(input:checked)    { color: var(--red);    border-color: var(--red);    background: rgba(248,81,73,0.12); }
@@ -2590,6 +2591,7 @@
       <label data-i18n="form_category" data-om-id="17a02737:1337">Category</label>
       <div class="cat-chip-group" id="l-categories" data-om-id="17a02737:1338">
         <label class="cat-chip framing" data-om-id="17a02737:1339"><input type="checkbox" value="framing" data-om-id="17a02737:1340"><span data-i18n="cat_framing_long" data-om-id="17a02737:1341">Framing Installation</span></label>
+        <label class="cat-chip glass"><input type="checkbox" value="glass"><span data-i18n="cat_glass_long">Glass Installation</span></label>
         <label class="cat-chip louver" data-om-id="17a02737:1342"><input type="checkbox" value="louver" data-om-id="17a02737:1343"><span data-i18n="cat_louver_long" data-om-id="17a02737:1344">Louver Installation</span></label>
         <label class="cat-chip caulking" data-om-id="17a02737:1345"><input type="checkbox" value="caulking" data-om-id="17a02737:1346"><span data-i18n="cat_caulking" data-om-id="17a02737:1347">Caulking</span></label>
         <label class="cat-chip issue" data-om-id="17a02737:1348"><input type="checkbox" value="issue" data-om-id="17a02737:1349"><span data-i18n="cat_issue_note" data-om-id="17a02737:1350">Issue / Note</span></label>
@@ -2667,6 +2669,8 @@
 
 <div class="toast" id="toast" data-i18n="toast_saved" data-om-id="17a02737:1358">Saved ✓</div>
 
+<script src="app-log.js"></script>
+<script src="app-backup.js"></script>
 <script src="app.js"></script>
 
 <!-- Embedded state — populated by Save to HTML. Do not edit by hand. -->
