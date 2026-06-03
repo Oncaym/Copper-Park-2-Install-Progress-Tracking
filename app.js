@@ -2073,19 +2073,25 @@ function _photoFileToDataUrl(file, maxEdge = 1280, quality = 0.72) {
   });
 }
 
+let _logPhotosBusy = 0;   // in-flight photo compression count
 async function handleLogPhotoFiles(fileList) {
   if (!fileList || !fileList.length) return;
+  _logPhotosBusy++;
   const status = document.getElementById('l-photo-status');
   if (status) status.textContent = t('photo_processing');
-  for (const f of Array.from(fileList)) {
-    if (!f.type || !f.type.startsWith('image/')) continue;
-    try {
-      const dataUrl = await _photoFileToDataUrl(f);
-      _logPhotosDraft.push(dataUrl);
-    } catch(e) { /* skip bad image */ }
+  try {
+    for (const f of Array.from(fileList)) {
+      if (!f.type || !f.type.startsWith('image/')) continue;
+      try {
+        const dataUrl = await _photoFileToDataUrl(f);
+        _logPhotosDraft.push(dataUrl);
+        renderLogPhotoThumbs();   // show progress after each photo
+      } catch(e) { console.warn('[log photo] compression failed', e); }
+    }
+  } finally {
+    _logPhotosBusy--;
+    if (status && _logPhotosBusy === 0) status.textContent = '';
   }
-  if (status) status.textContent = '';
-  renderLogPhotoThumbs();
 }
 
 function removeLogPhoto(idx) {
@@ -2147,8 +2153,13 @@ function deleteLogFromModal() {
 function closeLogModal() {
   document.getElementById('logModal').classList.remove('show');
   editingLogIdx = null;
+  // pending compressions can still write to draft, but next openAddLog/editLog clears it
 }
 function saveLog() {
+  if (_logPhotosBusy > 0) {
+    toast('照片处理中，请稍等 / Photos still processing, please wait');
+    return;
+  }
   const cats = getLogCategoryCheckboxes();
   if (!cats.length) { toast(t('alert_pick_category')); return; }
   const entry = {
