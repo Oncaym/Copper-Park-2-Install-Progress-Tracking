@@ -579,6 +579,19 @@ const SEED_UNITS = [
   { key:'SF12A__5', id:'SF12A.4', type:'Storefront', zone:'East', level:'GF', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
   { key:'SF15E', id:'SF15E', type:'Storefront', zone:'East', level:'GF', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
   { key:'SF15N', id:'SF15N', type:'Storefront', zone:'East', level:'GF', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
+
+  // ---- Level 2 units (2nd FL Partial Plan + 13th FL Terrace Entry Doors) ----
+  { key:'SF60',    id:'SF60',    type:'Storefront', zone:'South', level:'L2', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
+  { key:'SF61',    id:'SF61',    type:'Storefront', zone:'South', level:'L2', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
+  { key:'SF62__1', id:'SF62',    type:'Storefront', zone:'North', level:'L2', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
+  { key:'SF62__2', id:'SF62.1',  type:'Storefront', zone:'North', level:'L2', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
+  { key:'SF63__1', id:'SF63',    type:'Storefront', zone:'North', level:'L2', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
+  { key:'SF63__2', id:'SF63.1',  type:'Storefront', zone:'North', level:'L2', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
+  { key:'SF70__1', id:'SF70',    type:'Storefront', zone:'North', level:'L2', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
+  { key:'SF70__2', id:'SF70.1',  type:'Storefront', zone:'North', level:'L2', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
+  { key:'SF70__3', id:'SF70.2',  type:'Storefront', zone:'North', level:'L2', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
+  { key:'SF71__1', id:'SF71',    type:'Storefront', zone:'North', level:'L2', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
+  { key:'SF71__2', id:'SF71.1',  type:'Storefront', zone:'North', level:'L2', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
 ];
 
 // Daily log from PDF notes (May 2026)
@@ -761,6 +774,22 @@ function loadState() {
   }
 
   if (s) {
+      mergeSeedUnits(s);
+      return s;
+  }
+  return {
+    units: structuredClone(SEED_UNITS),
+    log: structuredClone(SEED_LOG),
+    positions: structuredClone(DEFAULT_POSITIONS),
+    glassPanelOffsets: {},
+    updatedAt: new Date().toISOString()
+  };
+}
+
+/* Merge any new SEED_UNITS into an existing state object (in-place).
+   Called from loadState() and _cloudApplyRemoteState() so Firebase sync
+   never silently drops newly-added seed units (e.g. Level 2 markers). */
+function mergeSeedUnits(s) {
       // ensure positions exist (migration for older state)
       if (!s.positions) s.positions = structuredClone(DEFAULT_POSITIONS);
       if (!s.glassPanelOffsets) s.glassPanelOffsets = {};
@@ -799,15 +828,6 @@ function loadState() {
       if (added > 0) {
         s._mergeNote = `+${added} new units from PDF`;
       }
-      return s;
-  }
-  return {
-    units: structuredClone(SEED_UNITS),
-    log: structuredClone(SEED_LOG),
-    positions: structuredClone(DEFAULT_POSITIONS),
-    glassPanelOffsets: {},
-    updatedAt: new Date().toISOString()
-  };
 }
 
 function saveState(showToast = true, description) {
@@ -835,6 +855,9 @@ window._cloudApplyRemoteState = function(remoteState, meta) {
   if (!remoteState || !remoteState.units) return;
   if (window._cloudSetSuppress) window._cloudSetSuppress(true);
   try {
+    // Merge any new seed units (e.g. newly-added L2 units) that the stored
+    // remote state may not have yet, so Firebase sync never drops them.
+    mergeSeedUnits(remoteState);
     state = remoteState;
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
     if (typeof render === 'function') render();
@@ -1328,7 +1351,7 @@ document.getElementById('planImg').addEventListener('click', e => {
           newKey = trimmedId + '__' + n;
           while (state.units.some(u => u.key === newKey)) { n++; newKey = trimmedId + '__' + n; }
         }
-        state.units.push({ key: newKey, id: trimmedId, type:'Storefront', zone:'—', level:'GF', status:'pending', date:'', louver:'no', note:'' });
+        state.units.push({ key: newKey, id: trimmedId, type:'Storefront', zone:'—', level:currentLevel, status:'pending', date:'', louver:'no', note:'' });
         state.positions[newKey] = { x, y };
       }
       togglePlaceMode();
@@ -1359,6 +1382,8 @@ function setLevel(lvl) {
   currentLevel = lvl;
   document.querySelectorAll('.level-btn').forEach(b => b.classList.toggle('active', b.dataset.level === lvl));
   img.src = lvl === 'L2' ? PLAN_L2_SRC : PLAN_GF_SRC;
+  // L2 SVG has white background — invert to match GF dark theme (black bg, white lines)
+  img.style.filter = lvl === 'L2' ? 'invert(1)' : '';
   renderPlan();
 }
 
@@ -2004,6 +2029,16 @@ function switchModalTab(tab) {
 function closeModal() {
   document.getElementById('unitModal').classList.remove('show');
   editingUnitId = null;
+}
+function deleteUnit() {
+  if (!editingUnitId) return;
+  const u = state.units.find(x => x.key === editingUnitId);
+  if (!u) return;
+  if (!confirm(`Delete marker "${u.id}"? This cannot be undone.`)) return;
+  state.units = state.units.filter(x => x.key !== editingUnitId);
+  delete state.positions[editingUnitId];
+  closeModal();
+  saveState();
 }
 function saveUnit() {
   if (!editingUnitId) return;
