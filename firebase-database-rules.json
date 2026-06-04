@@ -31,6 +31,21 @@
       }
     },
 
+    // ---------- 仓库 (Warehouse — Stage 1: Receive only) ----------
+    // 读：任何登录用户
+    // 写：仅 editor；item 一旦写入不可改（一次性，类似 history）
+    //     ⇒ Stage 2 上线"出货"时需要放宽这条；会另开 warehouse/shipments 子树存出货事件
+    "warehouse": {
+      ".read": "auth != null",
+      "items": {
+        ".indexOn": ["receivedAt"],
+        "$itemId": {
+          ".write": "auth != null && !data.exists() && root.child('allowlist').child(auth.token.email.replace('.', ',')).exists()",
+          ".validate": "newData.hasChildren(['where','receivedAt','receivedBy','status']) && newData.child('receivedBy').val() == auth.token.email && newData.child('status').val() == 'in_stock'"
+        }
+      }
+    },
+
     // ---------- 编辑历史 ----------
     // 读：任何登录用户
     // 写（追加）：仅 editor，且 user 字段必须等于自己的邮箱
