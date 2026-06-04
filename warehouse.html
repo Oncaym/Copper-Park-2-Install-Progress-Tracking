@@ -121,22 +121,30 @@
     border-radius: 10px;
     padding: 24px 12px;
     color: var(--text-dim);
-    font-size: 15px; font-weight: 600;
+    font-size: 14px; font-weight: 600;
     cursor: pointer;
     min-height: 100px;
+    text-align: center;
   }
   .photo-btn:active { transform: scale(0.99); }
-  .photo-btn .icon { font-size: 28px; }
-  .photo-btn.has-photo {
-    border-style: solid; border-color: var(--green); padding: 0; overflow: hidden;
+  .photo-btn .icon { font-size: 26px; }
+  /* preview replaces the photo-row once a photo is chosen */
+  .photo-preview {
+    position: relative;
+    border-radius: 10px;
+    border: 2px solid var(--green);
+    overflow: hidden;
+    margin-bottom: 14px;
+    cursor: pointer;
   }
-  .photo-btn.has-photo img {
-    width: 100%; height: 160px; object-fit: cover; display: block;
+  .photo-preview img {
+    width: 100%; height: 180px; object-fit: cover; display: block;
   }
-  .photo-btn .retake {
-    background: rgba(0,0,0,0.6); color: #fff; font-size: 12px;
-    padding: 4px 10px; border-radius: 6px; position: absolute;
-    margin-top: -32px;
+  .photo-preview .retake-pill {
+    position: absolute; right: 10px; bottom: 10px;
+    background: rgba(0,0,0,0.65); color: #fff;
+    font-size: 12px; font-weight: 600;
+    padding: 5px 10px; border-radius: 999px;
   }
 
   /* hide native file inputs */
@@ -305,14 +313,24 @@
   <section class="card" id="receiveCard">
     <h2 data-i18n="form_title">New arrival</h2>
 
-    <!-- Photo capture (hidden inputs trigger camera or album) -->
-    <div class="photo-row">
-      <div class="photo-btn" id="photoBtn" onclick="onPhotoBtnClick()">
+    <!-- Photo capture (two entry points: camera vs album) -->
+    <div class="photo-row" id="photoRow">
+      <div class="photo-btn" id="photoBtnCamera" onclick="document.getElementById('fileCamera').click()">
         <span class="icon">📷</span>
         <span data-i18n="take_photo">Take photo</span>
       </div>
+      <div class="photo-btn" id="photoBtnAlbum" onclick="document.getElementById('fileAlbum').click()">
+        <span class="icon">🖼</span>
+        <span data-i18n="from_album">From album</span>
+      </div>
+    </div>
+    <!-- Once a photo is selected, photoRow above is hidden and this preview is shown instead -->
+    <div class="photo-preview" id="photoPreview" style="display:none" onclick="resetPhoto()">
+      <img id="photoPreviewImg" alt="">
+      <span class="retake-pill" data-i18n="retake">Retake</span>
     </div>
     <input type="file" class="hidden-file" id="fileCamera" accept="image/*" capture="environment" onchange="onPhotoSelected(event)">
+    <input type="file" class="hidden-file" id="fileAlbum"  accept="image/*"                       onchange="onPhotoSelected(event)">
 
     <div class="field">
       <label data-i18n="order_no">Order #</label>
@@ -378,6 +396,7 @@ const I18N = {
     gate_msg: "View only — sign in at the main app first to record items.",
     form_title: "New arrival",
     take_photo: "Take photo",
+    from_album: "From album",
     retake: "Retake",
     order_no: "Order #",
     type: "Type",
@@ -413,7 +432,8 @@ const I18N = {
     gate_msg: "只读模式 — 请先在主应用登录后再录入。",
     form_title: "新到货",
     take_photo: "拍照",
-    retake: "重拍",
+    from_album: "从相册",
+    retake: "重选",
     order_no: "订单号",
     type: "类型",
     type_aluminum: "铝材",
@@ -448,7 +468,8 @@ const I18N = {
     gate_msg: "읽기 전용 — 메인 앱에서 먼저 로그인하세요.",
     form_title: "신규 입고",
     take_photo: "사진 찍기",
-    retake: "다시 찍기",
+    from_album: "앨범에서",
+    retake: "다시 선택",
     order_no: "주문번호",
     type: "종류",
     type_aluminum: "알루미늄",
@@ -569,11 +590,8 @@ fbAuth.onAuthStateChanged(user => {
 });
 
 // ---------- Photo capture + compression ----------
-let pendingPhotoBlob = null; // JPEG blob ready to upload
-
-function onPhotoBtnClick() {
-  document.getElementById("fileCamera").click();
-}
+let pendingPhotoBlob   = null; // JPEG blob ready to upload
+let pendingPreviewUrl  = null; // ObjectURL to revoke on reset
 
 async function onPhotoSelected(ev) {
   const file = ev.target.files && ev.target.files[0];
@@ -582,14 +600,24 @@ async function onPhotoSelected(ev) {
   try {
     const blob = await compressImage(file, 1600, 0.85);
     pendingPhotoBlob = blob;
-    const url = URL.createObjectURL(blob);
-    const btn = document.getElementById("photoBtn");
-    btn.classList.add("has-photo");
-    btn.innerHTML = `<img src="${url}" alt=""><span class="retake">${escapeHtml(t("retake"))}</span>`;
+    if (pendingPreviewUrl) URL.revokeObjectURL(pendingPreviewUrl);
+    pendingPreviewUrl = URL.createObjectURL(blob);
+    document.getElementById("photoPreviewImg").src = pendingPreviewUrl;
+    document.getElementById("photoRow").style.display = "none";
+    document.getElementById("photoPreview").style.display = "block";
   } catch (err) {
     console.error("[warehouse] image compress failed:", err);
     toast(t("err_upload"), "err");
   }
+}
+
+/* Tap preview to discard the photo and reveal the camera/album buttons again. */
+function resetPhoto() {
+  pendingPhotoBlob = null;
+  if (pendingPreviewUrl) { URL.revokeObjectURL(pendingPreviewUrl); pendingPreviewUrl = null; }
+  document.getElementById("photoPreviewImg").src = "";
+  document.getElementById("photoPreview").style.display = "none";
+  document.getElementById("photoRow").style.display = "flex";
 }
 
 /* Resize image so the long edge is at most maxDim px, then export as JPEG. */
@@ -654,10 +682,7 @@ async function onSave() {
     });
 
     // 4) Reset form
-    pendingPhotoBlob = null;
-    const photoBtn = document.getElementById("photoBtn");
-    photoBtn.classList.remove("has-photo");
-    photoBtn.innerHTML = `<span class="icon">📷</span><span data-i18n="take_photo">${escapeHtml(t("take_photo"))}</span>`;
+    resetPhoto();
     document.getElementById("orderNo").value = "";
     document.getElementById("whereTxt").value = "";
     document.getElementById("typeCustom").value = "";
