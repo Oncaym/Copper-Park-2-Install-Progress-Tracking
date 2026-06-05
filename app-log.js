@@ -86,7 +86,7 @@ function rebuildAutoUnitsContent(entry) {
 // unitKey: the unit's unique .key field (e.g. 'SF20A__2'). Used as the storage
 // key so that multiple units with the same display unitId each get their own entry.
 function upsertUnitLog(date, category, unitId, unitKey) {
-  if (!state.log) state.log = [];
+  if (!Array.isArray(state.log)) state.log = Object.values(state.log || {});
   let entry = state.log.find(l =>
     isUnitAutoEntry(l) && l.date === date &&
     l.categories.length === 1 && l.categories[0] === category
@@ -121,7 +121,7 @@ function upsertUnitLog(date, category, unitId, unitKey) {
 }
 
 function removeUnitFromUnitLogs(unitId, unitKey) {
-  if (!state.log) state.log = [];
+  if (!Array.isArray(state.log)) state.log = Object.values(state.log || {});
   const sk = safeKey(unitId);
   const kk = unitKey ? safeKey(unitKey) : null;
   for (let i = state.log.length - 1; i >= 0; i--) {
@@ -155,7 +155,7 @@ function removeUnitFromUnitLogs(unitId, unitKey) {
 /* Glass-batch entries — separate kind='glass' so unit-modal sweeps leave them alone.
    Display id is "unitId panel" (e.g. "12A 1F-3"); safeKey() sanitizes the dot. */
 function upsertGlassLog(date, category, unitId, panel, status, unitKey) {
-  if (!state.log) state.log = [];
+  if (!Array.isArray(state.log)) state.log = Object.values(state.log || {});
   // Migration: re-tag legacy kind='glass' entries that were stored as category 'framing'
   // (before glass became its own daily-log category). Idempotent.
   state.log.forEach(function(l) {
