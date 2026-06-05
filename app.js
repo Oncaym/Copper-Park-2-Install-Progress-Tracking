@@ -774,6 +774,8 @@ function loadState() {
   }
 
   if (s) {
+      if (!s.log) s.log = [];
+      if (!s.positions) s.positions = {};
       mergeSeedUnits(s);
       return s;
   }
@@ -857,6 +859,10 @@ window._cloudApplyRemoteState = function(remoteState, meta) {
   try {
     // Merge any new seed units (e.g. newly-added L2 units) that the stored
     // remote state may not have yet, so Firebase sync never drops them.
+    // Ensure core arrays exist (Firebase may strip large fields like log)
+    if (!remoteState.log) remoteState.log = [];
+    if (!remoteState.positions) remoteState.positions = {};
+
     mergeSeedUnits(remoteState);
 
     // Preserve photos from local state — base64 images often exceed Firebase node

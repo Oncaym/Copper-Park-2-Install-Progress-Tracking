@@ -120,6 +120,7 @@ function upsertUnitLog(date, category, unitId, unitKey) {
 }
 
 function removeUnitFromUnitLogs(unitId, unitKey) {
+  if (!state.log) state.log = [];
   const sk = safeKey(unitId);
   const kk = unitKey ? safeKey(unitKey) : null;
   for (let i = state.log.length - 1; i >= 0; i--) {
