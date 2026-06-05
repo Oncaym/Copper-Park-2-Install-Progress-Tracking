@@ -838,7 +838,26 @@ function saveState(showToast = true, description) {
   const isRemoteApply = window._cloudIsSuppressed && window._cloudIsSuppressed();
 
   state.updatedAt = new Date().toISOString();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  // localStorage can overflow (~5MB) when legacy log entries still carry
+  // base64 photos. NEVER let that abort the save — cloud push below is the
+  // real persistence. Fallback: cache a slim copy without embedded photos.
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (e) {
+    try {
+      const slim = JSON.parse(JSON.stringify(state));
+      (slim.log || []).forEach(l => {
+        if (l && Array.isArray(l.photos)) {
+          l.photos = l.photos.filter(p => !String(p).startsWith('data:'));
+          if (!l.photos.length) delete l.photos;
+        }
+      });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(slim));
+      console.warn('CP2: state too big for localStorage — cached without embedded photos');
+    } catch (e2) {
+      console.warn('CP2: localStorage cache skipped (quota) — cloud sync still active', e2);
+    }
+  }
   // mark "unsaved-to-file" so the Save to HTML button can pulse
   markDirty();
   render();
@@ -885,7 +904,18 @@ window._cloudApplyRemoteState = function(remoteState, meta) {
     }
 
     state = remoteState;
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {
+      try {
+        const slim = JSON.parse(JSON.stringify(state));
+        (slim.log || []).forEach(l => {
+          if (l && Array.isArray(l.photos)) {
+            l.photos = l.photos.filter(p => !String(p).startsWith('data:'));
+            if (!l.photos.length) delete l.photos;
+          }
+        });
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(slim));
+      } catch(e2) {}
+    }
     if (typeof render === 'function') render();
     if (typeof toast === 'function' && meta && meta.by) {
       const who = String(meta.by).split('@')[0];
@@ -2750,6 +2780,83 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
   });
 });
 
+/* ======================================================
+   ONE-TIME PHOTO MIGRATION — legacy log entries store photos as base64
+   data-URLs, which blow up state size (localStorage quota + slow Firebase
+   pushes). Once signed in, upload each data-URL photo to Firebase Storage
+   (cp2-photos/) and replace it with the download URL. Idempotent: after a
+   successful run no data: photos remain, so it never runs again. Failed
+   uploads keep their data-URL and retry on next load.
+   ====================================================== */
+let _photoMigrationRan = false;   // once per session
+
+function _dataUrlToBlob(dataUrl) {
+  const m = String(dataUrl).match(/^data:([^;,]+)?(;base64)?,(.*)$/s);
+  if (!m) return null;
+  const mime = m[1] || 'image/jpeg';
+  if (!mime.startsWith('image/')) return null;   // Storage rules require image/*
+  try {
+    const bin = m[2] ? atob(m[3]) : decodeURIComponent(m[3]);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return new Blob([arr], { type: mime });
+  } catch (e) { return null; }
+}
+
+async function migrateLegacyPhotos() {
+  if (_photoMigrationRan) return;
+  if (!state || !Array.isArray(state.log)) return;
+  if (typeof firebase === 'undefined' || !firebase.apps || !firebase.apps.length) return;
+  if (!firebase.auth().currentUser) return;       // need auth for Storage rules
+
+  // Collect all data-URL photos
+  const jobs = [];
+  state.log.forEach((l, li) => {
+    if (l && Array.isArray(l.photos)) {
+      l.photos.forEach((p, pi) => {
+        if (String(p).startsWith('data:')) jobs.push({ li, pi });
+      });
+    }
+  });
+  if (!jobs.length) return;
+  _photoMigrationRan = true;
+
+  toast(`正在把 ${jobs.length} 张老照片迁移到云存储… / Migrating ${jobs.length} legacy photos`);
+  let ok = 0, fail = 0;
+  for (const j of jobs) {
+    const entry = state.log[j.li];
+    if (!entry || !entry.photos) continue;
+    const blob = _dataUrlToBlob(entry.photos[j.pi]);
+    if (!blob) { fail++; continue; }
+    if (blob.size >= 10 * 1024 * 1024) { fail++; continue; }  // Storage rule limit
+    try {
+      const url = await _uploadPhotoToStorage(blob, `migrated_${entry.date || 'log'}_${j.li}_${j.pi}.jpg`);
+      entry.photos[j.pi] = url;
+      ok++;
+    } catch (e) {
+      console.warn('CP2 photo migration: upload failed, keeping data-URL for retry', e);
+      fail++;
+    }
+  }
+  if (ok > 0) {
+    saveState(false, `photo migration: ${ok} moved to Storage`);
+    toast(`✓ 照片迁移完成：${ok} 张已上云${fail ? `，${fail} 张失败（下次加载重试）` : ''}`);
+  } else if (fail > 0) {
+    _photoMigrationRan = false;   // nothing succeeded — allow retry
+    console.warn(`CP2 photo migration: all ${fail} uploads failed`);
+  }
+}
+
+// Run once signed in (covers both fresh sign-in and already-signed-in reload).
+function _armPhotoMigration() {
+  try {
+    if (typeof firebase === 'undefined' || !firebase.apps || !firebase.apps.length) return;
+    firebase.auth().onAuthStateChanged(u => {
+      if (u) setTimeout(migrateLegacyPhotos, 2500);  // let initial cloud sync settle first
+    });
+  } catch (e) { console.warn('photo migration arm failed', e); }
+}
+
 /* boot */
 function initApp() {
   // ---- CLOUD SYNC: kick off Firebase Auth + Realtime DB sync ----
@@ -2764,6 +2871,8 @@ function initApp() {
   // Expose render/toast on window so cloud-sync.js can call them
   window.render = render;
   window.toast  = toast;
+
+  _armPhotoMigration();
 
   // Load state NOW that the entire <body> (including __embedded_state) is parsed.
   if (!state) state = loadState();
