@@ -1246,6 +1246,8 @@ function setupPlanZoomPan() {
     }
     lastTap = now;
   });
+  // Apply initial scale (MIN_ZOOM = 0.9) so the plan starts with a black border
+  applyPlanTransform();
 }
 
 let dragState = null;
