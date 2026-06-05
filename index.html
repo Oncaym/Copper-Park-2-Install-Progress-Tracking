@@ -392,6 +392,9 @@
   .plan-wrap.edit-mode .plan-marker:active { cursor: grabbing; }
   .plan-wrap.placing { cursor: crosshair; }
   .plan-wrap.placing .plan-marker { pointer-events: none; }
+  /* Box-select multi-drag */
+  #selBox { position:absolute; border:2px dashed #4af; background:rgba(68,170,255,0.12); pointer-events:none; display:none; z-index:20; border-radius:3px; }
+  .plan-marker.sel { outline:3px solid #4af; outline-offset:2px; box-shadow:0 0 8px rgba(68,170,255,0.6); }
 
   /* Highlighted / dimmed states driven by ?highlight=… query string */
   .plan-marker.dimmed {
@@ -1406,7 +1409,8 @@
         <button onclick="planZoom(1.4)" title="放大 / Zoom in" data-om-id="17a02737:91">+</button>
       </div>
       <div class="plan-wrap" id="planWrap" data-om-id="17a02737:92">
-      <img src="gf-plan.png" alt="Cooper Park 2 — Ground Floor Plan (from DXF)" data-i18n-alt="img_alt_gf" class="plan-img" id="planImg" data-plan-gf="" data-om-id="17a02737:93">
+      <div id="selBox"></div>
+      <img src="gf-plan.png" style="filter:invert(1)" alt="Cooper Park 2 — Ground Floor Plan (from DXF)" data-i18n-alt="img_alt_gf" class="plan-img" id="planImg" data-plan-gf="" data-om-id="17a02737:93">
       <div class="plan-tooltip" id="planTooltip" style="left: 1006.14px; top: 195.922px; display: none;" data-om-id="17a02737:94"><strong>SF01R</strong> · Storefront · North<br>
     <span style="color:var(--text-dim)">Installed · 5/13</span>
     <br><span style="color:var(--text-dim);font-size:10px">Framing 5/13 · Louver → 5/18</span></div>

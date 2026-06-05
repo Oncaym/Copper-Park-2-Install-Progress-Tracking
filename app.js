@@ -1250,12 +1250,35 @@ function setupPlanZoomPan() {
 
 let dragState = null;
 let placeMode = false;
+let selectedMarkers = new Set();  // keys of box-selected markers
+let selBoxState = null;           // active rubber-band selection
+
+function clearMarkerSelection() {
+  selectedMarkers.clear();
+  document.querySelectorAll('.plan-marker.sel').forEach(m => m.classList.remove('sel'));
+}
 
 function setupPlanInteractions() {
   setupPlanZoomPan();
   const wrap = document.getElementById('planWrap');
   const editMode = document.getElementById('editPositionMode').checked;
   wrap.classList.toggle('edit-mode', editMode);
+
+  // ----- Box-select: mousedown on background -----
+  wrap.onmousedown = (e) => {
+    if (!editMode || placeMode) return;
+    if (e.target.closest('.plan-marker')) return; // marker drag handled below
+    clearMarkerSelection();
+    const rect = wrap.getBoundingClientRect();
+    selBoxState = {
+      startPx: { x: e.clientX - rect.left, y: e.clientY - rect.top },
+      rect
+    };
+    const box = document.getElementById('selBox');
+    if (box) {
+      box.style.cssText = `display:block;left:${selBoxState.startPx.x}px;top:${selBoxState.startPx.y}px;width:0;height:0`;
+    }
+  };
 
   wrap.querySelectorAll('.plan-marker').forEach(m => {
     m.onpointerdown = (e) => {
@@ -1265,32 +1288,116 @@ function setupPlanInteractions() {
     m.onclick = (e) => {
       if (dragState && dragState.moved) { dragState = null; return; }
       if (placeMode) return;
+      // In edit mode, clicking an unselected marker clears the selection first
+      if (editMode && !selectedMarkers.has(m.dataset.unit)) clearMarkerSelection();
       openUnit(m.dataset.unit);
     };
     m.onmousedown = (e) => {
       if (!editMode || placeMode) return;
       e.preventDefault();
+      e.stopPropagation(); // don't start a box-select
       const rect = wrap.getBoundingClientRect();
-      dragState = { id: m.dataset.unit, el: m, rect, moved: false };
+      const startX = ((e.clientX - rect.left) / rect.width) * 100;
+      const startY = ((e.clientY - rect.top)  / rect.height) * 100;
+      const isMulti = selectedMarkers.has(m.dataset.unit) && selectedMarkers.size > 1;
+      dragState = { id: m.dataset.unit, el: m, rect, moved: false, startX, startY, isMulti };
+      if (isMulti) {
+        // Capture start positions + DOM elements of all selected markers
+        dragState.multiStart = {};
+        dragState.multiEls = {};
+        selectedMarkers.forEach(key => {
+          dragState.multiStart[key] = { ...(state.positions[key] || { x: 50, y: 50 }) };
+          const el = wrap.querySelector(`.plan-marker[data-unit="${CSS.escape(key)}"]`);
+          if (el) dragState.multiEls[key] = el;
+        });
+      }
       hidePlanTooltip();
     };
   });
 }
 
 document.addEventListener('mousemove', e => {
+  // ----- Box-select drawing -----
+  if (selBoxState) {
+    const box = document.getElementById('selBox');
+    if (box) {
+      const cx = e.clientX - selBoxState.rect.left;
+      const cy = e.clientY - selBoxState.rect.top;
+      const x = Math.min(cx, selBoxState.startPx.x);
+      const y = Math.min(cy, selBoxState.startPx.y);
+      const w = Math.abs(cx - selBoxState.startPx.x);
+      const h = Math.abs(cy - selBoxState.startPx.y);
+      box.style.left = x + 'px'; box.style.top = y + 'px';
+      box.style.width = w + 'px'; box.style.height = h + 'px';
+    }
+    return;
+  }
   if (!dragState) return;
   const { rect, el } = dragState;
   const x = ((e.clientX - rect.left) / rect.width) * 100;
   const y = ((e.clientY - rect.top)  / rect.height) * 100;
   if (x < 0 || x > 100 || y < 0 || y > 100) return;
-  el.style.left = x + '%';
-  el.style.top  = y + '%';
+  if (dragState.isMulti) {
+    // Move all selected markers by the same delta from drag start
+    const dx = x - dragState.startX;
+    const dy = y - dragState.startY;
+    Object.entries(dragState.multiStart).forEach(([key, sp]) => {
+      const nx = Math.max(0, Math.min(100, sp.x + dx));
+      const ny = Math.max(0, Math.min(100, sp.y + dy));
+      if (dragState.multiEls[key]) {
+        dragState.multiEls[key].style.left = nx + '%';
+        dragState.multiEls[key].style.top  = ny + '%';
+      }
+    });
+  } else {
+    el.style.left = x + '%';
+    el.style.top  = y + '%';
+  }
   dragState.x = x; dragState.y = y;
   dragState.moved = true;
 });
 document.addEventListener('mouseup', () => {
+  // ----- Finalize box selection -----
+  if (selBoxState) {
+    const box = document.getElementById('selBox');
+    if (box) {
+      const bw = parseFloat(box.style.width)  || 0;
+      const bh = parseFloat(box.style.height) || 0;
+      if (bw > 5 || bh > 5) {
+        const r = selBoxState.rect;
+        const bx1 = parseFloat(box.style.left)   / r.width  * 100;
+        const by1 = parseFloat(box.style.top)    / r.height * 100;
+        const bx2 = bx1 + bw / r.width  * 100;
+        const by2 = by1 + bh / r.height * 100;
+        document.querySelectorAll('#planWrap .plan-marker').forEach(m => {
+          const ml = parseFloat(m.style.left);
+          const mt = parseFloat(m.style.top);
+          if (ml >= bx1 && ml <= bx2 && mt >= by1 && mt <= by2) {
+            selectedMarkers.add(m.dataset.unit);
+            m.classList.add('sel');
+          }
+        });
+        if (selectedMarkers.size > 0) toast(`${selectedMarkers.size} markers selected — drag any to move all`);
+      }
+      box.style.display = 'none';
+    }
+    selBoxState = null;
+    return;
+  }
   if (dragState && dragState.moved && dragState.x != null) {
-    if (dragState.glassPanel) {
+    if (dragState.isMulti) {
+      // Save all selected marker positions
+      const dx = dragState.x - dragState.startX;
+      const dy = dragState.y - dragState.startY;
+      Object.entries(dragState.multiStart).forEach(([key, sp]) => {
+        state.positions[key] = {
+          x: Math.max(0, Math.min(100, sp.x + dx)),
+          y: Math.max(0, Math.min(100, sp.y + dy))
+        };
+      });
+      saveState(false);
+      toast(`${selectedMarkers.size} markers ` + t('msg_pos_saved'));
+    } else if (dragState.glassPanel) {
       // Glass panel: store offset relative to SF marker so it moves with the SF
       const sfPos = dragState.sfPos || state.positions[dragState.unitKey] || { x: 50, y: 50 };
       const dx = dragState.x - sfPos.x;
@@ -1377,13 +1484,14 @@ const PLAN_L2_SRC = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAADIAAAAO8CAYAA
 // works offline / when the assets/ folder is missing.
 let PLAN_GF_SRC = null;
 function setLevel(lvl) {
+  clearMarkerSelection();
   const img = document.getElementById('planImg');
   if (PLAN_GF_SRC === null) PLAN_GF_SRC = img.src;
   currentLevel = lvl;
   document.querySelectorAll('.level-btn').forEach(b => b.classList.toggle('active', b.dataset.level === lvl));
   img.src = lvl === 'L2' ? PLAN_L2_SRC : PLAN_GF_SRC;
-  // L2 SVG has white background — invert to match GF dark theme (black bg, white lines)
-  img.style.filter = lvl === 'L2' ? 'invert(1)' : '';
+  // Both plans have white background — always invert for dark theme
+  img.style.filter = 'invert(1)';
   renderPlan();
 }
 
