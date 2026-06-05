@@ -15,26 +15,23 @@
      reverted panel may leave a stale entry, but historical data is never lost. */
 function autoLogUnitChanges(u, old) {
   const oldId = (old && old.id) || u.id;
-  removeUnitFromUnitLogs(oldId);
-  if (oldId !== u.id) removeUnitFromUnitLogs(u.id);
+  removeUnitFromUnitLogs(oldId, u.key);
+  if (oldId !== u.id) removeUnitFromUnitLogs(u.id, u.key);
 
   const date = u.date || new Date().toISOString().slice(0,10);
 
   if (u.status === 'installed') {
-    upsertUnitLog(date, 'framing', u.id);
+    upsertUnitLog(date, 'framing', u.id, u.key);
   } else if (u.status === 'issue') {
-    upsertUnitLog(date, 'issue', u.id);
+    upsertUnitLog(date, 'issue', u.id, u.key);
   }
   // pending / in-progress: no entry (the sweep above already cleaned any prior log)
 
   if (u.louver === 'yes') {
-    upsertUnitLog(date, 'louver', u.id);
+    upsertUnitLog(date, 'louver', u.id, u.key);
   }
 
-  // --- Glass panel diff: log on actual status/date change. No sweep on purpose —
-  //     historical glass log dates may not match the current panel.date, so a
-  //     blanket sweep would relocate/erase past records. Cost: panel reverted to
-  //     pending leaves a stale log entry that has to be cleaned manually.
+  // --- Glass panel diff: log on actual status/date change. No sweep on purpose ---
   const _oldGP = (old && old.glassPanels) || [];
   const _newGP = u.glassPanels || [];
   _newGP.forEach(function(np, i) {
@@ -45,7 +42,7 @@ function autoLogUnitChanges(u, old) {
     if (!newSt || newSt === 'pending') return;
     const pDate = newDt || u.date || new Date().toISOString().slice(0,10);
     const cat   = newSt === 'issue' ? 'issue' : 'glass';
-    upsertGlassLog(pDate, cat, u.id, np.panel || '', newSt);
+    upsertGlassLog(pDate, cat, u.id, np.panel || '', newSt, u.key);
   });
 }
 
@@ -69,8 +66,8 @@ function autoUnitNorm(k, v) {
 }
 function autoUnitDisplay(v) { return v.status ? v.id + ' (' + v.status + ')' : v.id; }
 
-// Re-keys autoUnits to Firebase-safe keys + object values, then rebuilds content.
-// Idempotent and backwards-compatible. Call after every mutation.
+// Rebuilds the content string from autoUnits. Preserves original storage keys so
+// that multiple units sharing the same display ID all appear in the log.
 function rebuildAutoUnitsContent(entry) {
   if (!entry) return;
   const cur = entry.autoUnits || {};
@@ -78,13 +75,17 @@ function rebuildAutoUnitsContent(entry) {
   Object.entries(cur).forEach(function(kv) {
     const norm = autoUnitNorm(kv[0], kv[1]);
     if (!norm.id) return;
-    fresh[safeKey(norm.id)] = norm;
+    // Keep original key — don't re-key by safeKey(norm.id) which would
+    // collapse same-named units (e.g. two "SF20A") into one entry.
+    fresh[kv[0]] = norm;
   });
   entry.autoUnits = fresh;
   entry.content = Object.values(fresh).map(autoUnitDisplay).join(' · ');
 }
 
-function upsertUnitLog(date, category, unitId) {
+// unitKey: the unit's unique .key field (e.g. 'SF20A__2'). Used as the storage
+// key so that multiple units with the same display unitId each get their own entry.
+function upsertUnitLog(date, category, unitId, unitKey) {
   let entry = state.log.find(l =>
     isUnitAutoEntry(l) && l.date === date &&
     l.categories.length === 1 && l.categories[0] === category
@@ -112,12 +113,15 @@ function upsertUnitLog(date, category, unitId) {
       });
     }
   }
-  entry.autoUnits[safeKey(unitId)] = { id: unitId, status: '' };
+  // Use the unique unit key as storage key so same-named units each appear separately.
+  const storageKey = unitKey ? safeKey(unitKey) : safeKey(unitId);
+  entry.autoUnits[storageKey] = { id: unitId, status: '' };
   rebuildAutoUnitsContent(entry);
 }
 
-function removeUnitFromUnitLogs(unitId) {
+function removeUnitFromUnitLogs(unitId, unitKey) {
   const sk = safeKey(unitId);
+  const kk = unitKey ? safeKey(unitKey) : null;
   for (let i = state.log.length - 1; i >= 0; i--) {
     const l = state.log[i];
     if (!isUnitAutoEntry(l)) continue;
@@ -132,6 +136,8 @@ function removeUnitFromUnitLogs(unitId) {
       }
     }
     let removed = false;
+    // Remove by unique unit key first (new format), then fall back to display-id key (legacy)
+    if (kk && kk in l.autoUnits) { delete l.autoUnits[kk]; removed = true; }
     if (sk in l.autoUnits) { delete l.autoUnits[sk]; removed = true; }
     // Also handle pre-existing in-memory dotted keys
     if (unitId !== sk && unitId in l.autoUnits) { delete l.autoUnits[unitId]; removed = true; }
@@ -146,7 +152,7 @@ function removeUnitFromUnitLogs(unitId) {
 
 /* Glass-batch entries — separate kind='glass' so unit-modal sweeps leave them alone.
    Display id is "unitId panel" (e.g. "12A 1F-3"); safeKey() sanitizes the dot. */
-function upsertGlassLog(date, category, unitId, panel, status) {
+function upsertGlassLog(date, category, unitId, panel, status, unitKey) {
   // Migration: re-tag legacy kind='glass' entries that were stored as category 'framing'
   // (before glass became its own daily-log category). Idempotent.
   state.log.forEach(function(l) {
@@ -174,7 +180,11 @@ function upsertGlassLog(date, category, unitId, panel, status) {
   }
   if (!entry.autoUnits) entry.autoUnits = {};
   const displayId = unitId + (panel ? ' ' + panel : '');
-  entry.autoUnits[safeKey(displayId)] = {
+  // Use unitKey to differentiate same-named units (e.g. two 'SF20A' with different panels)
+  const storageKey = unitKey
+    ? safeKey(unitKey + (panel ? '_' + panel : ''))
+    : safeKey(displayId);
+  entry.autoUnits[storageKey] = {
     id: displayId,
     status: (status && status !== 'installed') ? status : ''
   };
