@@ -1066,14 +1066,19 @@ function hidePlanTooltip() {
 let planView = { s: 0.9, tx: 0, ty: 0 };
 const MIN_ZOOM = 0.9, MAX_ZOOM = 6;
 
-// Returns the centered planView state at MIN_ZOOM (equal black border on all sides)
+// Returns the centered planView state at MIN_ZOOM (equal black border on all sides).
+// Uses wrap.offsetHeight (image natural height) so vertical centering works even when
+// the image is shorter than the viewport (e.g. mobile portrait).
 function getPlanCenterView() {
-  const vp = document.getElementById('planViewport');
-  const r = vp ? vp.getBoundingClientRect() : { width: 0, height: 0 };
+  const vp   = document.getElementById('planViewport');
+  const wrap = document.getElementById('planWrap');
+  if (!vp || !wrap) return { s: MIN_ZOOM, tx: 0, ty: 0 };
+  const vpW = vp.offsetWidth,  vpH = vp.offsetHeight;
+  const wW  = wrap.offsetWidth, wH = wrap.offsetHeight;
   return {
     s:  MIN_ZOOM,
-    tx: r.width  * (1 - MIN_ZOOM) / 2,
-    ty: r.height * (1 - MIN_ZOOM) / 2
+    tx: Math.max(0, (vpW - wW * MIN_ZOOM) / 2),
+    ty: Math.max(0, (vpH - wH * MIN_ZOOM) / 2)
   };
 }
 
@@ -1260,11 +1265,14 @@ function setupPlanZoomPan() {
     }
     lastTap = now;
   });
-  // Defer initial centering to next frame so getBoundingClientRect() has correct dimensions
-  requestAnimationFrame(() => {
-    planView = getPlanCenterView();
-    applyPlanTransform();
-  });
+  // Center after image loads (ensures wrap.offsetHeight is correct before calculating)
+  const _img = document.getElementById('planImg');
+  const _doCenter = () => { planView = getPlanCenterView(); applyPlanTransform(); };
+  if (_img && !_img.complete) {
+    _img.addEventListener('load', _doCenter, { once: true });
+  } else {
+    requestAnimationFrame(_doCenter);
+  }
 }
 
 let dragState = null;
