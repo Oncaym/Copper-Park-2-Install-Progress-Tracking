@@ -1066,10 +1066,20 @@ function hidePlanTooltip() {
 let planView = { s: 0.9, tx: 0, ty: 0 };
 const MIN_ZOOM = 0.9, MAX_ZOOM = 6;
 
+// Returns the centered planView state at MIN_ZOOM (equal black border on all sides)
+function getPlanCenterView() {
+  const vp = document.getElementById('planViewport');
+  const r = vp ? vp.getBoundingClientRect() : { width: 0, height: 0 };
+  return {
+    s:  MIN_ZOOM,
+    tx: r.width  * (1 - MIN_ZOOM) / 2,
+    ty: r.height * (1 - MIN_ZOOM) / 2
+  };
+}
+
 function applyPlanTransform() {
   const wrap = document.getElementById('planWrap');
   if (!wrap) return;
-  if (planView.s <= MIN_ZOOM) { planView.s = MIN_ZOOM; planView.tx = 0; planView.ty = 0; }
   wrap.style.transform = `translate(${planView.tx}px, ${planView.ty}px) scale(${planView.s})`;
   const lbl = document.getElementById('zoomLabel');
   if (lbl) lbl.textContent = Math.round(planView.s / MIN_ZOOM * 100) + '%';
@@ -1078,7 +1088,11 @@ function clampPlanPan() {
   const vp = document.getElementById('planViewport');
   if (!vp) return;
   const r = vp.getBoundingClientRect();
-  if (planView.s <= MIN_ZOOM) { planView.tx = 0; planView.ty = 0; return; }
+  if (planView.s <= MIN_ZOOM) {
+    // Snap back to centered at MIN_ZOOM
+    Object.assign(planView, getPlanCenterView());
+    return;
+  }
   const minX = r.width  - r.width  * planView.s;
   const minY = r.height - r.height * planView.s;
   if (planView.tx > 0) planView.tx = 0;
@@ -1102,7 +1116,7 @@ function planZoom(factor, cx, cy) {
   applyPlanTransform();
 }
 function planZoomReset() {
-  planView = { s: MIN_ZOOM, tx: 0, ty: 0 };
+  planView = getPlanCenterView();
   applyPlanTransform();
 }
 
@@ -1246,7 +1260,8 @@ function setupPlanZoomPan() {
     }
     lastTap = now;
   });
-  // Apply initial scale (MIN_ZOOM = 0.9) so the plan starts with a black border
+  // Apply initial centered view (MIN_ZOOM = 0.9) so the plan starts with equal black border
+  planView = getPlanCenterView();
   applyPlanTransform();
 }
 
