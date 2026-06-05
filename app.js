@@ -856,14 +856,17 @@ function saveState(showToast = true, description) {
 window._cloudApplyRemoteState = function(remoteState, meta) {
   if (!remoteState || !remoteState.units) return;
   if (window._cloudSetSuppress) window._cloudSetSuppress(true);
+  let _needSeedSync = false;
   try {
-    // Merge any new seed units (e.g. newly-added L2 units) that the stored
-    // remote state may not have yet, so Firebase sync never drops them.
     // Ensure core arrays exist (Firebase may strip large fields like log)
     if (!remoteState.log) remoteState.log = [];
     if (!remoteState.positions) remoteState.positions = {};
 
     mergeSeedUnits(remoteState);
+
+    // If new seed units were added, push them back to Firebase after this
+    // function completes so Firebase "learns" about them and stops re-triggering.
+    if (remoteState._mergeNote) { _needSeedSync = true; delete remoteState._mergeNote; }
 
     // Preserve photos from local state — base64 images often exceed Firebase node
     // size limits and get silently stripped. We match log entries by date+content
@@ -891,6 +894,11 @@ window._cloudApplyRemoteState = function(remoteState, meta) {
     }
   } finally {
     if (window._cloudSetSuppress) window._cloudSetSuppress(false);
+  }
+  // One-time push: teach Firebase about newly merged seed units so the merge
+  // doesn't keep re-running on every Firebase update.
+  if (_needSeedSync && window._cloudQueuePush) {
+    setTimeout(() => window._cloudQueuePush(state, 'seed-sync'), 800);
   }
 };
 
