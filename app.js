@@ -1490,8 +1490,8 @@ function setLevel(lvl) {
   currentLevel = lvl;
   document.querySelectorAll('.level-btn').forEach(b => b.classList.toggle('active', b.dataset.level === lvl));
   img.src = lvl === 'L2' ? PLAN_L2_SRC : PLAN_GF_SRC;
-  // Both plans have white background — always invert for dark theme
-  img.style.filter = 'invert(1)';
+  // L2 SVG has white background — invert for dark theme; GF PNG already has dark bg
+  img.style.filter = lvl === 'L2' ? 'invert(1)' : '';
   renderPlan();
 }
 
