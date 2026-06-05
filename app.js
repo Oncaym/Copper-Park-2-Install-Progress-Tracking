@@ -1260,9 +1260,11 @@ function setupPlanZoomPan() {
     }
     lastTap = now;
   });
-  // Apply initial centered view (MIN_ZOOM = 0.9) so the plan starts with equal black border
-  planView = getPlanCenterView();
-  applyPlanTransform();
+  // Defer initial centering to next frame so getBoundingClientRect() has correct dimensions
+  requestAnimationFrame(() => {
+    planView = getPlanCenterView();
+    applyPlanTransform();
+  });
 }
 
 let dragState = null;
