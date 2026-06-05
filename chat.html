@@ -263,8 +263,15 @@
     background: var(--panel-2);
     font-size: 12px;
     color: var(--muted);
-    display: flex; align-items: center; gap: 8px;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   }
+  .map-toggles { display: flex; gap: 4px; }
+  .map-toggle {
+    padding: 3px 9px; font-size: 11px;
+    border: 1px solid var(--line); border-radius: 20px;
+    background: transparent; color: var(--muted); cursor: pointer;
+  }
+  .map-toggle.active { background: var(--accent); color: #fff; border-color: var(--accent); }
   .map-card-body {
     position: relative;
     line-height: 0;
@@ -272,28 +279,34 @@
   .map-card-body img {
     width: 100%;
     display: block;
-    opacity: 0.55;
+    opacity: 0.45;
   }
   .map-dot {
     position: absolute;
     transform: translate(-50%, -50%);
-    width: 18px; height: 18px;
+    width: 14px; height: 14px;
     border-radius: 50%;
-    border: 2px solid rgba(255,255,255,0.5);
+    border: 1.5px solid rgba(255,255,255,0.3);
     display: flex; align-items: center; justify-content: center;
-    font-size: 7px; font-weight: 700; color: #fff;
-    cursor: default;
-    letter-spacing: -0.3px;
-    line-height: 1;
+    font-size: 0; font-weight: 700; color: #fff;
+    cursor: default; letter-spacing: -0.3px; line-height: 1;
+    opacity: 0.45;
   }
+  /* framing colors */
   .map-dot.installed { background: #22c55e; }
   .map-dot.issue     { background: #ef4444; }
   .map-dot.pending   { background: #6b7280; }
-  .map-dot.highlight {
-    width: 22px; height: 22px;
-    border: 2.5px solid #fff;
-    font-size: 8px;
-    box-shadow: 0 0 8px rgba(255,255,255,0.4);
+  /* glass colors */
+  .map-dot.g-installed { background: #22c55e; }
+  .map-dot.g-partial   { background: #f59e0b; }
+  .map-dot.g-pending   { background: #6b7280; }
+  .map-dot.g-none      { background: #2a2f3a; border-color: var(--line); }
+  /* highlighted (this query / this week) */
+  .map-dot.hl {
+    width: 20px; height: 20px;
+    border: 2px solid #fff;
+    font-size: 7px;
+    opacity: 1;
     z-index: 2;
   }
   .map-legend {
@@ -303,10 +316,7 @@
     font-size: 11px; color: var(--muted);
   }
   .map-legend span { display: flex; align-items: center; gap: 4px; }
-  .map-legend i {
-    display: inline-block; width: 8px; height: 8px;
-    border-radius: 50%;
-  }
+  .map-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
 </style>
 </head>
 <body>
@@ -495,6 +505,7 @@
 
   async function sendMessage() {
     const text = input.value.trim();
+    lastUserMessage = text;
     if (!text) return;
     if (!cachedState) { pushError('State not loaded yet — wait a moment'); return; }
     if (pendingPreview) {
@@ -551,64 +562,148 @@
   }
 
   // ---------- Mini map ----------
-  function renderMapCard(highlightKeys, label) {
+  let lastUserMessage = '';
+
+  function getWeekStart() {
+    const d = new Date();
+    const day = d.getDay(); // 0=Sun
+    const diff = day === 0 ? -6 : 1 - day; // back to Monday
+    d.setDate(d.getDate() + diff);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function isWeekQuery(text) {
+    return /this week|这周|本周|这个星期|本星期/i.test(text);
+  }
+
+  function glassStatus(u) {
+    const panels = u.glassPanels || [];
+    if (!panels.length) return 'none';
+    const st = panels.map(p => p.status || '');
+    if (st.every(s => s === 'installed')) return 'installed';
+    if (st.some(s => s === 'installed' || s === 'ready')) return 'partial';
+    return 'pending';
+  }
+
+  function renderMapCard(highlightKeys, opts = {}) {
     if (!cachedState || !cachedState.positions) return;
     const positions = cachedState.positions;
     const units = cachedState.units || [];
-    const hSet = new Set(highlightKeys);
+    const origHL = new Set(highlightKeys);
 
-    // Determine which level(s) the highlighted units belong to
-    const hlUnits = units.filter(u => hSet.has(u.key));
-    const levels = [...new Set(hlUnits.map(u => u.level || 'GF'))];
-    const level = levels.includes('GF') ? 'GF' : (levels[0] || 'GF');
+    // Level: prefer GF if any highlighted unit is on GF
+    const hlUnits = units.filter(u => origHL.has(u.key));
+    const level = hlUnits.some(u => (u.level || 'GF') === 'GF') ? 'GF' : (hlUnits[0]?.level || 'GF');
     const allOnLevel = units.filter(u => (u.level || 'GF') === level && positions[u.key]);
+
+    let mode = 'framing';  // 'framing' | 'glass'
+    let filter = opts.filter || 'query'; // 'query' | 'week' | 'all'
+    const weekStart = getWeekStart();
 
     const card = document.createElement('div');
     card.className = 'map-card';
     card.innerHTML = `
       <div class="map-card-head">
         <span>🗺 Floor plan · ${level}</span>
-        <span style="margin-left:auto">${label || ''}</span>
+        <div class="map-toggles" id="mt-mode">
+          <button class="map-toggle active" data-mode="framing">Framing</button>
+          <button class="map-toggle" data-mode="glass">Glass</button>
+        </div>
+        <div class="map-toggles" id="mt-filter" style="margin-left:auto">
+          <button class="map-toggle${filter==='query'?' active':''}" data-filter="query">This query</button>
+          <button class="map-toggle${filter==='week'?' active':''}" data-filter="week">This week</button>
+          <button class="map-toggle${filter==='all'?' active':''}" data-filter="all">All</button>
+        </div>
       </div>
       <div class="map-card-body">
         <img src="gf-plan.png" alt="floor plan">
       </div>
-      <div class="map-legend">
-        <span><i style="background:#22c55e"></i>Installed</span>
-        <span><i style="background:#ef4444"></i>Issue</span>
-        <span><i style="background:#6b7280"></i>Pending</span>
-        ${hSet.size ? '<span style="color:#fff">· Highlighted: ' + hSet.size + ' unit(s)</span>' : ''}
-      </div>`;
+      <div class="map-legend" id="map-legend-row"></div>`;
 
-    const body = card.querySelector('.map-card-body');
-    allOnLevel.forEach(u => {
-      const pos = positions[u.key];
-      if (!pos) return;
-      const dot = document.createElement('div');
-      const isHL = hSet.has(u.key);
-      dot.className = 'map-dot ' + (u.status || 'pending') + (isHL ? ' highlight' : '');
-      dot.style.left = pos.x + '%';
-      dot.style.top = pos.y + '%';
-      dot.title = u.id + ' · ' + (u.status || 'pending');
-      if (isHL) dot.textContent = u.id.replace('SF', '');
-      body.appendChild(dot);
+    function getActiveKeys() {
+      if (filter === 'all') return null; // null = no highlights, all shown equally
+      if (filter === 'week') {
+        return new Set(units.filter(u => u.date && u.date >= weekStart).map(u => u.key));
+      }
+      return origHL; // 'query'
+    }
+
+    function buildDots() {
+      const body = card.querySelector('.map-card-body');
+      body.querySelectorAll('.map-dot').forEach(d => d.remove());
+      const activeKeys = getActiveKeys();
+      let hlCount = 0;
+
+      allOnLevel.forEach(u => {
+        const pos = positions[u.key];
+        if (!pos) return;
+        const dot = document.createElement('div');
+        const isHL = !activeKeys || activeKeys.has(u.key);
+        if (isHL) hlCount++;
+
+        if (mode === 'glass') {
+          const gs = glassStatus(u);
+          dot.className = 'map-dot g-' + gs + (isHL ? ' hl' : '');
+          dot.title = u.id + ' · glass: ' + gs;
+          if (isHL) dot.textContent = u.id.replace('SF', '');
+        } else {
+          dot.className = 'map-dot ' + (u.status || 'pending') + (isHL ? ' hl' : '');
+          dot.title = u.id + ' · ' + (u.status || 'pending') + (u.date ? ' · ' + u.date : '');
+          if (isHL) dot.textContent = u.id.replace('SF', '');
+        }
+        dot.style.left = pos.x + '%';
+        dot.style.top = pos.y + '%';
+        body.appendChild(dot);
+      });
+
+      // Legend
+      const leg = card.querySelector('#map-legend-row');
+      if (mode === 'glass') {
+        leg.innerHTML = `
+          <span><i style="background:#22c55e"></i>Glass in</span>
+          <span><i style="background:#f59e0b"></i>Partial</span>
+          <span><i style="background:#6b7280"></i>Pending</span>
+          ${activeKeys ? '<span style="color:#fff;margin-left:auto">· ' + hlCount + ' highlighted</span>' : ''}`;
+      } else {
+        leg.innerHTML = `
+          <span><i style="background:#22c55e"></i>Installed</span>
+          <span><i style="background:#ef4444"></i>Issue</span>
+          <span><i style="background:#6b7280"></i>Pending</span>
+          ${activeKeys ? '<span style="color:#fff;margin-left:auto">· ' + hlCount + ' highlighted</span>' : ''}`;
+      }
+    }
+
+    card.querySelectorAll('[data-mode]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        card.querySelectorAll('[data-mode]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        mode = btn.dataset.mode;
+        buildDots();
+      });
+    });
+    card.querySelectorAll('[data-filter]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        card.querySelectorAll('[data-filter]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        filter = btn.dataset.filter;
+        buildDots();
+      });
     });
 
     $('msgs').appendChild(card);
+    buildDots();
     scrollBottom();
   }
 
   function extractUnitKeys(text) {
-    // Find SF IDs in text like SF11A, SF20A.1, SF12B, etc.
     const mentions = (text.match(/\bSF[\w.]+/gi) || []).map(s => s.toUpperCase());
     if (!mentions.length || !cachedState) return [];
     const units = cachedState.units || [];
     const matched = new Set();
     mentions.forEach(m => {
-      // Match by id (case-insensitive) or key
       units.forEach(u => {
         if (u.id && u.id.toUpperCase() === m) matched.add(u.key);
-        if (u.key && u.key.toUpperCase().startsWith(m)) matched.add(u.key);
+        else if (u.key && u.key.toUpperCase().startsWith(m)) matched.add(u.key);
       });
     });
     return [...matched];
@@ -621,7 +716,10 @@
       pushBot(parsed.answer);
       // Show map if the answer mentions specific units
       const keys = extractUnitKeys(parsed.answer);
-      if (keys.length) renderMapCard(keys);
+      if (keys.length) {
+        const weekQ = isWeekQuery(lastUserMessage);
+        renderMapCard(keys, { filter: weekQ ? 'week' : 'query' });
+      }
       return;
     }
 
@@ -772,7 +870,7 @@
       pushBot('✅ ' + desc + '\n\nThe main dashboard will auto-refresh within ~1 second if it\'s open in another tab.');
       // Show map highlighting the units that just changed
       const changedKeys = (parsed.unit_updates || []).map(u => u.key).filter(Boolean);
-      if (changedKeys.length) renderMapCard(changedKeys, 'just updated');
+      if (changedKeys.length) renderMapCard(changedKeys, { filter: 'query' });
     } catch (err) {
       console.error(err);
       btns.forEach(b => b.disabled = false);
