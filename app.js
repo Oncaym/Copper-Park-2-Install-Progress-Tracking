@@ -859,7 +859,7 @@ window._cloudApplyRemoteState = function(remoteState, meta) {
   let _needSeedSync = false;
   try {
     // Ensure core arrays exist (Firebase may strip large fields like log)
-    if (!remoteState.log) remoteState.log = [];
+    if (!Array.isArray(remoteState.log)) remoteState.log = Object.values(remoteState.log || {});
     if (!remoteState.positions) remoteState.positions = {};
 
     mergeSeedUnits(remoteState);
@@ -1659,7 +1659,7 @@ function renderTable() {
 }
 
 function renderTimeline() {
-  if (!state.log) state.log = [];
+  if (!Array.isArray(state.log)) state.log = Object.values(state.log || {});
   const tl = document.getElementById('timeline');
   // Group log entries by date, preserving original index for edit/delete
   const groups = new Map();
@@ -1717,7 +1717,7 @@ function renderTimeline() {
 }
 
 function renderCharts() {
-  if (!state.log) state.log = [];
+  if (!Array.isArray(state.log)) state.log = Object.values(state.log || {});
   // Trend chart - by date, count by category
   const dates = [...new Set(state.log.map(l=>l.date))].sort();
   const framing = dates.map(d => countCategoryOnDate(d, 'framing'));
@@ -2063,7 +2063,7 @@ function getCats(l) {
   return ['framing'];
 }
 function countCategoryOnDate(date, cat) {
-  if (!state.log) state.log = [];
+  if (!Array.isArray(state.log)) state.log = Object.values(state.log || {});
   return state.log.filter(l => l.date === date && getCats(l).includes(cat)).reduce((acc, l) => {
     if (cat === 'caulking') return acc + 1;
     // count tokens separated by ·
@@ -2813,8 +2813,3 @@ async function bootstrap() {
   initApp();
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', bootstrap);
-} else {
-  bootstrap();
-}
