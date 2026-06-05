@@ -2784,8 +2784,9 @@ function initApp() {
     }
   } catch (e) { console.warn('triage subscribe failed', e); }
   if (state._mergeNote) {
-    setTimeout(() => toast(state._mergeNote + ' — see left margin / L2 tab'), 600);
+    const _note = state._mergeNote;
     delete state._mergeNote;
+    setTimeout(() => toast(_note + ' — see left margin / L2 tab'), 600);
   }
 }
 
