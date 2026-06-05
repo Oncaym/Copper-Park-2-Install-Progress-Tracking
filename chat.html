@@ -596,7 +596,7 @@
     const level = hlUnits.some(u => (u.level || 'GF') === 'GF') ? 'GF' : (hlUnits[0]?.level || 'GF');
     const allOnLevel = units.filter(u => (u.level || 'GF') === level && positions[u.key]);
 
-    let mode = 'framing';  // 'framing' | 'glass'
+    let mode = opts.defaultMode || 'framing';  // 'framing' | 'glass'
     let filter = opts.filter || 'query'; // 'query' | 'week' | 'all'
     const weekStart = getWeekStart();
 
@@ -606,8 +606,8 @@
       <div class="map-card-head">
         <span>🗺 Floor plan · ${level}</span>
         <div class="map-toggles" id="mt-mode">
-          <button class="map-toggle active" data-mode="framing">Framing</button>
-          <button class="map-toggle" data-mode="glass">Glass</button>
+          <button class="map-toggle${mode==='framing'?' active':''}" data-mode="framing">Framing</button>
+          <button class="map-toggle${mode==='glass'?' active':''}" data-mode="glass">Glass</button>
         </div>
         <div class="map-toggles" id="mt-filter" style="margin-left:auto">
           <button class="map-toggle${filter==='query'?' active':''}" data-filter="query">This query</button>
@@ -623,7 +623,13 @@
     function getActiveKeys() {
       if (filter === 'all') return null; // null = no highlights, all shown equally
       if (filter === 'week') {
-        return new Set(units.filter(u => u.date && u.date >= weekStart).map(u => u.key));
+        return new Set(units.filter(u => {
+          // framing: unit date this week
+          if (u.date && u.date >= weekStart) return true;
+          // glass: any glassPanels with date this week
+          const panels = u.glassPanels || [];
+          return panels.some(p => p.date && p.date >= weekStart);
+        }).map(u => u.key));
       }
       return origHL; // 'query'
     }
@@ -717,8 +723,10 @@
       // Show map if the answer mentions specific units
       const keys = extractUnitKeys(parsed.answer);
       if (keys.length) {
-        const weekQ = isWeekQuery(lastUserMessage);
-        renderMapCard(keys, { filter: weekQ ? 'week' : 'query' });
+        // Auto-detect glass queries → default to glass mode
+        const glassQ = /glass|玻璃/i.test(lastUserMessage + ' ' + parsed.answer);
+        // Always use 'query' filter: Claude's answer already filters by time period
+        renderMapCard(keys, { filter: 'query', defaultMode: glassQ ? 'glass' : 'framing' });
       }
       return;
     }
