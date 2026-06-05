@@ -858,6 +858,23 @@ window._cloudApplyRemoteState = function(remoteState, meta) {
     // Merge any new seed units (e.g. newly-added L2 units) that the stored
     // remote state may not have yet, so Firebase sync never drops them.
     mergeSeedUnits(remoteState);
+
+    // Preserve photos from local state — base64 images often exceed Firebase node
+    // size limits and get silently stripped. We match log entries by date+content
+    // and copy local photos back so they survive a remote-state overwrite.
+    if (state && Array.isArray(state.log) && Array.isArray(remoteState.log)) {
+      const localPhotos = {};
+      state.log.forEach(l => {
+        if (l.photos && l.photos.length) {
+          localPhotos[(l.date || '') + '||' + (l.content || '').slice(0, 40)] = l.photos;
+        }
+      });
+      remoteState.log.forEach(l => {
+        const key = (l.date || '') + '||' + (l.content || '').slice(0, 40);
+        if (!l.photos && localPhotos[key]) l.photos = localPhotos[key];
+      });
+    }
+
     state = remoteState;
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
     if (typeof render === 'function') render();
@@ -2230,12 +2247,12 @@ function getLogCategoryCheckboxes() {
   return Array.from(document.querySelectorAll('#l-categories input[type="checkbox"]:checked')).map(cb => cb.value);
 }
 /* -------- Daily Log photo helpers --------
-   Photos are stored as compressed JPEG data-URLs on entry.photos[].
-   This keeps everything inside state.json so Firebase + Save-to-HTML
-   both keep working with zero extra plumbing. */
+   Photos are uploaded to Firebase Storage; only the download URL is stored
+   in entry.photos[], keeping state.json small and Firebase-sync-safe. */
 let _logPhotosDraft = [];   // in-progress photos for the open log modal
 
-function _photoFileToDataUrl(file, maxEdge = 1280, quality = 0.72) {
+// Compress image file → Blob (JPEG)
+function _photoFileToBlob(file, maxEdge = 1280, quality = 0.72) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('read failed'));
@@ -2248,10 +2265,8 @@ function _photoFileToDataUrl(file, maxEdge = 1280, quality = 0.72) {
         w = Math.round(w * scale); h = Math.round(h * scale);
         const canvas = document.createElement('canvas');
         canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, w, h);
-        try { resolve(canvas.toDataURL('image/jpeg', quality)); }
-        catch(e){ reject(e); }
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('toBlob failed')), 'image/jpeg', quality);
       };
       img.src = reader.result;
     };
@@ -2259,7 +2274,22 @@ function _photoFileToDataUrl(file, maxEdge = 1280, quality = 0.72) {
   });
 }
 
-let _logPhotosBusy = 0;   // in-flight photo compression count
+// Upload compressed blob to Firebase Storage, return download URL
+async function _uploadPhotoToStorage(blob, originalName) {
+  const storage = firebase.storage();
+  const filename = `cp2-photos/${Date.now()}_${(originalName || 'photo').replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+  const ref = storage.ref(filename);
+  await ref.put(blob, { contentType: 'image/jpeg' });
+  return await ref.getDownloadURL();
+}
+
+// Delete a photo from Storage if it's a Storage URL (fire-and-forget)
+function _deleteStoragePhoto(url) {
+  if (!url || !url.startsWith('https://firebasestorage')) return;
+  try { firebase.storage().refFromURL(url).delete().catch(() => {}); } catch(e) {}
+}
+
+let _logPhotosBusy = 0;   // in-flight upload count
 async function handleLogPhotoFiles(fileList) {
   if (!fileList || !fileList.length) return;
   _logPhotosBusy++;
@@ -2269,10 +2299,18 @@ async function handleLogPhotoFiles(fileList) {
     for (const f of Array.from(fileList)) {
       if (!f.type || !f.type.startsWith('image/')) continue;
       try {
-        const dataUrl = await _photoFileToDataUrl(f);
-        _logPhotosDraft.push(dataUrl);
-        renderLogPhotoThumbs();   // show progress after each photo
-      } catch(e) { console.warn('[log photo] compression failed', e); }
+        const blob = await _photoFileToBlob(f);
+        let ref;
+        try {
+          ref = await _uploadPhotoToStorage(blob, f.name);
+        } catch(e) {
+          // Fallback: store as data-URL if Storage unavailable
+          console.warn('[log photo] Storage upload failed, falling back to data-URL', e);
+          ref = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
+        }
+        _logPhotosDraft.push(ref);
+        renderLogPhotoThumbs();
+      } catch(e) { console.warn('[log photo] failed', e); }
     }
   } finally {
     _logPhotosBusy--;
@@ -2282,6 +2320,7 @@ async function handleLogPhotoFiles(fileList) {
 
 function removeLogPhoto(idx) {
   if (!confirm(t('photo_remove_confirm'))) return;
+  _deleteStoragePhoto(_logPhotosDraft[idx]);
   _logPhotosDraft.splice(idx, 1);
   renderLogPhotoThumbs();
 }
@@ -2327,6 +2366,8 @@ function deleteLog(idx) {
   const entry = state.log[idx];
   if (!entry) return;
   if (!confirm(t('confirm_log_delete').replace('{content}', entry.content))) return;
+  // Clean up photos from Firebase Storage
+  (entry.photos || []).forEach(_deleteStoragePhoto);
   state.log.splice(idx, 1);
   closeLogModal();
   saveState();
