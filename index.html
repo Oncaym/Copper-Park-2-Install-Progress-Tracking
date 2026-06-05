@@ -1295,6 +1295,16 @@
     .plan-marker:hover { transform: translate(-50%, -50%); }
     .unit-cell:hover { transform: none; border-color: var(--border); }
   }
+
+  /* ---- Embed mode (?embed=1) — show only the floor plan ---- */
+  html.embed-mode header,
+  html.embed-mode .kpi-grid,
+  html.embed-mode .section:not(.plan-section) { display: none !important; }
+  html.embed-mode body { overflow: hidden; height: 100vh; background: #0f1115; }
+  html.embed-mode main { padding: 4px 8px 0 !important; height: 100vh; overflow: hidden; }
+  html.embed-mode .plan-section { margin: 0 !important; border: none !important; background: transparent !important; }
+  html.embed-mode .plan-section .section-header { padding: 6px 0 4px; }
+  html.embed-mode .highlight-banner { margin: 4px 0 0 !important; }
 </style>
 <style data-designer-overlay="1"></style></head>
 <body data-om-id="17a02737:4">

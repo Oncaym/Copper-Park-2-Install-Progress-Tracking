@@ -1969,6 +1969,23 @@ function clearMapHighlight() {
   if (banner) banner.style.display = 'none';
   if (typeof renderPlan === 'function') renderPlan();
 }
+
+/* ---- Embed mode: ?embed=1[&glass=1][&highlight=SF03,...] ---- */
+function applyEmbedMode() {
+  const ep = new URLSearchParams(window.location.search);
+  if (ep.get('embed') !== '1') return;
+  document.documentElement.classList.add('embed-mode');
+  // Mark the plan section so CSS can show it exclusively
+  const planWrap = document.getElementById('planWrap');
+  if (planWrap) {
+    const sec = planWrap.closest('.section');
+    if (sec) sec.classList.add('plan-section');
+  }
+  // Auto glass mode
+  if (ep.get('glass') === '1' && !mapGlassMode) {
+    if (typeof toggleMapGlassMode === 'function') toggleMapGlassMode();
+  }
+}
 function showHighlightBanner(orderLbl, ids) {
   let banner = document.getElementById('highlightBanner');
   if (!banner) {
@@ -2886,6 +2903,7 @@ function initApp() {
   render();
   // Pick up ?highlight=SF03,SF20A&order=J04 from Glass Triage "📍 Map" deep-link
   if (typeof applyMapHighlightFromUrl === 'function') applyMapHighlightFromUrl();
+  if (typeof applyEmbedMode === 'function') applyEmbedMode();
   // Subscribe (read-only) to Glass Triage pieces so the unit modal can show
   // shipping status (📦 on-site / staged) next to each glass panel.
   try {
