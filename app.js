@@ -1063,22 +1063,22 @@ function hidePlanTooltip() {
 }
 
 /* ---- Plan zoom & pan (touch + buttons + wheel) ---- */
-let planView = { s: 1, tx: 0, ty: 0 };
-const MIN_ZOOM = 1, MAX_ZOOM = 6;
+let planView = { s: 0.9, tx: 0, ty: 0 };
+const MIN_ZOOM = 0.9, MAX_ZOOM = 6;
 
 function applyPlanTransform() {
   const wrap = document.getElementById('planWrap');
   if (!wrap) return;
-  if (planView.s <= 1) { planView.s = 1; planView.tx = 0; planView.ty = 0; }
+  if (planView.s <= MIN_ZOOM) { planView.s = MIN_ZOOM; planView.tx = 0; planView.ty = 0; }
   wrap.style.transform = `translate(${planView.tx}px, ${planView.ty}px) scale(${planView.s})`;
   const lbl = document.getElementById('zoomLabel');
-  if (lbl) lbl.textContent = Math.round(planView.s * 100) + '%';
+  if (lbl) lbl.textContent = Math.round(planView.s / MIN_ZOOM * 100) + '%';
 }
 function clampPlanPan() {
   const vp = document.getElementById('planViewport');
   if (!vp) return;
   const r = vp.getBoundingClientRect();
-  if (planView.s <= 1) { planView.tx = 0; planView.ty = 0; return; }
+  if (planView.s <= MIN_ZOOM) { planView.tx = 0; planView.ty = 0; return; }
   const minX = r.width  - r.width  * planView.s;
   const minY = r.height - r.height * planView.s;
   if (planView.tx > 0) planView.tx = 0;
@@ -1102,7 +1102,7 @@ function planZoom(factor, cx, cy) {
   applyPlanTransform();
 }
 function planZoomReset() {
-  planView = { s: 1, tx: 0, ty: 0 };
+  planView = { s: MIN_ZOOM, tx: 0, ty: 0 };
   applyPlanTransform();
 }
 
@@ -1189,7 +1189,7 @@ function setupPlanZoomPan() {
       if (Math.hypot(e.clientX - p.sx, e.clientY - p.sy) < PAN_THRESHOLD) return;
       panActive = true;
       // At base zoom, auto-zoom on first drag so the gesture actually moves the map
-      if (planView.s <= 1) {
+      if (planView.s <= MIN_ZOOM) {
         const r = vp.getBoundingClientRect();
         planZoom(1.8, p.sx - r.left, p.sy - r.top);
       }
