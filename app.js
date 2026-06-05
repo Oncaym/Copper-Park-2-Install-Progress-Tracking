@@ -1659,6 +1659,7 @@ function renderTable() {
 }
 
 function renderTimeline() {
+  if (!state.log) state.log = [];
   const tl = document.getElementById('timeline');
   // Group log entries by date, preserving original index for edit/delete
   const groups = new Map();
@@ -1716,6 +1717,7 @@ function renderTimeline() {
 }
 
 function renderCharts() {
+  if (!state.log) state.log = [];
   // Trend chart - by date, count by category
   const dates = [...new Set(state.log.map(l=>l.date))].sort();
   const framing = dates.map(d => countCategoryOnDate(d, 'framing'));
@@ -2061,6 +2063,7 @@ function getCats(l) {
   return ['framing'];
 }
 function countCategoryOnDate(date, cat) {
+  if (!state.log) state.log = [];
   return state.log.filter(l => l.date === date && getCats(l).includes(cat)).reduce((acc, l) => {
     if (cat === 'caulking') return acc + 1;
     // count tokens separated by ·
