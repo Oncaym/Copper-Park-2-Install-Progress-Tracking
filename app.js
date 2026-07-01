@@ -1730,9 +1730,9 @@ function renderTimeline() {
             ).join('')}${photos.length>6?`<span class="timeline-photo-more" onclick="event.stopPropagation();openPhotoGallery(${i},6)">+${photos.length-6}</span>`:''}</div>`
         : '';
       const metaPills = [
-        l.ref   ? `<span class="meta-pill">单元 <b>${esc(l.ref)}</b></span>` : '',
-        l.party ? `<span class="meta-pill">对方 <b>${esc(l.party)}</b></span>` : '',
-        l.fault ? `<span class="meta-pill">归因 <b>${esc(l.fault)}</b></span>` : ''
+        l.ref   ? `<span class="meta-pill">Ref <b>${esc(l.ref)}</b></span>` : '',
+        l.party ? `<span class="meta-pill">Party <b>${esc(l.party)}</b></span>` : '',
+        l.fault ? `<span class="meta-pill">Fault <b>${esc(l.fault)}</b></span>` : ''
       ].filter(Boolean).join('');
       const meta = metaPills ? `<div class="timeline-meta">${metaPills}</div>` : '';
       return `
@@ -2213,7 +2213,7 @@ function formatStatus(s) {
 }
 function categoryLabel(c) {
   return { framing:'Framing', glass:'Glass', louver:'Louver', caulking:'Caulking', issue:'Issue',
-    'fit-issue':'装配问题', 'field-verify':'实测确认', 'gc-inquiry':'致GC函' }[c] || c;
+    'fit-issue':'Fit Issue', 'field-verify':'Field Verify', 'gc-inquiry':'GC Inquiry' }[c] || c;
 }
 
 /* -------- Modals -------- */

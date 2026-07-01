@@ -1401,7 +1401,7 @@
         "fit-issue"
       ],
       "ref": "SF12A",
-      "fault": "待查"
+      "fault": "Investigating"
     },
     {
       "date": "2026-05-13",
@@ -1444,7 +1444,7 @@
       "category": "fit-issue",
       "content": "11A — opening error",
       "ref": "SF11A",
-      "fault": "待查"
+      "fault": "Investigating"
     },
     {
       "date": "2026-05-20",
@@ -1456,7 +1456,7 @@
       "category": "issue",
       "content": "Caulking / Louvers — Yulin NOT On-site",
       "planned": true,
-      "party": "分包 Sub"
+      "party": "Sub"
     },
     {
       "date": "2026-05-22",
