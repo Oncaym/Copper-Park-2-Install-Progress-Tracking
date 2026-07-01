@@ -1351,6 +1351,13 @@ function clearMarkerSelection() {
   document.querySelectorAll('.plan-marker.sel').forEach(m => m.classList.remove('sel'));
 }
 
+function clearGlassSelection() {
+  selectedGlassPanels = [];
+  document.querySelectorAll('.glass-marker.selected').forEach(el => el.classList.remove('selected'));
+  const cnt = document.getElementById('glassBatchCount');
+  if (cnt) cnt.textContent = '0';
+}
+
 function setupPlanInteractions() {
   setupPlanZoomPan();
   const wrap = document.getElementById('planWrap');
@@ -1360,12 +1367,17 @@ function setupPlanInteractions() {
   // ----- Box-select: mousedown on background -----
   wrap.onmousedown = (e) => {
     if (!editMode || placeMode) return;
-    if (e.target.closest('.plan-marker')) return; // marker drag handled below
-    clearMarkerSelection();
-    const rect = wrap.getBoundingClientRect();
+    if (e.target.closest('.plan-marker, .glass-marker')) return; // marker drag handled below
+    e.preventDefault();                            // stop native drag/text-select auto-scroll
+    // In glass mode the box selects glass dots; otherwise it selects SF markers.
+    if (mapGlassMode) clearGlassSelection(); else clearMarkerSelection();
+    // Draw the marquee in the NON-transformed viewport so it tracks the cursor
+    // 1:1 regardless of zoom/pan. (planWrap carries the scale transform.)
+    const vp = document.getElementById('planViewport');
+    const vpRect = vp.getBoundingClientRect();
     selBoxState = {
-      startPx: { x: e.clientX - rect.left, y: e.clientY - rect.top },
-      rect
+      startPx: { x: e.clientX - vpRect.left, y: e.clientY - vpRect.top },
+      vpRect
     };
     const box = document.getElementById('selBox');
     if (box) {
@@ -1412,10 +1424,14 @@ function setupPlanInteractions() {
 document.addEventListener('mousemove', e => {
   // ----- Box-select drawing -----
   if (selBoxState) {
+    e.preventDefault();                     // block page scroll / text selection while dragging
     const box = document.getElementById('selBox');
     if (box) {
-      const cx = e.clientX - selBoxState.rect.left;
-      const cy = e.clientY - selBoxState.rect.top;
+      const r = selBoxState.vpRect;
+      // Clamp the cursor to the viewport so the box never extends past the
+      // visible area (which is what was nudging the page scroll before).
+      const cx = Math.max(0, Math.min(r.width,  e.clientX - r.left));
+      const cy = Math.max(0, Math.min(r.height, e.clientY - r.top));
       const x = Math.min(cx, selBoxState.startPx.x);
       const y = Math.min(cy, selBoxState.startPx.y);
       const w = Math.abs(cx - selBoxState.startPx.x);
@@ -1430,7 +1446,15 @@ document.addEventListener('mousemove', e => {
   const x = ((e.clientX - rect.left) / rect.width) * 100;
   const y = ((e.clientY - rect.top)  / rect.height) * 100;
   if (x < 0 || x > 100 || y < 0 || y > 100) return;
-  if (dragState.isMulti) {
+  if (dragState.glassMulti) {
+    // Move all selected glass dots by the same delta from drag start
+    const dx = x - dragState.startX;
+    const dy = y - dragState.startY;
+    dragState.glassItems.forEach(it => {
+      it.el.style.left = (it.startLeft + dx) + '%';
+      it.el.style.top  = (it.startTop  + dy) + '%';
+    });
+  } else if (dragState.isMulti) {
     // Move all selected markers by the same delta from drag start
     const dx = x - dragState.startX;
     const dy = y - dragState.startY;
@@ -1457,20 +1481,43 @@ document.addEventListener('mouseup', () => {
       const bw = parseFloat(box.style.width)  || 0;
       const bh = parseFloat(box.style.height) || 0;
       if (bw > 5 || bh > 5) {
-        const r = selBoxState.rect;
-        const bx1 = parseFloat(box.style.left)   / r.width  * 100;
-        const by1 = parseFloat(box.style.top)    / r.height * 100;
-        const bx2 = bx1 + bw / r.width  * 100;
-        const by2 = by1 + bh / r.height * 100;
-        document.querySelectorAll('#planWrap .plan-marker').forEach(m => {
-          const ml = parseFloat(m.style.left);
-          const mt = parseFloat(m.style.top);
-          if (ml >= bx1 && ml <= bx2 && mt >= by1 && mt <= by2) {
-            selectedMarkers.add(m.dataset.unit);
-            m.classList.add('sel');
-          }
-        });
-        if (selectedMarkers.size > 0) toast(`${selectedMarkers.size} markers selected — drag any to move all`);
+        // The box is in viewport (screen) px; markers use % of the SCALED wrap.
+        // Convert the box's screen rect into wrap % so hit-testing is zoom/pan-correct.
+        const vpr = selBoxState.vpRect;
+        const wrapRect = document.getElementById('planWrap').getBoundingClientRect();
+        const boxScreenL = vpr.left + (parseFloat(box.style.left) || 0);
+        const boxScreenT = vpr.top  + (parseFloat(box.style.top)  || 0);
+        const bx1 = (boxScreenL - wrapRect.left) / wrapRect.width  * 100;
+        const by1 = (boxScreenT - wrapRect.top)  / wrapRect.height * 100;
+        const bx2 = bx1 + bw / wrapRect.width  * 100;
+        const by2 = by1 + bh / wrapRect.height * 100;
+        if (mapGlassMode) {
+          // Glass mode: box selects glass dots (into selectedGlassPanels) for batch move.
+          document.querySelectorAll('#planWrap .glass-marker').forEach(el => {
+            const ml = parseFloat(el.style.left);
+            const mt = parseFloat(el.style.top);
+            if (ml >= bx1 && ml <= bx2 && mt >= by1 && mt <= by2) {
+              const uk = el.dataset.unitKey, pidx = parseInt(el.dataset.panelIdx, 10);
+              if (!selectedGlassPanels.some(x => x.unitKey === uk && x.panelIdx === pidx)) {
+                selectedGlassPanels.push({ unitKey: uk, panelIdx: pidx });
+                el.classList.add('selected');
+              }
+            }
+          });
+          const cnt = document.getElementById('glassBatchCount');
+          if (cnt) cnt.textContent = selectedGlassPanels.length;
+          if (selectedGlassPanels.length > 0) toast(`${selectedGlassPanels.length} glass panels selected — drag any to move all`);
+        } else {
+          document.querySelectorAll('#planWrap .plan-marker').forEach(m => {
+            const ml = parseFloat(m.style.left);
+            const mt = parseFloat(m.style.top);
+            if (ml >= bx1 && ml <= bx2 && mt >= by1 && mt <= by2) {
+              selectedMarkers.add(m.dataset.unit);
+              m.classList.add('sel');
+            }
+          });
+          if (selectedMarkers.size > 0) toast(`${selectedMarkers.size} markers selected — drag any to move all`);
+        }
       }
       box.style.display = 'none';
     }
@@ -1478,7 +1525,20 @@ document.addEventListener('mouseup', () => {
     return;
   }
   if (dragState && dragState.moved && dragState.x != null) {
-    if (dragState.isMulti) {
+    if (dragState.glassMulti) {
+      // Save every selected glass dot as an offset relative to its own SF marker
+      const dx = dragState.x - dragState.startX;
+      const dy = dragState.y - dragState.startY;
+      if (!state.glassPanelOffsets) state.glassPanelOffsets = {};
+      (dragState.glassItems || []).forEach(it => {
+        const nx = it.startLeft + dx;
+        const ny = it.startTop  + dy;
+        if (!state.glassPanelOffsets[it.unitKey]) state.glassPanelOffsets[it.unitKey] = {};
+        state.glassPanelOffsets[it.unitKey][it.panelIdx] = { dx: nx - it.sfPos.x, dy: ny - it.sfPos.y };
+      });
+      saveState(false);
+      toast(`${(dragState.glassItems || []).length} glass panels ` + t('msg_pos_saved'));
+    } else if (dragState.isMulti) {
       // Save all selected marker positions
       const dx = dragState.x - dragState.startX;
       const dy = dragState.y - dragState.startY;
@@ -2624,19 +2684,35 @@ function toggleMapGlassMode() {
   const wrap     = document.getElementById('planWrap');
   const btn      = document.getElementById('glassMapBtn');
   const batchBtn = document.getElementById('glassBatchBtn');
+  const hideSfBtn = document.getElementById('hideSfBtn');
   if (mapGlassMode) {
     wrap.classList.add('glass-mode');
     if (btn) { btn.textContent = '🗺 SF View'; btn.classList.add('btn-primary'); }
     if (batchBtn) batchBtn.style.display = '';
+    if (hideSfBtn) hideSfBtn.style.display = '';
     renderGlassMarkers();
   } else {
     wrap.classList.remove('glass-mode');
+    wrap.classList.remove('hide-sf');   // reset so SF markers reappear in SF view
     wrap.querySelectorAll('.glass-marker').forEach(el => el.remove());
     if (btn) { btn.textContent = '🪟 Glass Mode'; btn.classList.remove('btn-primary'); }
     if (batchBtn) { batchBtn.style.display = 'none'; batchBtn.textContent = '☑ Batch Select'; batchBtn.classList.remove('btn-primary'); }
+    if (hideSfBtn) { hideSfBtn.style.display = 'none'; hideSfBtn.textContent = '🙈 Hide SF'; hideSfBtn.classList.remove('btn-primary'); }
     mapGlassBatchMode = false;
     selectedGlassPanels = [];
     document.getElementById('glassBatchBar').style.display = 'none';
+  }
+}
+
+// Toggle full hiding of SF/door markers while in glass mode (vs. the default dim).
+function toggleHideSf() {
+  const wrap = document.getElementById('planWrap');
+  if (!wrap) return;
+  const hidden = wrap.classList.toggle('hide-sf');
+  const btn = document.getElementById('hideSfBtn');
+  if (btn) {
+    btn.textContent = hidden ? '👁 Show SF' : '🙈 Hide SF';
+    btn.classList.toggle('btn-primary', hidden);
   }
 }
 
@@ -2732,15 +2808,37 @@ function renderGlassMarkers() {
           e.preventDefault();
           e.stopPropagation();
           const rect = wrap.getBoundingClientRect();
+          const startX = ((e.clientX - rect.left) / rect.width)  * 100;
+          const startY = ((e.clientY - rect.top)  / rect.height) * 100;
+          // If this dot is part of a multi-selection, drag moves the whole group.
+          const inSel = selectedGlassPanels.some(s => s.unitKey === u.key && s.panelIdx === pi);
+          const glassMulti = inSel && selectedGlassPanels.length > 1;
           dragState = {
             glassPanel: true,
+            glassMulti: glassMulti,
             unitKey: u.key,
             panelIdx: pi,
             sfPos: pos,
             el: el,
             rect: rect,
-            moved: false
+            moved: false,
+            startX: startX,
+            startY: startY
           };
+          if (glassMulti) {
+            dragState.glassItems = selectedGlassPanels.map(s => {
+              const gEl = wrap.querySelector(`.glass-marker[data-unit-key="${CSS.escape(s.unitKey)}"][data-panel-idx="${s.panelIdx}"]`);
+              if (!gEl) return null;
+              return {
+                unitKey: s.unitKey,
+                panelIdx: s.panelIdx,
+                el: gEl,
+                startLeft: parseFloat(gEl.style.left),
+                startTop:  parseFloat(gEl.style.top),
+                sfPos: state.positions[s.unitKey] || { x: 50, y: 50 }
+              };
+            }).filter(Boolean);
+          }
           el.style.cursor = 'grabbing';
           hidePlanTooltip();
         };

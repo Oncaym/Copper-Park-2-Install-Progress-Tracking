@@ -1104,6 +1104,8 @@
   .plan-wrap.edit-mode .glass-marker:active { cursor: grabbing; }
   /* dim SF markers in glass mode */
   .plan-wrap.glass-mode .plan-marker { opacity: 0.18; pointer-events: none; }
+  /* Glass mode "Hide SF": fully hide the storefront/door markers instead of dimming */
+  .plan-wrap.glass-mode.hide-sf .plan-marker { display: none; }
   /* batch bar */
   #glassBatchBar {
     display: none; align-items: center; gap: 8px;
@@ -1426,6 +1428,7 @@
       <button class="btn" id="glassMapBtn" onclick="toggleMapGlassMode()" style="font-size:12px;padding:5px 10px" title="Show glass panel circles on plan">🪟 Glass Mode</button>
       <button class="btn" id="doorModeBtn" onclick="toggleDoorMode()" style="font-size:12px;padding:5px 10px" title="Show only doors (SD) — hide storefront markers">🚪 Door Mode</button>
       <button class="btn" id="glassBatchBtn" onclick="toggleGlassBatchMode()" style="font-size:12px;padding:5px 10px;display:none" title="Batch select glass panels to update">☑ Batch Select</button>
+      <button class="btn" id="hideSfBtn" onclick="toggleHideSf()" style="font-size:12px;padding:5px 10px;display:none" title="Hide storefront markers while working on glass">🙈 Hide SF</button>
       <div style="flex:1" data-om-id="17a02737:81"></div>
       <label class="mode-toggle" data-om-id="17a02737:82">
         <input type="checkbox" id="hidePendingChk" onchange="renderPlan()" data-om-id="17a02737:83">
@@ -1452,8 +1455,8 @@
         <button onclick="planZoomReset()" title="重置 / Reset" data-om-id="17a02737:89"><span class="zoom-label" id="zoomLabel" data-om-id="17a02737:90">100%</span></button>
         <button onclick="planZoom(1.4)" title="放大 / Zoom in" data-om-id="17a02737:91">+</button>
       </div>
-      <div class="plan-wrap" id="planWrap" data-om-id="17a02737:92">
       <div id="selBox"></div>
+      <div class="plan-wrap" id="planWrap" data-om-id="17a02737:92">
       <img src="gf-plan.png" style="filter:invert(1)" alt="Cooper Park 2 — Ground Floor Plan (from DXF)" data-i18n-alt="img_alt_gf" class="plan-img" id="planImg" data-plan-gf="" data-om-id="17a02737:93">
       <div class="plan-tooltip" id="planTooltip" style="left: 1006.14px; top: 195.922px; display: none;" data-om-id="17a02737:94"><strong>SF01R</strong> · Storefront · North<br>
     <span style="color:var(--text-dim)">Installed · 5/13</span>
