@@ -1699,7 +1699,7 @@ function renderTimeline() {
   });
   const dates = [...groups.keys()].sort((a, b) => b.localeCompare(a));
   // Dot color priority: issue > framing > louver > caulking
-  const dotPriority = ['issue', 'framing', 'glass', 'louver', 'caulking'];
+  const dotPriority = ['fit-issue', 'issue', 'gc-inquiry', 'field-verify', 'framing', 'glass', 'louver', 'caulking'];
   const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
   tl.innerHTML = dates.map(date => {
@@ -1729,11 +1729,18 @@ function renderTimeline() {
               `<img src="${p}" alt="photo ${pi+1}" onclick="event.stopPropagation();openPhotoGallery(${i},${pi})">`
             ).join('')}${photos.length>6?`<span class="timeline-photo-more" onclick="event.stopPropagation();openPhotoGallery(${i},6)">+${photos.length-6}</span>`:''}</div>`
         : '';
+      const metaPills = [
+        l.ref   ? `<span class="meta-pill">单元 <b>${esc(l.ref)}</b></span>` : '',
+        l.party ? `<span class="meta-pill">对方 <b>${esc(l.party)}</b></span>` : '',
+        l.fault ? `<span class="meta-pill">归因 <b>${esc(l.fault)}</b></span>` : ''
+      ].filter(Boolean).join('');
+      const meta = metaPills ? `<div class="timeline-meta">${metaPills}</div>` : '';
       return `
       <div class="timeline-entry${isIssue?' is-issue':''}" data-log-idx="${i}" onclick="${onClick}" title="${title}">
         <button class="log-delete-btn" onclick="event.stopPropagation();deleteLog(${i})" title="${esc(t('log_delete'))}" aria-label="delete">×</button>
         <div class="timeline-content">${esc(l.content)}</div>
         <div class="timeline-tags">${tags}${camBadge}</div>
+        ${meta}
         ${thumbs}
       </div>`;
     }).join('');
@@ -2205,7 +2212,8 @@ function formatStatus(s) {
   return { installed:t('status_installed'), 'in-progress':t('status_in_progress'), issue:t('status_issue'), pending:t('status_pending') }[s] || s;
 }
 function categoryLabel(c) {
-  return { framing:'Framing', glass:'Glass', louver:'Louver', caulking:'Caulking', issue:'Issue' }[c] || c;
+  return { framing:'Framing', glass:'Glass', louver:'Louver', caulking:'Caulking', issue:'Issue',
+    'fit-issue':'装配问题', 'field-verify':'实测确认', 'gc-inquiry':'致GC函' }[c] || c;
 }
 
 /* -------- Modals -------- */
@@ -2406,6 +2414,7 @@ function openAddLog() {
   document.getElementById('l-date').value = new Date().toISOString().slice(0,10);
   setLogCategoryCheckboxes(['framing']);
   document.getElementById('l-content').value = '';
+  setRespFields({});
   _logPhotosDraft = [];
   renderLogPhotoThumbs();
   const inp = document.getElementById('l-photo-input'); if (inp) inp.value = '';
@@ -2420,11 +2429,21 @@ function editLog(idx) {
   document.getElementById('l-date').value = entry.date || '';
   setLogCategoryCheckboxes(getCats(entry));
   document.getElementById('l-content').value = entry.content || '';
+  setRespFields(entry);
   _logPhotosDraft = Array.isArray(entry.photos) ? entry.photos.slice() : [];
   renderLogPhotoThumbs();
   const inp = document.getElementById('l-photo-input'); if (inp) inp.value = '';
   document.getElementById('logDeleteBtn').style.display = '';
   document.getElementById('logModal').classList.add('show');
+}
+// Responsibility/evidence fields (ref / party / fault) in the log modal
+function setRespFields(entry) {
+  const r = document.getElementById('l-ref');
+  const p = document.getElementById('l-party');
+  const f = document.getElementById('l-fault');
+  if (r) r.value = entry.ref || '';
+  if (p) p.value = entry.party || '';
+  if (f) f.value = entry.fault || '';
 }
 function deleteLog(idx) {
   const entry = state.log[idx];
@@ -2460,6 +2479,13 @@ function saveLog() {
     content: document.getElementById('l-content').value.trim(),
     photos: _logPhotosDraft.slice()
   };
+  // Responsibility/evidence fields — only stored when non-empty
+  const _ref   = (document.getElementById('l-ref')   || {}).value;
+  const _party = (document.getElementById('l-party') || {}).value;
+  const _fault = (document.getElementById('l-fault') || {}).value;
+  if (_ref   && _ref.trim())   entry.ref   = _ref.trim();
+  if (_party && _party.trim()) entry.party = _party.trim();
+  if (_fault && _fault.trim()) entry.fault = _fault.trim();
   if (!entry.date || !entry.content) { toast(t('alert_fill_required')); return; }
   if (editingLogIdx !== null) {
     // Preserve auto/kind/autoUnits metadata when editing an auto-generated entry
