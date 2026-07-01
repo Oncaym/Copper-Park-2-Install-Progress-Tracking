@@ -1104,6 +1104,9 @@
   .plan-wrap.edit-mode .glass-marker:active { cursor: grabbing; }
   /* dim SF markers in glass mode */
   .plan-wrap.glass-mode .plan-marker { opacity: 0.18; pointer-events: none; }
+  /* In glass mode the box-select targets glass dots, so SF markers must never
+     show as selected (no leftover blue outline on the dimmed SF markers). */
+  .plan-wrap.glass-mode .plan-marker.sel { outline: none; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
   /* Glass mode "Hide SF": fully hide the storefront/door markers instead of dimming */
   .plan-wrap.glass-mode.hide-sf .plan-marker { display: none; }
   /* batch bar */

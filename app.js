@@ -1370,7 +1370,9 @@ function setupPlanInteractions() {
     if (e.target.closest('.plan-marker, .glass-marker')) return; // marker drag handled below
     e.preventDefault();                            // stop native drag/text-select auto-scroll
     // In glass mode the box selects glass dots; otherwise it selects SF markers.
-    if (mapGlassMode) clearGlassSelection(); else clearMarkerSelection();
+    // Always clear SF selection so stale blue outlines can't linger under glass mode.
+    clearMarkerSelection();
+    if (mapGlassMode) clearGlassSelection();
     // Draw the marquee in the NON-transformed viewport so it tracks the cursor
     // 1:1 regardless of zoom/pan. (planWrap carries the scale transform.)
     const vp = document.getElementById('planViewport');
@@ -2687,6 +2689,7 @@ function toggleMapGlassMode() {
   const hideSfBtn = document.getElementById('hideSfBtn');
   if (mapGlassMode) {
     wrap.classList.add('glass-mode');
+    clearMarkerSelection();   // drop any SF box-selection so it can't show under glass mode
     if (btn) { btn.textContent = '🗺 SF View'; btn.classList.add('btn-primary'); }
     if (batchBtn) batchBtn.style.display = '';
     if (hideSfBtn) hideSfBtn.style.display = '';
