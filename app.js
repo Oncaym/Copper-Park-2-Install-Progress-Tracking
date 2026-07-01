@@ -1269,6 +1269,10 @@ function setupPlanZoomPan() {
       return;
     }
 
+    // In edit mode a single-pointer background drag is a box-select, not a pan —
+    // so don't pan or auto-zoom here (that was dragging the whole plan + markers).
+    if (document.getElementById('editPositionMode')?.checked) return;
+
     // Single pointer pan
     if (!panActive) {
       if (Math.hypot(e.clientX - p.sx, e.clientY - p.sy) < PAN_THRESHOLD) return;
