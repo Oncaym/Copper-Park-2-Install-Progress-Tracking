@@ -2293,6 +2293,9 @@ function openUnit(id) {
   if (!u) return;
   editingUnitId = id;
   document.getElementById('modalTitle').textContent = t('edit_unit_title').replace('{id}', u.id);
+  // Doors don't have "framing" — relabel that tab to "Door" for SD units.
+  const _framingTab = document.getElementById('tab-framing');
+  if (_framingTab) _framingTab.textContent = isDoor(u) ? 'Door' : 'Framing';
   document.getElementById('m-id').value = u.id;
   document.getElementById('m-status').value = u.status;
   document.getElementById('m-date').value = u.date || '';
