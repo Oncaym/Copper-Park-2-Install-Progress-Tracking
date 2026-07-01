@@ -506,6 +506,10 @@ const YEAR = new Date().getFullYear(); // assumed log year
 
 const TODAY_ISO = new Date().toISOString().slice(0,10);
 function isPlanned(item) { return !!(item && item.date && item.date > TODAY_ISO); }
+// Doors are identified by an SD-prefixed id (all SD* units are doors),
+// or an explicit type === 'Door'. Storefront = everything else.
+function isDoor(u) { return !!u && (u.type === 'Door' || /^SD/i.test(u.id || '')); }
+let doorMode = false;  // when true, floor plan shows only doors (hides storefront)
 
 // Seed data extracted from PDF — Ground Floor + Level 2 units
 // Source: "GLASS and Louver Locations on plans.pdf"
@@ -1084,13 +1088,14 @@ function renderPlan() {
   state.units.forEach(u => {
     if ((u.level || 'GF') !== currentLevel) return;
     if (hidePending && u.status === 'pending') return;
+    if (doorMode && !isDoor(u)) return;   // Door Mode: hide storefront markers
     const pos = state.positions[u.key] || { x: 50, y: 50 };
     const m = document.createElement('div');
     let extra = '';
     if (hl && hl.size) {
       extra = hl.has((u.id || '').toUpperCase()) ? ' highlighted' : ' dimmed';
     }
-    m.className = `plan-marker ${u.status}${u.louver === 'yes' ? ' has-louver' : ''}${isPlanned(u) ? ' planned' : ''}${extra}`;
+    m.className = `plan-marker ${u.status}${isDoor(u) ? ' door' : ''}${u.louver === 'yes' ? ' has-louver' : ''}${isPlanned(u) ? ' planned' : ''}${extra}`;
     m.style.left = pos.x + '%';
     m.style.top  = pos.y + '%';
     {
@@ -1110,7 +1115,7 @@ function renderPlan() {
 
 function showPlanTooltip(e, u) {
   const tt = document.getElementById('planTooltip');
-  tt.innerHTML = `<strong>${u.id}</strong> · ${u.type} · ${u.zone}<br>
+  tt.innerHTML = `<strong>${u.id}</strong> · ${isDoor(u) ? 'Door' : u.type} · ${u.zone}<br>
     <span style="color:var(--text-dim)">${formatStatus(u.status)}${u.date ? ' · ' + formatDate(u.date) : ''}${u.louver==='yes' ? ' · Louver ✓' : ''}</span>
     ${u.note ? '<br><span style="color:var(--text-dim);font-size:10px">' + u.note + '</span>' : ''}`;
   const rect = e.currentTarget.getBoundingClientRect();
@@ -1679,7 +1684,7 @@ function renderTable() {
     return `
     <tr${rowCls} onclick="openUnit('${u.key}')" style="cursor:pointer">
       <td><strong>${u.id}</strong>${u.level==='L2' ? ' <span style="font-size:9px;background:var(--purple);color:#fff;padding:1px 5px;border-radius:6px;vertical-align:middle">L2</span>' : ''}</td>
-      <td>${u.type}<br><span style="color:var(--text-dim);font-size:11px">${u.zone}</span></td>
+      <td>${isDoor(u) ? '<span style="color:#22d3ee">Door</span>' : u.type}<br><span style="color:var(--text-dim);font-size:11px">${u.zone}</span></td>
       <td><span class="status-dot ${u.status}"></span>${formatStatus(u.status)}${plannedBadge}</td>
       <td>${u.date ? formatDate(u.date) : '<span style="color:var(--text-dim)">—</span>'}</td>
       <td style="font-size:12px;color:var(--text-dim);max-width:240px">${u.note || ''}</td>
@@ -2633,6 +2638,17 @@ function toggleMapGlassMode() {
     selectedGlassPanels = [];
     document.getElementById('glassBatchBar').style.display = 'none';
   }
+}
+
+// Door Mode: show only doors (SD units) on the floor plan; hide storefront markers.
+function toggleDoorMode() {
+  doorMode = !doorMode;
+  const btn = document.getElementById('doorModeBtn');
+  if (btn) {
+    btn.textContent = doorMode ? '🚪 All Units' : '🚪 Door Mode';
+    btn.classList.toggle('btn-primary', doorMode);
+  }
+  renderPlan();
 }
 
 function toggleGlassBatchMode() {

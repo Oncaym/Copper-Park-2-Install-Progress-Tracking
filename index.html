@@ -337,6 +337,13 @@
   .plan-marker.in-progress { background: var(--yellow); }
   .plan-marker.issue { background: var(--red); animation: pulse 1.6s infinite; }
   .plan-marker.pending { background: #6c7682; opacity: 0.85; }
+  /* Doors (SD-prefixed) — square shape + cyan ring so they read distinctly from
+     the round storefront markers, while the fill still encodes install status. */
+  .plan-marker.door {
+    border-radius: 4px;
+    border-color: #22d3ee;
+    box-shadow: 0 0 0 1px #22d3ee, 0 2px 6px rgba(0,0,0,0.45);
+  }
   .plan-marker.has-louver::after {
     content: 'L';
     position: absolute;
@@ -1417,6 +1424,7 @@
       </label>
       <button class="btn" id="placeBtn" onclick="togglePlaceMode()" style="font-size:12px;padding:5px 10px" data-i18n="tool_place" data-om-id="17a02737:80">➕ Add new marker on plan</button>
       <button class="btn" id="glassMapBtn" onclick="toggleMapGlassMode()" style="font-size:12px;padding:5px 10px" title="Show glass panel circles on plan">🪟 Glass Mode</button>
+      <button class="btn" id="doorModeBtn" onclick="toggleDoorMode()" style="font-size:12px;padding:5px 10px" title="Show only doors (SD) — hide storefront markers">🚪 Door Mode</button>
       <button class="btn" id="glassBatchBtn" onclick="toggleGlassBatchMode()" style="font-size:12px;padding:5px 10px;display:none" title="Batch select glass panels to update">☑ Batch Select</button>
       <div style="flex:1" data-om-id="17a02737:81"></div>
       <label class="mode-toggle" data-om-id="17a02737:82">
