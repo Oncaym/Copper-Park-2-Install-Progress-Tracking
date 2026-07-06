@@ -97,6 +97,29 @@
     --purple: #bc8cff;
     --orange: #ff8c42;
   }
+  /* ===== Day mode (light theme) ===== */
+  body.day-mode {
+    --bg: #f2f4f7;
+    --panel: #ffffff;
+    --panel-2: #e9edf2;
+    --border: #d0d7de;
+    --text: #1f2328;
+    --text-dim: #59636e;
+    --accent: #0969da;
+    --accent-2: #218bff;
+    --green: #1a7f37;
+    --yellow: #9a6700;
+    --red: #cf222e;
+    --purple: #8250df;
+    --orange: #bc4c00;
+  }
+  body.day-mode header { background: linear-gradient(135deg, #ffffff 0%, #e9edf2 100%); }
+  body.day-mode .btn:hover { background: #dde3ea; border-color: #b6c0cb; }
+  body.day-mode .glass-pending   { background:rgba(89,99,110,0.12);  color:#59636e; }
+  body.day-mode .glass-ready     { background:rgba(9,105,218,0.10);  color:#0969da; }
+  body.day-mode .glass-installed { background:rgba(26,127,55,0.10);  color:#1a7f37; }
+  body.day-mode .glass-issue     { background:rgba(207,34,46,0.10);  color:#cf222e; }
+  body.day-mode .cat-chip:hover  { border-color:#8c959f; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -1345,6 +1368,26 @@
 </style>
 <style data-designer-overlay="1"></style></head>
 <body data-om-id="17a02737:4">
+<script>
+(function(){
+  if (localStorage.getItem('cp2_theme') === 'day') document.body.classList.add('day-mode');
+})();
+function applyThemeUI(){
+  const day = document.body.classList.contains('day-mode');
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = day ? '🌙' : '☀️';
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', day ? '#f2f4f7' : '#0f1419');
+}
+function toggleTheme(){
+  const day = document.body.classList.toggle('day-mode');
+  localStorage.setItem('cp2_theme', day ? 'day' : 'night');
+  applyThemeUI();
+  try { if (typeof renderCharts === 'function') renderCharts(); } catch(e){}
+  try { if (typeof renderGlassChart === 'function') renderGlassChart(); } catch(e){}
+}
+document.addEventListener('DOMContentLoaded', applyThemeUI);
+</script>
 
 <header data-om-id="17a02737:5">
   <div class="header-inner" data-om-id="17a02737:6">
@@ -1353,6 +1396,7 @@
       <p data-i18n="header_sub" data-om-id="17a02737:9">Broadway Builder · Ground Floor · Installed Framing &amp; Louver Tracking</p>
     </div>
     <div class="header-actions" data-om-id="17a02737:10">
+      <button class="btn" type="button" id="themeToggle" onclick="toggleTheme()" title="日间/夜间模式 Day/Night">☀️</button>
       <div class="lang-switcher" id="langSwitcher" data-om-id="17a02737:11">
         <button class="lang-btn active" data-lang="en" data-om-id="17a02737:12">ENG</button>
         <button class="lang-btn" data-lang="zh" data-om-id="17a02737:13">中文</button>

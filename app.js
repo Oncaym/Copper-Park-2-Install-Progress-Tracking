@@ -1824,6 +1824,12 @@ function renderTimeline() {
   }).join('');
 }
 
+function isDayMode(){ return document.body.classList.contains('day-mode'); }
+function chartTickColor(){ return isDayMode() ? '#59636e' : '#8b949e'; }
+function chartGridColor(){ return isDayMode() ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.05)'; }
+function chartTextColor(){ return isDayMode() ? '#1f2328' : '#e6edf3'; }
+function chartRingBorder(){ return isDayMode() ? '#ffffff' : '#1a2028'; }
+
 function renderCharts() {
   if (!Array.isArray(state.log)) state.log = Object.values(state.log || {});
   // Trend chart - by date, count by category
@@ -1850,8 +1856,8 @@ function renderCharts() {
       maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
-        x: { stacked: true, ticks:{ color:'#8b949e' }, grid:{ color:'rgba(255,255,255,0.05)' } },
-        y: { stacked: true, ticks:{ color:'#8b949e', stepSize:1 }, grid:{ color:'rgba(255,255,255,0.05)' } }
+        x: { stacked: true, ticks:{ color:chartTickColor() }, grid:{ color:chartGridColor() } },
+        y: { stacked: true, ticks:{ color:chartTickColor(), stepSize:1 }, grid:{ color:chartGridColor() } }
       }
     }
   });
@@ -1875,7 +1881,7 @@ function renderCharts() {
       datasets: [{
         data: [counts.installed, counts['in-progress'], counts.issue, counts.pending],
         backgroundColor: ['#3fb950','#d29922','#f85149','#4d5764'],
-        borderColor: '#1a2028',
+        borderColor: chartRingBorder(),
         borderWidth: 2,
       }]
     },
@@ -1892,7 +1898,7 @@ function renderCharts() {
         evt.native.target.style.cursor = (els && els.length) ? 'pointer' : 'default';
       },
       plugins: {
-        legend: { position: 'bottom', labels: { color:'#e6edf3', boxWidth: 12, padding: 12 } },
+        legend: { position: 'bottom', labels: { color:chartTextColor(), boxWidth: 12, padding: 12 } },
         tooltip: {
           backgroundColor: 'rgba(20,24,30,0.96)',
           borderColor: '#30363d',
@@ -2163,7 +2169,7 @@ function renderGlassChart() {
       datasets: [{
         data: counts,
         backgroundColor: ['#3fb950','#58a6ff','#4d5764','#f85149','#2d333b'],
-        borderColor: '#1a2028',
+        borderColor: chartRingBorder(),
         borderWidth: 2,
       }]
     },
@@ -2172,7 +2178,7 @@ function renderGlassChart() {
       maintainAspectRatio: false,
       cutout: '65%',
       plugins: {
-        legend: { position:'bottom', labels:{ color:'#e6edf3', boxWidth:12, padding:12 } }
+        legend: { position:'bottom', labels:{ color:chartTextColor(), boxWidth:12, padding:12 } }
       }
     }
   });
