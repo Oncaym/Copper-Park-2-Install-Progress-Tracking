@@ -325,6 +325,8 @@
     isReadOnly = true;
     console.warn('[CloudSync] read-only mode:', reason);
     showReadOnlyBanner(reason);
+    // Let the app hide editor-only controls the moment we know (F-033 v2).
+    try { if (typeof window._onReadOnly === 'function') window._onReadOnly(); } catch (e) {}
     // Snapshot whatever the app currently has as the "good" baseline so
     // we have something to revert to even if we never got a cloud read.
     // (The HTML exposes its local `state` as `window.state` for this.)

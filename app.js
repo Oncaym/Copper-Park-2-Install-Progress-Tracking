@@ -2352,7 +2352,10 @@ function _eviCell(label, inner) {
     + `<label style="display:block;font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.3px;margin:0">${label}</label>`
     + inner + `</div>`;
 }
-const _EVI_IN = 'style="width:100%;min-width:0;box-sizing:border-box"';
+// Dark input styling copied from `.form-row input` so project-level boxes in the
+// Things-to-Solve modal (which are NOT inside a .form-row) match the unit RFI tab
+// instead of rendering as default white.
+const _EVI_IN = 'style="width:100%;min-width:0;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:13px;font-family:inherit"';
 function renderRfiList(rows) {
   const box = document.getElementById('rfi-list'); if (!box) return;
   const esc = s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -3528,6 +3531,8 @@ const FEATURE_MODULES = [
   { k:'warehouseLink', emoji:'📦', label:{en:'Warehouse page',zh:'Warehouse 仓库页入口',ko:'Warehouse 창고 페이지 입구'},             sel:['a[href="warehouse.html"]'] },
   { k:'drawingsBtn',   emoji:'📁', label:{en:'Drawings button',zh:'Drawings 图纸按钮',ko:'Drawings 도면 버튼'},                sel:['button[onclick="openDrawings()"]'] },
   { k:'openItemsBtn',  emoji:'⏳', label:{en:'Open Items panel',zh:'Open Items 卡点面板',ko:'Open Items 패널'},               sel:['#openItemsBtn'] },
+  // defaultOff: hidden unless a teammate turns it on in the ⚙ Modules panel.
+  { k:'glassTriage',   emoji:'🪟', label:{en:'Glass Triage page',zh:'Glass Triage 玻璃到货页入口',ko:'Glass Triage 페이지 입구'}, sel:['a[href="friday-triage.html"]'], defaultOff:true },
 ];
 
 /* ------------------------------------------------------------
@@ -3569,9 +3574,11 @@ function computeOpenItems() {
   return items;
 }
 function _openItemsT() {
-  if (currentLang === 'zh') return { title: '⏳ Open Items · 跨方卡点', desc: '汇总所有 unit 里状态为 open 的 RFI/inquiry，按卡住天数从久到近排序。点击 unit 行可直接打开该 unit；项目级条目不挂在任何单个 unit 上，但通常会影响一批 unit（比如门铰链变更只影响门），可以直接在下面编辑，并在"Related Units"里写清楚影响范围。', empty: '目前没有开着的 item 🎉', unit: 'Unit', party: '对方', subject: '事项', days: '天数', projectHeader: '项目级（影响一批 unit，不挂单个 unit）', addBtn: '+ 新增项目级条目', relatedUnits: 'Related Units' };
-  if (currentLang === 'ko') return { title: '⏳ Open Items · 상호 지연 항목', desc: '모든 unit의 open 상태 RFI/inquiry를 모아 지연일 순으로 정렬합니다. Unit 행을 클릭하면 바로 엽니다. 프로젝트 레벨 항목은 하나의 unit에 속하지 않지만 보통 여러 unit에 영향을 줍니다(예: 문 힌지 변경은 문에만 영향). 아래에서 직접 편집하고 "Related Units"에 영향 범위를 적어주세요.', empty: '열려있는 항목이 없습니다 🎉', unit: 'Unit', party: '상대', subject: '내용', days: '일수', projectHeader: '프로젝트 레벨 (여러 unit에 영향, 단일 unit 아님)', addBtn: '+ 프로젝트 항목 추가', relatedUnits: 'Related Units' };
-  return { title: '⏳ Open Items', desc: 'Every unit’s open-status RFI/inquiry rows, aggregated and sorted oldest-first. Click a unit row to open it. Project-level items aren’t tied to one unit, but usually affect a batch of them (e.g. a door-hinge change only touches doors) — edit them directly below and note the affected scope in Related Units.', empty: 'Nothing open right now 🎉', unit: 'Unit', party: 'Party', subject: 'Subject', days: 'Days', projectHeader: 'Project-level (affects a batch of units, not one)', addBtn: '+ Add project-level item', relatedUnits: 'Related Units' };
+  // Title kept in English on purpose — it's the main urgency cue and is GC-facing.
+  // Description intentionally dropped (Leo: unnecessary). Other labels stay localized.
+  if (currentLang === 'zh') return { title: '🔧 Things to Solve', desc: '', empty: '目前没有需要处理的事项 🎉', unit: 'Unit', party: '对方', subject: '事项', days: '天数', projectHeader: '项目级（影响一批 unit，不挂单个 unit）', addBtn: '+ 新增项目级条目', relatedUnits: 'Related Units' };
+  if (currentLang === 'ko') return { title: '🔧 Things to Solve', desc: '', empty: '처리할 항목이 없습니다 🎉', unit: 'Unit', party: '상대', subject: '내용', days: '일수', projectHeader: '프로젝트 레벨 (여러 unit에 영향, 단일 unit 아님)', addBtn: '+ 프로젝트 항목 추가', relatedUnits: 'Related Units' };
+  return { title: '🔧 Things to Solve', desc: '', empty: 'Nothing to solve right now 🎉', unit: 'Unit', party: 'Party', subject: 'Subject', days: 'Days', projectHeader: 'Project-level (affects a batch of units, not one)', addBtn: '+ Add project-level item', relatedUnits: 'Related Units' };
 }
 function openItemsModal() {
   const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -3591,8 +3598,7 @@ function openItemsModal() {
       ${_daysOpenBadge(it.days)}
     </div>`).join('') : `<div style="padding:16px 2px;color:var(--text-dim)">${T.empty}</div>`;
   ov.innerHTML = `<div class="modal" style="max-width:640px">
-      <h3>${T.title}</h3>
-      <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">${T.desc}</div>
+      <h3 style="margin-bottom:12px">${T.title}</h3>
       <div style="display:grid;grid-template-columns:1fr 1fr 2fr auto;gap:8px;padding:0 2px 6px;font-size:11px;color:var(--text-dim);text-transform:uppercase;border-bottom:1px solid var(--border,rgba(255,255,255,.15))">
         <span>${T.unit}</span><span>${T.party}</span><span>${T.subject}</span><span>${T.days}</span>
       </div>
@@ -3668,22 +3674,39 @@ function saveProjectItems() {
   sweepOrphanRfiLogs('project', state.projectItems);
   saveState();
   openItemsModal(); // re-render (refreshes both sections + day badges + header count)
-  toast('Open Items updated ✓');
+  toast('Updated ✓');
 }
 function _injectOpenItemsBtn() {
   let b = document.getElementById('openItemsBtn');
   const bar = document.querySelector('.header-actions'); if (!bar) return;
   if (!b) {
     b = document.createElement('button'); b.className = 'btn'; b.id = 'openItemsBtn'; b.type = 'button';
-    b.title = 'Open Items · 跨方卡点一览'; b.onclick = openItemsModal;
+    b.title = 'Things to Solve'; b.onclick = openItemsModal;
     bar.appendChild(b);
   }
   const n = computeOpenItems().length;
-  b.textContent = `⏳ ${n}`;
-  // Pilot: make the blocker panel the thing you notice first. Colour + label it when
-  // there are open items so GC's eye lands on it instead of a static progress number.
-  if (n > 0) { b.style.background = 'var(--red,#e5484d)'; b.style.color = '#fff'; b.style.fontWeight = '600'; b.title = `${n} open blocker(s) · 跨方卡点`; }
-  else { b.style.background = ''; b.style.color = ''; b.style.fontWeight = ''; }
+  b.textContent = `🔧 ${n}`;
+  // Colour + bold when there's something to solve so the eye lands on it.
+  if (n > 0) { b.style.background = 'var(--red,#e5484d)'; b.style.color = '#fff'; b.style.fontWeight = '600'; b.title = `${n} thing(s) to solve`; }
+  else { b.style.background = ''; b.style.color = ''; b.style.fontWeight = ''; b.title = 'Things to Solve'; }
+}
+
+/* Attention banner (F-033 v2): a persistent bar at the top of <main> instead of the
+   auto-popping modal (which read on desktop as a page glitch and did not fire reliably
+   on mobile). Renders on every render(), reflects the live count, works on all sizes. */
+function _injectBlockerBanner() {
+  const main = document.querySelector('main'); if (!main) return;
+  let bn = document.getElementById('blockerBanner');
+  const n = (typeof computeOpenItems === 'function') ? computeOpenItems().length : 0;
+  if (n <= 0) { if (bn) bn.remove(); return; }
+  const label = n === 1 ? '1 thing to solve' : `${n} things to solve`;
+  if (!bn) {
+    bn = document.createElement('div'); bn.id = 'blockerBanner';
+    bn.style.cssText = 'display:flex;align-items:center;gap:10px;cursor:pointer;margin:0 0 14px;padding:11px 15px;border-radius:9px;background:rgba(229,72,77,.13);border:1px solid var(--red,#e5484d);color:var(--red,#e5484d);font-weight:600;font-size:14px';
+    bn.onclick = openItemsModal;
+    main.insertBefore(bn, main.firstChild);
+  }
+  bn.innerHTML = `<span style="font-size:16px">🔧</span><span>${label}</span><span style="margin-left:auto;font-weight:500;opacity:.85">Review →</span>`;
 }
 
 /* ==================== 2-week pilot add-ons (F-033) ====================
@@ -3707,13 +3730,13 @@ function buildDailyPushText(){
   const open = (typeof computeOpenItems==='function') ? computeOpenItems() : []; // oldest-first
   const dLabel = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
   const L = [];
-  L.push(`CP2 Curtain Wall / 幕墙安装 — ${dLabel}`);
+  L.push(`CP2 Curtain Wall — ${dLabel}`);
   L.push('');
   L.push(`Installed today (${installedToday.length}): ${installedToday.length ? installedToday.join(', ') : '—'}`);
   L.push(`Planned tomorrow (${planTomorrow.length}): ${planTomorrow.length ? planTomorrow.join(', ') : 'TBD'}`);
   L.push('');
   if (open.length){
-    L.push(`Open blockers / 跨方卡点 (${open.length}):`);
+    L.push(`Open blockers (${open.length}):`);
     open.slice(0, 8).forEach(it => {
       const label = it.scope==='project' ? 'PROJECT' : it.unitId;
       const subj  = it.subject || it.ref || '(no subject)';
@@ -3741,7 +3764,7 @@ function openDailyPush(){
     document.body.appendChild(ov);
     ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('show'); });
   }
-  const zh = currentLang==='zh';
+  const zh = false; // GC-facing push tool is English-only regardless of UI language
   ov.innerHTML = `<div class="modal" style="max-width:620px">
       <h3>📤 ${zh?'今日 GC 推送':'Daily GC push'}</h3>
       <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">${zh?'用当前云端数据生成。可直接改，再复制或生成邮件草稿发给 GC。':'Generated from live cloud data. Edit if needed, then copy or open an email draft to send to the GC.'}</div>
@@ -3756,7 +3779,7 @@ function openDailyPush(){
 }
 function _copyDailyPush(){
   const ta = document.getElementById('dailyPushText'); if (!ta) return;
-  const done = () => { if (typeof toast==='function') toast(currentLang==='zh'?'已复制 ✓':'Copied ✓'); };
+  const done = () => { if (typeof toast==='function') toast('Copied ✓'); };
   if (navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(ta.value).then(done).catch(()=>{ ta.select(); document.execCommand('copy'); done(); }); }
   else { ta.select(); document.execCommand('copy'); done(); }
 }
@@ -3805,20 +3828,19 @@ function openUsagePanel(){
   } catch(e){ const body=document.getElementById('usageBody'); if(body) body.textContent = String(e); }
 }
 
-// Pilot landing emphasis: on first load of a browser session, if there are open
-// blockers, pop the Open Items panel once so it's the first thing seen (not repeated
-// on every render/edit — editors work in here all day).
-function _pilotAutoOpenBlockers(){
-  try {
-    const today = new Date().toISOString().slice(0,10);
-    const seen = sessionStorage.getItem('cp2_blockers_shown');
-    if (seen === today) return;
-    if (typeof computeOpenItems==='function' && computeOpenItems().length > 0){
-      sessionStorage.setItem('cp2_blockers_shown', today);
-      setTimeout(() => { if (typeof openItemsModal==='function') openItemsModal(); }, 900);
-    }
-  } catch(e){}
+// Read-only users (GC / non-allowlist accounts) only need the read-only view: hide the
+// editor-only entry points — Chat updater, Warehouse, Modules toggle, and the Daily GC
+// push generator (a Leo tool). CloudSync.isReadOnly() flips async after the allowlist
+// check, so this runs on every render() and is also re-fired from cloud-sync's
+// enterReadOnlyMode() via window._onReadOnly (below).
+const _READONLY_HIDE = ['a[href="/chat"]', 'a[href="warehouse.html"]', '#modulesBtn', '#dailyPushBtn'];
+function applyReadOnlyUI(){
+  const ro = !!(window.CloudSync && typeof window.CloudSync.isReadOnly === 'function' && window.CloudSync.isReadOnly());
+  if (!ro) return; // hide-only — never un-hide, so we don't clobber Modules' own toggling
+  _READONLY_HIDE.forEach(q => document.querySelectorAll(q).forEach(el => { el.style.display = 'none'; }));
 }
+// Let cloud-sync notify us the moment it flips a session to read-only.
+window._onReadOnly = function(){ try { applyReadOnlyUI(); } catch(e){} };
 /* ==================== end F-033 ==================== */
 function moduleLabel(m){ const L=m.label; return (m.emoji?m.emoji+' ':'')+((L&&(L[currentLang]||L.en))||m.k); }
 function _modT(){
@@ -3826,7 +3848,12 @@ function _modT(){
   if(currentLang==='ko') return {title:'⚙ Modules · 기능 모듈', desc:'팀 전체에 적용(저장 시 클라우드 동기화, Edit History에 표시). 끄면 입구만 숨기며 데이터는 삭제되지 않습니다.', cancel:'취소', save:'저장'};
   return {title:'⚙ Modules', desc:'Applies to the whole team (cloud-synced on save, shows in Edit History). Off just hides the entry — data is never deleted.', cancel:'Cancel', save:'Save'};
 }
-function featureOn(k){ const f=(typeof state!=='undefined' && state && state.features)||{}; return f[k]!==false; }
+function featureOn(k){
+  const f=(typeof state!=='undefined' && state && state.features)||{};
+  // No explicit team setting yet → honor the module's defaultOff (else default ON).
+  if(f[k]===undefined){ const m=FEATURE_MODULES.find(x=>x.k===k); if(m && m.defaultOff) return false; }
+  return f[k]!==false;
+}
 function applyFeatures(){
   if(typeof state==='undefined' || !state) return;
   FEATURE_MODULES.forEach(m=>{
@@ -3866,7 +3893,7 @@ function _injectModulesBtn(){
 }
 // Re-apply after every render so remote toggles from teammates take effect live.
 const _renderBase = render;
-render = function(){ _renderBase(); applyFeatures(); _injectModulesBtn(); _injectOpenItemsBtn(); _injectDailyPushBtn(); };
+render = function(){ _renderBase(); applyFeatures(); _injectModulesBtn(); _injectOpenItemsBtn(); _injectDailyPushBtn(); _injectBlockerBanner(); applyReadOnlyUI(); };
 
 /* boot */
 function initApp() {
@@ -3912,7 +3939,6 @@ function initApp() {
     delete state._mergeNote;
     setTimeout(() => toast(_note + ' — see left margin / L2 tab'), 600);
   }
-  _pilotAutoOpenBlockers(); // F-033: surface blockers first, once per session
 }
 
 // Fetch the team's baseline snapshot before running initApp.
