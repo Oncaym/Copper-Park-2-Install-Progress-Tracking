@@ -24,12 +24,19 @@
   let auth = null;
   let db = null;
   let currentUser = null;
-  let isEditor = false;   // whether currentUser is in /allowlist (can write)
 
   let suppressNextSave = false;   // true while applying a remote snapshot (don't push it back)
   let pendingState = null;         // debounced push buffer
   let pushTimer = null;
   let lastDescription = null;      // optional description passed to next push (for history)
+
+  // Read-only mode: user is signed in but not in the /allowlist node.
+  // We detect this via a permission_denied error on the first state read
+  // (or on the presence write). When true, any saveState() attempt is
+  // intercepted: we toast the user and revert local state to the last
+  // known cloud snapshot.
+  let isReadOnly = false;
+  let lastRemoteSnapshot = null;   // last good remote state (for revert)
 
   // ---------- Public API ----------
   window.CloudSync = {
@@ -54,8 +61,8 @@
     // Force-flush any pending push immediately
     flush() { if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; flushPush(); } },
     isSignedIn() { return !!currentUser; },
-    isEditor() { return isEditor; },
     currentUser() { return currentUser; },
+    isReadOnly() { return isReadOnly; },
     logout() { if (auth) auth.signOut(); },
     openHistory() { openHistoryPanel(); },
   };
@@ -68,9 +75,9 @@
     gate.innerHTML = `
       <div class="cs-auth-card">
         <div class="cs-auth-brand">
-          <div class="cs-auth-logo">CP2</div>
+          <div class="cs-auth-logo">${(window.PROJECT || {}).code || ""}</div>
           <div>
-            <div class="cs-auth-title">Cooper Park 2</div>
+            <div class="cs-auth-title">${(window.PROJECT || {}).name || "Installation Tracker"}</div>
             <div class="cs-auth-sub">Installation Progress Monitor</div>
           </div>
         </div>
@@ -178,80 +185,21 @@
   function onAuthChanged(user) {
     currentUser = user;
     if (user) {
-      // Check editor status BEFORE mounting UI so viewer-mode styles apply on first paint.
-      checkEditorStatus().then(() => {
-        hideAuthGate();
-        applyRoleToBody();
-        mountStatusBadge();
-        updateBadge();
-        updateRoleChip();
-        if (!isEditor) showViewerBanner();
-        subscribeToState();
-        if (isEditor) subscribeToPresence();   // rules block viewers from writing presence
-      });
+      hideAuthGate();
+      mountStatusBadge();
+      updateBadge();
+      subscribeToState();
+      subscribeToPresence();
     } else {
-      isEditor = false;
-      applyRoleToBody();
-      hideViewerBanner();
+      // Clear read-only flag + banner so the next sign-in starts clean.
+      isReadOnly = false;
+      lastRemoteSnapshot = null;
+      hideReadOnlyBanner();
       unmountStatusBadge();
       showAuthGate();
       // Stop listening (Firebase auto-unsubs when ref handle is dropped, but be defensive)
       if (db) try { db.ref('state').off(); } catch(e){}
     }
-  }
-
-  async function checkEditorStatus() {
-    isEditor = false;
-    if (!currentUser || !db) return;
-    try {
-      const emailKey = currentUser.email.replace(/\./g, ',');
-      const snap = await db.ref('allowlist/' + emailKey).once('value');
-      isEditor = snap.exists();
-    } catch (err) {
-      console.warn('Allowlist check failed:', err);
-      isEditor = false;
-    }
-  }
-
-  function applyRoleToBody() {
-    if (!currentUser) {
-      delete document.body.dataset.csRole;
-    } else {
-      document.body.dataset.csRole = isEditor ? 'editor' : 'viewer';
-    }
-  }
-
-  function updateRoleChip() {
-    let chip = document.getElementById('cs-role-chip');
-    if (!chip) return;
-    if (isEditor) {
-      chip.textContent = 'Editor';
-      chip.className = 'cs-role-chip editor';
-      chip.title = 'You can save changes';
-    } else {
-      chip.textContent = 'View only';
-      chip.className = 'cs-role-chip viewer';
-      chip.title = 'You can view but not save changes — ask an admin to add your email to the editor allowlist';
-    }
-  }
-
-  function showViewerBanner() {
-    // Only show on the main tracker — chat.html has its own role indicator in its header.
-    if (!document.querySelector('.header-actions')) return;
-    if (document.getElementById('cs-viewer-banner')) return;
-    const b = document.createElement('div');
-    b.id = 'cs-viewer-banner';
-    b.innerHTML = `
-      <span class="cs-vb-icon">👁</span>
-      <span class="cs-vb-text">You're in <strong>view-only</strong> mode — edits won't be saved. Ask an admin to add you to the editor allowlist.</span>
-      <button class="cs-vb-dismiss" title="Dismiss">×</button>
-    `;
-    document.body.appendChild(b);
-    b.querySelector('.cs-vb-dismiss').addEventListener('click', () => b.remove());
-  }
-  function hideViewerBanner() {
-    const b = document.getElementById('cs-viewer-banner');
-    if (b) b.remove();
   }
 
   // ---------- Header status badge ----------
@@ -267,7 +215,6 @@
         <span class="cs-dot" id="cs-conn-dot"></span>
         <span class="cs-status-text" id="cs-status-text">Connecting…</span>
       </button>
-      <span class="cs-role-chip" id="cs-role-chip"></span>
       <div class="cs-user-menu">
         <button class="cs-user-btn" id="cs-user-btn">
           <span class="cs-user-avatar" id="cs-user-avatar"></span>
@@ -287,37 +234,10 @@
     document.getElementById('cs-history-btn').addEventListener('click', openHistoryPanel);
     const userBtn = document.getElementById('cs-user-btn');
     const dropdown = document.getElementById('cs-user-dropdown');
-
-    // Move the dropdown out of .header-actions (which clips with overflow-x: auto on mobile)
-    // and attach to <body>. We re-position it under the button each time it opens.
-    document.body.appendChild(dropdown);
-    dropdown.style.position = 'fixed';
-
-    function positionDropdown() {
-      const r = userBtn.getBoundingClientRect();
-      const dw = dropdown.offsetWidth || 180;
-      const vw = window.innerWidth;
-      let left = r.right - dw;
-      if (left < 8) left = 8;
-      if (left + dw > vw - 8) left = vw - dw - 8;
-      dropdown.style.top  = (r.bottom + 6) + 'px';
-      dropdown.style.left = left + 'px';
-      dropdown.style.right = 'auto';
-    }
-
     userBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const willOpen = !dropdown.classList.contains('open');
-      if (willOpen) positionDropdown();
       dropdown.classList.toggle('open');
     });
-    window.addEventListener('resize', () => {
-      if (dropdown.classList.contains('open')) positionDropdown();
-    });
-    window.addEventListener('scroll', () => {
-      if (dropdown.classList.contains('open')) positionDropdown();
-    }, true);
-
     document.addEventListener('click', () => dropdown.classList.remove('open'));
     dropdown.addEventListener('click', (e) => {
       const action = e.target.dataset.action;
@@ -374,35 +294,97 @@
       if (!remote) {
         // First time anyone has touched this DB. Seed it with whatever
         // local state we have so the team has a starting point.
-        // Only editors can seed — viewers' writes would be rejected by rules.
-        if (window.state && isEditor) {
+        if (window.state) {
           pushNow(window.state, 'Initialized cloud state from local snapshot');
         }
         return;
       }
+      // Stash the cloud snapshot so we can revert read-only users to it.
+      const { _clientId, _ts, _by, _desc, ...stateData } = remote;
+      lastRemoteSnapshot = JSON.parse(JSON.stringify(stateData));
+
       // Our own echo — ignore.
       if (remote._clientId === CLIENT_ID) return;
 
       // Remote update from another client — replace local state.
-      const { _clientId, _ts, _by, _desc, ...stateData } = remote;
       window._cloudApplyRemoteState(stateData, { by: _by, ts: _ts, desc: _desc });
     }, (err) => {
       console.error('Firebase state listen failed:', err);
       setConnState('offline');
+      // PERMISSION_DENIED on /state means this account is not in /allowlist.
+      // Flip into read-only mode so save attempts are blocked locally.
+      if (err && (err.code === 'PERMISSION_DENIED' || /permission/i.test(err.message || ''))) {
+        enterReadOnlyMode('Your account is not on the allowlist — read-only mode');
+      }
     });
+  }
+
+  // ---------- Read-only mode ----------
+  function enterReadOnlyMode(reason) {
+    if (isReadOnly) return;
+    isReadOnly = true;
+    console.warn('[CloudSync] read-only mode:', reason);
+    showReadOnlyBanner(reason);
+    // Snapshot whatever the app currently has as the "good" baseline so
+    // we have something to revert to even if we never got a cloud read.
+    // (The HTML exposes its local `state` as `window.state` for this.)
+    if (!lastRemoteSnapshot && window.state) {
+      try {
+        lastRemoteSnapshot = JSON.parse(JSON.stringify(window.state));
+      } catch (e) {
+        console.warn('[CloudSync] failed to snapshot baseline state:', e);
+      }
+    }
+  }
+
+  function showReadOnlyBanner(reason) {
+    if (document.getElementById('cs-readonly-banner')) return;
+    const bar = document.createElement('div');
+    bar.id = 'cs-readonly-banner';
+    bar.innerHTML = `
+      <span class="cs-ro-icon">🔒</span>
+      <span class="cs-ro-text">${escapeHtml(reason || 'Read-only mode — you do not have edit permission')}</span>
+      <span class="cs-ro-hint">Ask an admin to add your email to the allowlist if you need to edit.</span>
+    `;
+    document.body.appendChild(bar);
+  }
+  function hideReadOnlyBanner() {
+    const el = document.getElementById('cs-readonly-banner');
+    if (el) el.remove();
   }
 
   // Called by the HTML's monkey-patched saveState() — debounces ~350ms.
   window._cloudQueuePush = function(state, description) {
     if (suppressNextSave) return;       // applying a remote update, don't echo
     if (!currentUser) return;            // not signed in, nothing to push
-    if (!isEditor) return;               // viewer mode — local edits don't persist
+
+    // Read-only user — block the save and revert UI to the cloud snapshot.
+    if (isReadOnly) {
+      if (window.toast) window.toast('⚠ You do not have edit permission — changes were not saved');
+      revertToCloudSnapshot();
+      return;
+    }
+
     pendingState = state;
     if (description) lastDescription = description;
     setConnState('syncing');
     if (pushTimer) clearTimeout(pushTimer);
     pushTimer = setTimeout(flushPush, 350);
   };
+
+  function revertToCloudSnapshot() {
+    if (!window._cloudApplyRemoteState) return;
+    if (!lastRemoteSnapshot) {
+      // We have no baseline at all (e.g. read-only user with no localStorage
+      // history). Best we can do is warn — the UI will stay as-is until the
+      // user reloads.
+      console.warn('[CloudSync] cannot revert — no baseline snapshot. Reload to discard changes.');
+      return;
+    }
+    // Deep-clone so the caller can't mutate our baseline by reference.
+    const fresh = JSON.parse(JSON.stringify(lastRemoteSnapshot));
+    window._cloudApplyRemoteState(fresh, { by: 'cloud', desc: '(reverted — no edit permission)' });
+  }
 
   function flushPush() {
     pushTimer = null;
@@ -432,6 +414,15 @@
     }).catch((err) => {
       console.error('State push failed:', err);
       setConnState('offline');
+      // PERMISSION_DENIED here means the user is not allowed to write —
+      // either removed from /allowlist mid-session, or never was.
+      // Flip to read-only and revert their local changes.
+      if (err && (err.code === 'PERMISSION_DENIED' || /permission/i.test(err.message || ''))) {
+        enterReadOnlyMode('Your account is not on the allowlist — read-only mode');
+        if (window.toast) window.toast('⚠ You do not have edit permission — changes were not saved');
+        revertToCloudSnapshot();
+        return;
+      }
       // Surface to user
       if (window.toast) window.toast('⚠ Cloud save failed: ' + err.message);
     });
@@ -479,11 +470,30 @@
     presenceRef = db.ref('presence/' + id);
     db.ref('.info/connected').on('value', (snap) => {
       if (snap.val() === true) {
+        // F-033 pilot: append-only access log — one record per browser session so we can
+        // see who has opened the tracker and when (opens/last-seen in the 📊 Usage panel).
+        // Guarded by _accessLogged so a reconnect during the same session doesn't double-count.
+        if (!window._accessLogged) {
+          window._accessLogged = true;
+          try {
+            db.ref('access').push({
+              email: currentUser.email,
+              ts: firebase.database.ServerValue.TIMESTAMP,
+              ua: (navigator.userAgent || '').slice(0, 120),
+            }).catch(() => {}); // read-only viewers may be denied; ignore
+          } catch (e) {}
+        }
         presenceRef.onDisconnect().remove();
         presenceRef.set({
           email: currentUser.email,
           since: firebase.database.ServerValue.TIMESTAMP,
           clientId: CLIENT_ID,
+        }).catch((err) => {
+          // Writing presence failed → almost certainly not in /allowlist.
+          // This is the fastest signal that this user is read-only.
+          if (err && (err.code === 'PERMISSION_DENIED' || /permission/i.test(err.message || ''))) {
+            enterReadOnlyMode('Your account is not on the allowlist — read-only mode');
+          }
         });
       }
     });
@@ -807,61 +817,28 @@
     }
     .cs-setup-dismiss:hover { background: rgba(0,0,0,0.25); }
 
+    /* Read-only banner — shown at the top when user is not in /allowlist */
+    #cs-readonly-banner {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 99997;
+      background: linear-gradient(90deg, #5a4a3a, #3d2f24);
+      color: #fde8d0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 12px;
+      padding: 8px 20px;
+      display: flex; align-items: center; gap: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+      border-bottom: 1px solid rgba(232, 93, 31, 0.4);
+    }
+    #cs-readonly-banner .cs-ro-icon { font-size: 14px; }
+    #cs-readonly-banner .cs-ro-text { font-weight: 600; color: #fff; }
+    #cs-readonly-banner .cs-ro-hint { color: #c9b9a3; font-size: 11px; }
+    @media (max-width: 720px) {
+      #cs-readonly-banner .cs-ro-hint { display: none; }
+    }
+
     @media (max-width: 720px) {
       .cs-user-email { display: none; }
       .cs-status-text { display: none; }
-    }
-
-    /* ---------- Role chip + viewer mode ---------- */
-    .cs-role-chip {
-      display: none;
-      font-size: 10px; font-weight: 700; letter-spacing: 0.4px;
-      text-transform: uppercase;
-      padding: 3px 8px; border-radius: 10px;
-      white-space: nowrap;
-      cursor: default;
-    }
-    .cs-role-chip.editor { display: inline-block; background: rgba(52, 199, 122, 0.15); color: #3fb950; border: 1px solid rgba(52, 199, 122, 0.3); }
-    .cs-role-chip.viewer { display: inline-block; background: rgba(245, 165, 36, 0.18); color: #f5a524; border: 1px solid rgba(245, 165, 36, 0.4); }
-
-    /* In viewer mode, hide common edit affordances in the main tracker.
-       This is a defense-in-depth on top of the Firebase rule — even if
-       a viewer clicks something edit-y, _cloudQueuePush bails. */
-    body[data-cs-role="viewer"] .header-actions .btn-primary,
-    body[data-cs-role="viewer"] .header-actions .btn-danger {
-      display: none !important;
-    }
-
-    /* Viewer banner */
-    #cs-viewer-banner {
-      position: fixed;
-      left: 50%; transform: translateX(-50%);
-      bottom: max(16px, env(safe-area-inset-bottom));
-      z-index: 9000;
-      display: flex; align-items: center; gap: 10px;
-      max-width: calc(100vw - 24px);
-      background: rgba(245, 165, 36, 0.12);
-      border: 1px solid rgba(245, 165, 36, 0.4);
-      color: #f5d28a;
-      padding: 10px 14px;
-      border-radius: 10px;
-      font-size: 13px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-      backdrop-filter: blur(8px);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-    }
-    .cs-vb-icon { font-size: 14px; }
-    .cs-vb-text { line-height: 1.4; }
-    .cs-vb-text strong { color: #f5a524; }
-    .cs-vb-dismiss {
-      background: transparent; border: none; color: #f5d28a;
-      font-size: 18px; line-height: 1; cursor: pointer;
-      padding: 0 4px; margin-left: 4px;
-    }
-    .cs-vb-dismiss:hover { color: #fff; }
-    @media (max-width: 480px) {
-      #cs-viewer-banner { font-size: 12px; padding: 9px 12px; }
-      .cs-vb-text { max-width: 220px; }
     }
   `;
   document.head.appendChild(css);

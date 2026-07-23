@@ -55,6 +55,32 @@
   }
   .modal-tab-panel { display: none; }
   .modal-tab-panel.active { display: block; }
+
+  /* Calendar tab (F-031 modal catch-up) */
+  #cal-rows { margin-top: 10px; }
+  .cal-row { display:grid; grid-template-columns:1fr 1.2fr 1fr; gap:8px; align-items:center; padding:6px 2px; border-bottom:1px solid var(--border); }
+  .cal-row-rollup { grid-template-columns:1fr auto 1fr 1fr auto; }
+  .cal-row-label { font-size:12px; color:var(--text-dim); }
+  .cal-row-rollup-frac { font-size:12px; font-weight:600; }
+  .cal-row-hint { font-size:10px; color:var(--text-dim); grid-column:1/-1; }
+  .cal-status, .cal-date, .cal-bulk-status, .cal-bulk-date { font-size:12px; }
+  .ro-row { }
+  .meta-pill { display:inline-block; font-size:10px; border:1px solid var(--border); border-radius:10px; padding:1px 7px; white-space:nowrap; }
+  /* RFI / project-item rows (F-032 follow-up): split across two lines, each .evi-row
+     wraps .evi-line1 + .evi-line2 (grid templates set inline per render call). */
+  .evi-row { margin-top:10px; padding-bottom:8px; border-bottom:1px dashed var(--border); }
+  .evi-row:first-child { margin-top:0; }
+  .evi-row:last-child { border-bottom:none; padding-bottom:0; }
+</style>
+
+<!-- Widen the unit-edit modal only (RFI/R.O. rows have too many columns for the 420px
+     default) — scoped to desktop so it doesn't fight the mobile full-screen modal rule
+     at @media (max-width: 820px) around line ~1170 (both are unscoped-by-media-query
+     specificity-wise, so an unscoped override here would win on phones too). -->
+<style>
+  @media (min-width: 821px) {
+    #unitModal .modal { max-width: 760px; }
+  }
 </style>
 
 
@@ -74,6 +100,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
 <script src="firebase-config.js"></script>
+<script src="project-config.js"></script>
 <script src="cloud-sync.js"></script>
 
 
@@ -1373,7 +1400,7 @@
 <body data-om-id="17a02737:4">
 <script>
 (function(){
-  if (localStorage.getItem('cp2_theme') === 'day') document.body.classList.add('day-mode');
+  if (localStorage.getItem(((window.PROJECT||{}).code||'tracker').toLowerCase()+'_theme') === 'day') document.body.classList.add('day-mode');
 })();
 function applyThemeUI(){
   const day = document.body.classList.contains('day-mode');
@@ -1384,7 +1411,7 @@ function applyThemeUI(){
 }
 function toggleTheme(){
   const day = document.body.classList.toggle('day-mode');
-  localStorage.setItem('cp2_theme', day ? 'day' : 'night');
+  localStorage.setItem(((window.PROJECT||{}).code||'tracker').toLowerCase()+'_theme', day ? 'day' : 'night');
   applyThemeUI();
   try { if (typeof renderCharts === 'function') renderCharts(); } catch(e){}
   try { if (typeof renderGlassChart === 'function') renderGlassChart(); } catch(e){}
@@ -1915,6 +1942,8 @@ document.addEventListener('DOMContentLoaded', applyThemeUI);
     <section class="section" data-om-id="17a02737:466">
       <div class="section-header" data-om-id="17a02737:467">
         <div class="section-title" data-i18n="sec_log" data-om-id="17a02737:468">Daily Installation Log</div>
+        <input type="search" id="logFilter" oninput="setLogFilter(this.value)" data-i18n-placeholder="ph_log_filter" placeholder="Filter: unit / party / ref…" style="flex:1;max-width:230px;margin:0 10px;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 9px">
+        <span id="logFilterCount" style="font-size:11px;color:var(--text-dim);margin-right:8px"></span>
         <button class="btn" onclick="openAddLog()" style="font-size:12px;padding:6px 10px" data-i18n="btn_add_entry" data-om-id="17a02737:469">+ Add Entry</button>
       </div>
       <div class="timeline" id="timeline" style="max-height:540px;overflow-y:auto" data-om-id="17a02737:470">
@@ -2609,43 +2638,51 @@ document.addEventListener('DOMContentLoaded', applyThemeUI);
 <div class="modal-overlay" id="unitModal" data-om-id="17a02737:1302">
   <div class="modal" data-om-id="17a02737:1303">
     <h3 id="modalTitle" data-i18n="modal_edit_unit" data-om-id="17a02737:1304">Edit · SF01</h3>
-    <!-- Tab bar -->
+    <!-- Tab bar (F-031 catch-up: was Framing/R.O./Glass; now matches core app.js's
+         Calendar/RFI expectations — Elevation tab intentionally omitted, CP2 has no
+         DXF-derived window.ELEVATIONS yet (F-007 disabled). R.O. and Glass kept
+         alongside since CP2 still uses u.ro[]/u.glassPanels[] directly. ) -->
     <div class="modal-tabs">
-      <div class="modal-tab active" id="tab-framing" onclick="switchModalTab('framing')">Framing</div>
+      <div class="modal-tab active" id="tab-cal" onclick="switchModalTab('cal')">Calendar</div>
+      <div class="modal-tab" id="tab-ro" onclick="switchModalTab('ro')">Field Verify · R.O.</div>
       <div class="modal-tab" id="tab-glass" onclick="switchModalTab('glass')">Glass</div>
+      <div class="modal-tab" id="tab-rfi" onclick="switchModalTab('rfi')">RFI</div>
     </div>
 
-    <!-- Framing tab -->
-    <div class="modal-tab-panel active" id="panel-framing">
-      <div class="form-row" data-om-id="17a02737:1305">
-        <label data-om-id="17a02737:1306">Unit ID</label>
-        <input type="text" id="m-id" autocomplete="off" placeholder="e.g. SF12A" data-om-id="17a02737:1307">
-        <div style="font-size:11px;color:var(--text-dim);margin-top:4px;" data-om-id="17a02737:1308">Only changes the displayed ID (marker position is preserved)</div>
+    <!-- Calendar tab (replaces old Framing tab; renderCalendar()/readCalendarScopes() in app.js
+         fill #cal-rows. cal-id/cal-louver/cal-note are the per-unit header fields; cal-facecap
+         intentionally omitted — F-006 Face Cap is off for CP2. ) -->
+    <div class="modal-tab-panel active" id="panel-cal">
+      <div class="form-row">
+        <label>Unit ID</label>
+        <input type="text" id="cal-id" autocomplete="off" placeholder="e.g. SF12A">
+        <div style="font-size:11px;color:var(--text-dim);margin-top:4px;">Only changes the displayed ID (marker position is preserved)</div>
       </div>
-      <div class="form-row" data-om-id="17a02737:1309">
-        <label data-i18n="form_status" data-om-id="17a02737:1310">Status</label>
-        <select id="m-status" data-om-id="17a02737:1311">
-          <option value="pending" data-i18n="status_pending" data-om-id="17a02737:1312">Pending</option>
-          <option value="in-progress" data-i18n="status_in_progress" data-om-id="17a02737:1313">Ready</option>
-          <option value="installed" data-i18n="status_installed" data-om-id="17a02737:1314">Installed</option>
-          <option value="issue" data-i18n="status_issue_long" data-om-id="17a02737:1315">Issue / Rework Needed</option>
+      <div class="form-row">
+        <label data-i18n="form_louver">Louver Installed?</label>
+        <select id="cal-louver">
+          <option value="no" data-i18n="opt_no">No</option>
+          <option value="yes" data-i18n="opt_yes">Yes</option>
+          <option value="na" data-i18n="opt_na">N/A</option>
         </select>
       </div>
-      <div class="form-row" data-om-id="17a02737:1316">
-        <label data-i18n="form_date" data-om-id="17a02737:1317">Installation Date</label>
-        <input type="date" id="m-date" data-om-id="17a02737:1318">
+      <div class="form-row">
+        <label>Scopes</label>
+        <div id="cal-rows"></div>
       </div>
-      <div class="form-row" data-om-id="17a02737:1319">
-        <label data-i18n="form_louver" data-om-id="17a02737:1320">Louver Installed?</label>
-        <select id="m-louver" data-om-id="17a02737:1321">
-          <option value="no" data-i18n="opt_no" data-om-id="17a02737:1322">No</option>
-          <option value="yes" data-i18n="opt_yes" data-om-id="17a02737:1323">Yes</option>
-          <option value="na" data-i18n="opt_na" data-om-id="17a02737:1324">N/A</option>
-        </select>
+      <div class="form-row">
+        <label data-i18n="form_note">Note</label>
+        <textarea id="cal-note" rows="2" data-i18n-placeholder="ph_note" placeholder="Notes"></textarea>
       </div>
-      <div class="form-row" data-om-id="17a02737:1325">
-        <label data-i18n="form_note" data-om-id="17a02737:1326">Note</label>
-        <textarea id="m-note" rows="2" data-i18n-placeholder="ph_note" placeholder="Notes"></textarea>
+    </div>
+
+    <!-- Field Verify / R.O. tab -->
+    <div class="modal-tab-panel" id="panel-ro">
+      <div class="form-row">
+        <label>R.O. field measurements — record when measured, re-check at ordering. Entries auto-log as field-verify evidence.</label>
+        <div style="display:grid;grid-template-columns:1.1fr 1fr 1.6fr 1fr .9fr auto;gap:6px;font-size:11px;color:var(--text-dim)"><span>Date</span><span>Stage</span><span>Measured dims / note</span><span>By</span><span>Tolerance</span><span></span></div>
+        <div id="ro-list"></div>
+        <button type="button" class="btn" style="font-size:12px;margin-top:8px" onclick="addRoRow()">+ Add measurement</button>
       </div>
     </div>
 
@@ -2654,26 +2691,21 @@ document.addEventListener('DOMContentLoaded', applyThemeUI);
       <div class="form-row">
         <label>Glass Panels</label>
         <div class="glass-panel-th" style="display:grid;grid-template-columns:1fr 1.2fr 1.3fr auto;gap:6px"><span>Panel #</span><span>Status</span><span>Install Date</span><span></span></div>
-        <div id="glass-panels-list">
-    <div class="glass-panel-row" data-idx="0">
-      <input type="text" value="" placeholder="e.g. 1F-27" autocomplete="off">
-      <select><option value="" selected="">— Unknown —</option><option value="pending">Pending</option><option value="ready">Ready</option><option value="installed">Installed</option><option value="issue">Issue / Rework</option></select>
-      <input type="date" value="">
-      <button type="button" class="btn-remove" onclick="removeGlassPanel(0)" title="Remove">×</button>
-    </div>
-    <div class="glass-panel-row" data-idx="1">
-      <input type="text" value="" placeholder="e.g. 1F-27" autocomplete="off">
-      <select><option value="" selected="">— Unknown —</option><option value="pending">Pending</option><option value="ready">Ready</option><option value="installed">Installed</option><option value="issue">Issue / Rework</option></select>
-      <input type="date" value="">
-      <button type="button" class="btn-remove" onclick="removeGlassPanel(1)" title="Remove">×</button>
-    </div></div>
+        <div id="glass-panels-list"></div>
         <button type="button" class="glass-panel-add" onclick="addGlassPanel()">＋ Add Panel</button>
       </div>
+    </div>
+
+    <!-- RFI tab (F-031) — status=open rows now show a days-open badge (renderRfiList) and
+         roll up project-wide into the header ⏳ Open Items panel (computeOpenItems). -->
+    <div class="modal-tab-panel" id="panel-rfi">
       <div class="form-row">
-        <label>Glass Note</label>
-        <textarea id="m-glass-note" rows="2" placeholder="e.g. Damaged, wrong size…"></textarea>
+        <label>RFIs / GC inquiries tied to this unit. New rows auto-log as GC-inquiry evidence.</label>
+        <div id="rfi-list"></div>
+        <button type="button" class="btn" style="font-size:12px;margin-top:8px" onclick="addRfiRow()">+ Add RFI</button>
       </div>
     </div>
+
     <div class="modal-actions" data-om-id="17a02737:1327">
       <button class="btn" onclick="closeModal()" data-i18n="btn_cancel" data-om-id="17a02737:1328">Cancel</button>
       <button class="btn" style="color:var(--red,#e05);margin-right:auto" onclick="deleteUnit()">🗑 Delete</button>
@@ -2808,6 +2840,6 @@ document.addEventListener('DOMContentLoaded', applyThemeUI);
 <script type="application/json" id="__embedded_state"></script>
 <script src="app-log.js"></script>
 <script src="app.js"></script>
-<script>bootstrap();</script>
+<!-- boot handled inside app.js (core) -->
 </body>
 </html>

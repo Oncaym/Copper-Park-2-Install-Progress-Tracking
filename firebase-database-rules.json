@@ -71,6 +71,17 @@
       }
     },
 
+    // ---------- 访问日志 (F-033 pilot: opens tracking) ----------
+    // 写（追加）：任何登录用户（包括非 editor 的 GC 只读账号），只能写自己那条，不能改历史
+    // 读：仅 editor（避免把所有访客邮箱暴露给普通登录用户）
+    "access": {
+      ".read": "auth != null && root.child('allowlist').child(auth.token.email.replace('.', ',')).exists()",
+      "$id": {
+        ".write": "auth != null && !data.exists()",
+        ".validate": "newData.hasChildren(['email','ts']) && newData.child('email').val() == auth.token.email"
+      }
+    },
+
     // ---------- 白名单本身 ----------
     // 整体不可读（防止枚举所有 editor 邮箱）
     // 但允许登录用户读自己那条（用来判断当前账号是不是 editor）
