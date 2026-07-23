@@ -288,6 +288,15 @@
     background: var(--accent);
     border-radius: 2px;
   }
+  /* Mobile-only collapse/expand for the floor-plan section (Leo, 2026-07-23). */
+  .plan-collapse-btn {
+    display: none; margin-left: auto; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px; width: 30px; height: 30px;
+    font-size: 15px; cursor: pointer; flex: 0 0 auto;
+  }
+  #planSection.plan-collapsed .plan-toolbar,
+  #planSection.plan-collapsed #glassBatchBar,
+  #planSection.plan-collapsed .plan-viewport { display: none !important; }
 
   /* Two column layout */
   .grid-2 {
@@ -1243,6 +1252,10 @@
     .section-header { margin-bottom: 12px; gap: 8px; }
     .section-title  { font-size: 13px; }
     .section-title::before { width: 3px; height: 14px; }
+    .plan-collapse-btn { display: inline-flex; align-items: center; justify-content: center; }
+    /* Editable evidence rows (RFI tab + project items) stack on mobile so the
+       7-8 fields never overlap — read view is separate (thread cards). */
+    .evi-line1, .evi-line2 { grid-template-columns: 1fr !important; }
 
     /* ----- Buttons (tap targets) ----- */
     .btn { padding: 9px 12px; font-size: 12px; min-height: 36px; border-radius: 7px; }
@@ -1437,7 +1450,6 @@ document.addEventListener('DOMContentLoaded', applyThemeUI);
       <a class="btn" href="warehouse.html" title="Warehouse"><span data-i18n="btn_warehouse">📦 Warehouse</span></a>
       <button class="btn" type="button" onclick="openDrawings()" title="Project drawings"><span data-i18n="btn_drawings">📐 Drawings</span></button>
       <button class="btn btn-primary" onclick="openAddLog()" data-om-id="17a02737:21"><span data-i18n="btn_add_log" data-om-id="17a02737:22">+ Add Daily Log</span></button>
-      <button class="btn btn-danger" onclick="resetData()" data-om-id="17a02737:23"><span data-i18n="btn_reset" data-om-id="17a02737:24">↻ Reset</span></button>
     </div>
   </div>
 </header>
@@ -1480,9 +1492,10 @@ document.addEventListener('DOMContentLoaded', applyThemeUI);
 
 
   <!-- Floor Plan -->
-  <section class="section" data-om-id="17a02737:51">
+  <section class="section" id="planSection" data-om-id="17a02737:51">
     <div class="section-header" data-om-id="17a02737:52">
       <div class="section-title" data-i18n="sec_plan_title" data-om-id="17a02737:53">Floor Plan (from DXF) · Click marker to edit / drag to reposition</div>
+      <button type="button" id="planCollapseBtn" class="plan-collapse-btn" onclick="togglePlanCollapse()" aria-label="Collapse / expand map" title="Collapse / expand map">▾</button>
       <div class="legend" data-om-id="17a02737:54">
         <div class="legend-item" data-om-id="17a02737:55"><span class="status-dot installed" data-om-id="17a02737:56"></span><span data-i18n="status_installed" data-om-id="17a02737:57">Installed</span></div>
         <div class="legend-item" data-om-id="17a02737:58"><span class="status-dot in-progress" data-om-id="17a02737:59"></span><span data-i18n="status_in_progress" data-om-id="17a02737:60">Ready</span></div>

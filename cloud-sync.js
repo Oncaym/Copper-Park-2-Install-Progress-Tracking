@@ -340,6 +340,9 @@
   }
 
   function showReadOnlyBanner(reason) {
+    // Suppressed (Leo, 2026-07-23): the read-only strip is noise for GC viewers — they
+    // already can't edit; the editor-only buttons are hidden for them via applyReadOnlyUI.
+    return;
     if (document.getElementById('cs-readonly-banner')) return;
     const bar = document.createElement('div');
     bar.id = 'cs-readonly-banner';

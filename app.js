@@ -2300,26 +2300,80 @@ function readGlassPanels() {
 function renderRoList(rows) {
   const box = document.getElementById('ro-list'); if (!box) return;
   const esc = s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  // Single-quoted attribute needs &, ', < escaped (values like Firebase URLs contain &).
+  const attr = s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/'/g,'&#39;').replace(/</g,'&lt;');
   const r = (rows && rows.length) ? rows : [{}];
-  box.innerHTML = r.map((m,i)=>`
-    <div class="ro-row" style="display:grid;grid-template-columns:1.1fr 1fr 1.6fr 1fr .9fr auto;gap:6px;margin-top:6px">
-      <input type="date" value="${esc(m.date)}">
-      <select>${['R.O. measure','Order check','Site check'].map(s=>`<option${(m.stage||'R.O. measure')===s?' selected':''}>${s}</option>`).join('')}</select>
-      <input type="text" placeholder="e.g. 2140 × 915 (+5 / −0)" value="${esc(m.dims)}" autocomplete="off">
-      <input type="text" placeholder="who" value="${esc(m.by)}" autocomplete="off">
-      <select><option value=""${!m.tol?' selected':''}>—</option><option value="ok"${m.tol==='ok'?' selected':''}>OK</option><option value="out"${m.tol==='out'?' selected':''}>OUT</option></select>
-      <button type="button" class="btn-remove" onclick="removeRoRow(${i})" title="Remove">×</button>
-    </div>`).join('');
+  box.innerHTML = r.map((m,i)=>{
+    const photos = Array.isArray(m.photos) ? m.photos : [];
+    const thumbs = photos.map((p,pi)=>`<span style="position:relative;display:inline-block">
+        <img src="${esc(p)}" alt="RO photo ${pi+1}" style="width:46px;height:46px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer" onclick="window.open('${esc(p)}','_blank')">
+        <button type="button" onclick="removeRoPhoto(${i},${pi})" title="remove" style="position:absolute;top:-7px;right:-7px;width:18px;height:18px;line-height:16px;border-radius:50%;border:none;background:var(--red,#e5484d);color:#fff;font-size:12px;cursor:pointer;padding:0">×</button>
+      </span>`).join('');
+    return `<div class="ro-row" data-photos='${attr(JSON.stringify(photos))}' style="border-bottom:1px solid var(--border,rgba(255,255,255,.07));padding-bottom:9px;margin-top:9px">
+      <div style="display:grid;grid-template-columns:1.1fr 1fr 1.6fr 1fr .9fr auto;gap:6px;align-items:center">
+        <input type="date" value="${esc(m.date)}">
+        <select>${['R.O. measure','Order check','Site check'].map(s=>`<option${(m.stage||'R.O. measure')===s?' selected':''}>${s}</option>`).join('')}</select>
+        <input type="text" placeholder="e.g. 2140 × 915 (+5 / −0)" value="${esc(m.dims)}" autocomplete="off">
+        <input type="text" placeholder="who" value="${esc(m.by)}" autocomplete="off">
+        <select><option value=""${!m.tol?' selected':''}>—</option><option value="ok"${m.tol==='ok'?' selected':''}>OK</option><option value="out"${m.tol==='out'?' selected':''}>OUT</option></select>
+        <button type="button" class="btn-remove" onclick="removeRoRow(${i})" title="Remove">×</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:7px;flex-wrap:wrap">
+        <label class="btn" style="font-size:11px;padding:4px 10px;cursor:pointer;margin:0">📷 Add photo
+          <input type="file" accept="image/*" multiple class="ro-photo-input" style="display:none" onchange="addRoPhotos(${i}, this.files); this.value='';">
+        </label>
+        ${thumbs}
+        <span class="ro-photo-status" data-ri="${i}" style="font-size:11px;color:var(--text-dim)"></span>
+      </div>
+    </div>`;
+  }).join('');
 }
 function _roRowsRaw() {
   return Array.from(document.querySelectorAll('#ro-list .ro-row')).map(row=>{
-    const f = row.querySelectorAll('input,select');
-    return { date:f[0].value, stage:f[1].value, dims:f[2].value.trim(), by:f[3].value.trim(), tol:f[4].value };
+    // Exclude the file input so date/stage/dims/by/tol keep their positions.
+    const f = row.querySelectorAll('input:not([type="file"]),select');
+    let photos = []; try { photos = JSON.parse(row.dataset.photos || '[]'); } catch(e) {}
+    return { date:f[0].value, stage:f[1].value, dims:f[2].value.trim(), by:f[3].value.trim(), tol:f[4].value, photos };
   });
 }
-function readRoRows() { return _roRowsRaw().filter(m=>m.dims||m.by); }
+function readRoRows() { return _roRowsRaw().filter(m=>m.dims||m.by||(m.photos&&m.photos.length)); }
 function addRoRow() { const rows=_roRowsRaw(); rows.push({date:new Date().toISOString().slice(0,10),stage:'R.O. measure'}); renderRoList(rows); }
 function removeRoRow(i) { const rows=_roRowsRaw(); rows.splice(i,1); renderRoList(rows); }
+// Photo capture/upload for a Field Verify R.O. row — reuses the log photo pipeline
+// (_photoFileToBlob + _uploadPhotoToStorage, Firebase Storage w/ data-URL fallback).
+// Stores download URLs (small strings) on u.ro[i].photos, so they sync fine in state.
+let _roPhotoBusy = 0;
+async function addRoPhotos(i, fileList) {
+  if (!fileList || !fileList.length) return;
+  const statusEl = document.querySelector(`#ro-list .ro-photo-status[data-ri="${i}"]`);
+  if (statusEl) statusEl.textContent = (typeof t==='function' ? t('photo_processing') : 'Uploading…') || 'Uploading…';
+  _roPhotoBusy++;
+  const urls = [];
+  try {
+    for (const f of Array.from(fileList)) {
+      if (!f.type || !f.type.startsWith('image/')) continue;
+      try {
+        const blob = await _photoFileToBlob(f);
+        let ref;
+        try { ref = await _uploadPhotoToStorage(blob, f.name); }
+        catch(e) { ref = await new Promise(r=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(blob); }); }
+        urls.push(ref);
+      } catch(e) { console.warn('[RO photo] failed', e); }
+    }
+  } finally { _roPhotoBusy--; }
+  const rows = _roRowsRaw();
+  if (!rows[i]) return;
+  rows[i].photos = (rows[i].photos || []).concat(urls);
+  renderRoList(rows);
+}
+function removeRoPhoto(i, pi) {
+  const rows = _roRowsRaw();
+  if (!rows[i] || !Array.isArray(rows[i].photos)) return;
+  const url = rows[i].photos[pi];
+  if (typeof _deleteStoragePhoto === 'function') _deleteStoragePhoto(url);
+  rows[i].photos.splice(pi, 1);
+  renderRoList(rows);
+}
 /* Note: the R.O. tab/UI above was retired by AC3's M3 (replaced by the RFI tab below).
    CP2 kept the R.O. tab (no elevation data yet), so openUnit()/saveUnit() do call
    renderRoList/readRoRows for CP2 — guarded, so this stays a no-op on projects
@@ -2406,7 +2460,7 @@ function formatStatus(s) {
 function categoryLabel(c) {
   return { framing:'Framing', glass:'Glass', louver:'Louver', caulking:'Caulking', issue:'Issue',
     'fit-issue':'Fit Issue', 'field-verify':'Field Verify', 'gc-inquiry':'GC Inquiry',
-    'doors':'Doors', 'metal-panel':'Metal Panel', 'sunshade':'Sun Shade', 'beauty-cap':'Beauty Cap' }[c] || c;
+    'doors':'Doors', 'metal-panel':'Metal Panel', 'faceCover':'Face Cover', 'sunshade':'Sun Shade', 'beauty-cap':'Beauty Cap' }[c] || c;
 }
 
 /* -------- Modals -------- */
@@ -2523,8 +2577,9 @@ function renderCalendar() {
     date:   (S.frame && S.frame.date)   != null ? S.frame.date   : (u.date   || '') });
   rows.push({ scope:'caulking', label:'Caulking', editable:true,
     status: (S.caulking && S.caulking.status) || '', date: (S.caulking && S.caulking.date) || '' });
-  rows.push({ scope:'sunshade', label:'Sun Shade', editable:true,
-    status: (S.sunshade && S.sunshade.status) || '', date: (S.sunshade && S.sunshade.date) || '' });
+  // CP2 has no sunshades — track Face Cover install instead (Leo, 2026-07-23).
+  rows.push({ scope:'faceCover', label:'Face Cover', editable:true,
+    status: (S.faceCover && S.faceCover.status) || '', date: (S.faceCover && S.faceCover.date) || '' });
   if (u.facecap === 'yes') {
     rows.push({ scope:'beautyCap', label:'Beauty Cap', editable:true,
       status: (S.beautyCap && S.beautyCap.status) || 'installed', date: (S.beautyCap && S.beautyCap.date) || '' });
@@ -3580,6 +3635,7 @@ function _openItemsT() {
   if (currentLang === 'ko') return { title: '🔧 Things to Solve', desc: '', empty: '처리할 항목이 없습니다 🎉', unit: 'Unit', party: '상대', subject: '내용', days: '일수', projectHeader: '프로젝트 레벨 (여러 unit에 영향, 단일 unit 아님)', addBtn: '+ 프로젝트 항목 추가', relatedUnits: 'Related Units' };
   return { title: '🔧 Things to Solve', desc: '', empty: 'Nothing to solve right now 🎉', unit: 'Unit', party: 'Party', subject: 'Subject', days: 'Days', projectHeader: 'Project-level (affects a batch of units, not one)', addBtn: '+ Add project-level item', relatedUnits: 'Related Units' };
 }
+let _projItemsEditMode = false; // Things-to-Solve project section: read (threads) vs edit (rows)
 function openItemsModal() {
   const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   let ov = document.getElementById('openItemsModal');
@@ -3589,37 +3645,65 @@ function openItemsModal() {
     ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('show'); });
   }
   const T = _openItemsT();
+  const statusPill = (st) => { st = st || 'open'; const c = st === 'open' ? 'var(--red,#e5484d)' : (st === 'answered' ? 'var(--yellow,#d29922)' : 'var(--text-dim)'); return `<span style="font-size:10px;text-transform:uppercase;letter-spacing:.4px;border:1px solid ${c};color:${c};border-radius:20px;padding:1px 8px;white-space:nowrap">${esc(st)}</span>`; };
+  // Read-only "thread" card — lists the info, no input boxes (Leo, 2026-07-23). Same
+  // shape for unit + project items so each reads as one thread and nothing overlaps on mobile.
+  const threadCard = (it) => {
+    const clickable = it.scope === 'unit' && it.unitKey;
+    const head = it.scope === 'unit'
+      ? `<b>${esc(it.unitId)}</b>${it.ref ? ` · <span style="color:var(--text-dim)">${esc(it.ref)}</span>` : ''}`
+      : `<b>${esc(it.ref || '—')}</b> <span style="font-size:9px;color:var(--text-dim);border:1px solid var(--border);border-radius:20px;padding:1px 6px;margin-left:2px">PROJECT</span>`;
+    const meta = [];
+    if (it.party) meta.push(`👤 ${esc(it.party)}`);
+    if (it.scope === 'project' && it.relatedUnits) meta.push(`Affects: ${esc(it.relatedUnits)}`);
+    return `<div style="padding:10px 2px;border-bottom:1px solid var(--border,rgba(255,255,255,.08));${clickable ? 'cursor:pointer' : ''}"${clickable ? ` onclick="closeOpenItemsModal();openUnit('${esc(it.unitKey)}')"` : ''}>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">${head}</span>
+          ${statusPill(it.status)}${it.days != null ? _daysOpenBadge(it.days) : ''}
+        </div>
+        ${it.subject ? `<div style="font-size:13px;margin-top:3px">${esc(it.subject)}</div>` : ''}
+        ${meta.length ? `<div style="font-size:11.5px;color:var(--text-dim);margin-top:3px">${meta.join(' · ')}</div>` : ''}
+        ${it.response ? `<div style="font-size:11.5px;color:var(--text-dim);margin-top:2px">↩ ${esc(it.response)}</div>` : ''}
+      </div>`;
+  };
   const unitItems = computeOpenItems().filter(it => it.scope === 'unit');
-  const rows = unitItems.length ? unitItems.map(it => `
-    <div class="ro-row" style="display:grid;grid-template-columns:1fr 1fr 2fr auto;gap:8px;padding:6px 2px;border-bottom:1px solid var(--border,rgba(255,255,255,.08));align-items:center;cursor:pointer" onclick="closeOpenItemsModal();openUnit('${esc(it.unitKey)}')">
-      <b>${esc(it.unitId)}</b>
-      <span>${esc(it.party) || '—'}</span>
-      <span style="font-size:12px;color:var(--text-dim)">${esc(it.subject)}${it.ref ? ' · ' + esc(it.ref) : ''}</span>
-      ${_daysOpenBadge(it.days)}
-    </div>`).join('') : `<div style="padding:16px 2px;color:var(--text-dim)">${T.empty}</div>`;
+  unitItems.forEach(it => it.status = 'open');
+  const unitCards = unitItems.length ? unitItems.map(threadCard).join('')
+    : `<div style="padding:14px 2px;color:var(--text-dim)">${T.empty}</div>`;
+  // Project-level read cards from the full records (carry status/response, unlike computeOpenItems).
+  const projAll = (Array.isArray(state.projectItems) ? state.projectItems : []).map(m => ({
+    scope: 'project', ref: m.ref || '', subject: m.subject || '', party: m.party || '',
+    relatedUnits: m.relatedUnits || '', status: m.status || 'open', response: m.response || '',
+    days: (m.status || 'open') === 'open' ? _daysOpen(m.date) : null
+  })).filter(m => m.ref || m.subject);
+  projAll.sort((a, b) => { const ao = a.status === 'open' ? 0 : 1, bo = b.status === 'open' ? 0 : 1; if (ao !== bo) return ao - bo; return (b.days == null ? -1 : b.days) - (a.days == null ? -1 : a.days); });
+  const editing = !!_projItemsEditMode;
+  const projRead = projAll.length ? projAll.map(threadCard).join('')
+    : `<div style="padding:12px 2px;color:var(--text-dim);font-size:12px">${currentLang==='zh'?'暂无项目级事项。':(currentLang==='ko'?'프로젝트 항목 없음.':'No project-level items yet.')}</div>`;
+  const projBody = editing
+    ? `<div id="project-items-list"></div><button type="button" class="btn" style="font-size:12px;margin-top:8px" onclick="addProjectItemRow()">${T.addBtn}</button>`
+    : projRead;
+  const editBtn = `<button type="button" class="btn${editing ? ' btn-primary' : ''}" style="margin-left:auto;font-size:12px" onclick="toggleProjectEdit()">${editing ? ('✓ ' + _modT().save) : '✏️ Edit'}</button>`;
   ov.innerHTML = `<div class="modal" style="max-width:640px">
       <h3 style="margin-bottom:12px">${T.title}</h3>
-      <div style="display:grid;grid-template-columns:1fr 1fr 2fr auto;gap:8px;padding:0 2px 6px;font-size:11px;color:var(--text-dim);text-transform:uppercase;border-bottom:1px solid var(--border,rgba(255,255,255,.15))">
-        <span>${T.unit}</span><span>${T.party}</span><span>${T.subject}</span><span>${T.days}</span>
+      <div style="max-height:44vh;overflow:auto">
+        ${unitCards}
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <span style="font-size:12px;color:var(--text-dim)">${T.projectHeader}</span>${editBtn}
+          </div>
+          ${projBody}
+        </div>
       </div>
-      <div style="max-height:260px;overflow:auto">${rows}</div>
-
-      <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
-        <label style="display:block;font-size:12px;color:var(--text-dim);margin-bottom:6px">${T.projectHeader}</label>
-        <div id="project-items-list"></div>
-        <button type="button" class="btn" style="font-size:12px;margin-top:8px" onclick="addProjectItemRow()">${T.addBtn}</button>
-      </div>
-
       <div class="modal-actions" style="gap:8px;flex-wrap:wrap">
-        <button class="btn" type="button" onclick="openUsagePanel()" style="margin-right:auto" title="Opens tracking · 谁看过 (editors only)">📊 Usage</button>
+        <button class="btn" type="button" onclick="openUsagePanel()" style="margin-right:auto" title="Opens tracking (editors only)">📊 Usage</button>
         <button class="btn" type="button" onclick="closeOpenItemsModal()">${_modT().cancel}</button>
-        <button class="btn btn-primary" type="button" onclick="saveProjectItems()">${_modT().save}</button>
       </div>
     </div>`;
-  renderProjectItemsList(Array.isArray(state.projectItems) && state.projectItems.length ? state.projectItems : [{}]);
+  if (editing) renderProjectItemsList(Array.isArray(state.projectItems) && state.projectItems.length ? state.projectItems : [{}]);
   ov.classList.add('show');
 }
-function closeOpenItemsModal() { const ov = document.getElementById('openItemsModal'); if (ov) ov.classList.remove('show'); }
+function closeOpenItemsModal() { _projItemsEditMode = false; const ov = document.getElementById('openItemsModal'); if (ov) ov.classList.remove('show'); }
 
 /* -------- Project-level Open Items rows (F-032) --------
    Same row shape/UI convention as the unit RFI tab (renderRfiList/_rfiRowsRaw), just
@@ -3673,8 +3757,15 @@ function saveProjectItems() {
   state.projectItems.forEach(row => upsertRfiLog('project', 'PROJECT', row));
   sweepOrphanRfiLogs('project', state.projectItems);
   saveState();
+  _projItemsEditMode = false;           // back to read (thread) view after saving
   openItemsModal(); // re-render (refreshes both sections + day badges + header count)
   toast('Updated ✓');
+}
+// Toggle the project-level section between read (thread cards) and edit (input rows).
+// From edit → save (which flips the flag back); from read → enter edit and re-render.
+function toggleProjectEdit() {
+  if (_projItemsEditMode) { saveProjectItems(); }
+  else { _projItemsEditMode = true; openItemsModal(); }
 }
 function _injectOpenItemsBtn() {
   let b = document.getElementById('openItemsBtn');
@@ -3841,6 +3932,14 @@ function applyReadOnlyUI(){
 }
 // Let cloud-sync notify us the moment it flips a session to read-only.
 window._onReadOnly = function(){ try { applyReadOnlyUI(); } catch(e){} };
+
+// Mobile collapse/expand for the floor-plan section (Leo, 2026-07-23). The button is
+// CSS-hidden on desktop, so this only matters on phones.
+function togglePlanCollapse(){
+  const sec = document.getElementById('planSection'); if (!sec) return;
+  const collapsed = sec.classList.toggle('plan-collapsed');
+  const btn = document.getElementById('planCollapseBtn'); if (btn) btn.textContent = collapsed ? '▸' : '▾';
+}
 /* ==================== end F-033 ==================== */
 function moduleLabel(m){ const L=m.label; return (m.emoji?m.emoji+' ':'')+((L&&(L[currentLang]||L.en))||m.k); }
 function _modT(){
