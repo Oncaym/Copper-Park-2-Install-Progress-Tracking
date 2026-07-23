@@ -1,5 +1,5 @@
 /* ============================================================
-   CP2 Chat — Claude parse endpoint
+   Tracker Chat — Claude parse endpoint (core, project-agnostic)
    ============================================================
    POST /api/parse
    Body: { message: string, state: { units, log }, today: 'YYYY-MM-DD' }
@@ -56,7 +56,7 @@ const APPLY_CHANGES_TOOL = {
           type: 'object',
           properties: {
             key:    { type: 'string', description: 'Exact unit key, e.g. "SF11A__1"' },
-            status: { type: 'string', enum: ['installed', 'pending', 'issue'] },
+            status: { type: 'string', enum: ['installed', 'pending', 'in-progress', 'issue'] },
             date:   { type: 'string', description: 'YYYY-MM-DD' },
             louver: { type: 'string', enum: ['yes', 'no'] },
             note:   { type: 'string' }
@@ -71,9 +71,12 @@ const APPLY_CHANGES_TOOL = {
           type: 'object',
           properties: {
             date:     { type: 'string', description: 'YYYY-MM-DD' },
-            category: { type: 'string', enum: ['framing', 'louver', 'caulking', 'issue', 'glass', 'other'] },
+            category: { type: 'string', enum: ['framing', 'louver', 'caulking', 'issue', 'glass', 'fit-issue', 'field-verify', 'gc-inquiry', 'other'] },
             content:  { type: 'string', description: 'A short line listing the affected unit ids (with dot suffixes), separated by " · ". Example: "11A · 11A.1 · 11B"' },
-            planned:  { type: 'boolean', description: 'true if this is a future/planned item' }
+            planned:  { type: 'boolean', description: 'true if this is a future/planned item' },
+            ref:      { type: 'string', description: 'Reference number of a related RFI / email / submittal / drawing, e.g. "RFI-023", ONLY if the user mentions one' },
+            party:    { type: 'string', description: 'Counterparty involved (GC, another sub, factory, inspector), e.g. "Monadnock", ONLY if mentioned' },
+            fault:    { type: 'string', description: 'Attribution of responsibility, ONLY if the user states a cause: e.g. "factory fab error", "GC opening out of tolerance", "drawing error"' }
           },
           required: ['date', 'category', 'content']
         }
@@ -83,7 +86,7 @@ const APPLY_CHANGES_TOOL = {
   }
 };
 
-function buildSystemPrompt(state, today) {
+function buildSystemPrompt(state, today, projectName) {
   const units = (state && state.units) || [];
   const logs  = (state && state.log)   || [];
   const unitLines = units.map(u =>
@@ -96,7 +99,7 @@ function buildSystemPrompt(state, today) {
     return `${l.date || '?'}\t[${cats}]${l.planned ? ' (planned)' : ''}\t${l.content || ''}`;
   }).join('\n');
 
-  return `You are the install-progress assistant for the Cooper Park 2 construction site. Users either DESCRIBE site activity (in which case parse it into apply_changes) or ASK questions about existing data (in which case use answer_question). Users write in English, Chinese, or Korean.
+  return `You are the install-progress assistant for the ${projectName} construction site. Users either DESCRIBE site activity (in which case parse it into apply_changes) or ASK questions about existing data (in which case use answer_question). Users write in English, Chinese, or Korean.
 
 Today's date: ${today}
 
@@ -104,7 +107,10 @@ Today's date: ${today}
 - Each unit has a unique "key" (e.g. SF11A__1) and a display "id" (e.g. SF11A, SF11A.1). Multiple keys can share the same id — you MUST update by key.
 - status: installed / pending / issue
 - louver: yes / no (whether the louver has been installed)
-- Log categories: framing / louver / caulking / issue / glass / other
+- Log categories: framing / louver / caulking / issue / glass / other, plus three EVIDENCE categories:
+  - fit-issue: a dimensional conflict / something does not fit (record WHY it doesn't fit if stated)
+  - field-verify: a proactive verification record — user measured/checked something and confirms it is OK / within tolerance. These matter precisely BECAUSE nothing is wrong: they are future proof of due diligence.
+  - gc-inquiry: a written notice / question / inquiry sent to the GC or another party (paper trail)
 
 ## Current units (key / id / zone / status / louver / note)
 ${unitLines}
@@ -125,6 +131,10 @@ ${logLines || '(none)'}
 5. "Planning X tomorrow" → add a planned:true log_entry with that future date, DO NOT modify any unit.
 6. Whenever unit_updates is non-empty, also add a matching log_entry. date = change date. content = affected ids joined with " · ".
 7. If you cannot parse the message at all, set needs_clarification to a short question and leave unit_updates and log_entries as empty arrays.
+7b. EVIDENCE extraction: when a message involves responsibility, verification, or correspondence, fill the evidence fields on the log entry — party (who else is involved), fault (stated cause/attribution), ref (RFI/email/submittal number). Examples:
+   - "SF07W夹芯板卡不上，洞口比图纸小20mm，是Monadnock结构超差" → category=fit-issue, party="Monadnock", fault="GC opening out of tolerance (-20mm vs drawing)", plus unit_update status=issue.
+   - "今天实测SF03门洞R.O. 2140x915，在公差内，GC代表在场确认" → category=field-verify, party="GC (on site)", content includes the measured values. Record it even though nothing is wrong — that is the point.
+   - "给Monadnock发邮件问SF12钢结构进度，编号RFI-031" → category=gc-inquiry, party="Monadnock", ref="RFI-031", no unit_updates.
 8. summary, needs_clarification, and answer must be in the SAME language the user used.
 9. Reply ONLY via one of the two tools — no plain text.`;
 }
@@ -145,7 +155,7 @@ export default async function handler(req, res) {
   if (typeof body === 'string') {
     try { body = JSON.parse(body); } catch (e) { return res.status(400).json({ error: 'Invalid JSON' }); }
   }
-  const { message, state, today } = body || {};
+  const { message, state, today, project } = body || {};
   if (!message || typeof message !== 'string') {
     return res.status(400).json({ error: 'message required' });
   }
@@ -162,7 +172,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: MODEL,
         max_tokens: 2048,
-        system: buildSystemPrompt(state, todayStr),
+        system: buildSystemPrompt(state, todayStr, project || 'this project'),
         tools: [APPLY_CHANGES_TOOL, ANSWER_QUESTION_TOOL],
         // 'any' lets Claude pick between updating data and answering a question.
         tool_choice: { type: 'any' },
