@@ -1083,7 +1083,7 @@ function renderPlan() {
     if (hl && hl.size) {
       extra = hl.has((u.id || '').toUpperCase()) ? ' highlighted' : ' dimmed';
     }
-    m.className = `plan-marker ${u.status}${isDoor(u) ? ' door' : ''}${u.louver === 'yes' ? ' has-louver' : ''}${isPlanned(u) ? ' planned' : ''}${extra}`;
+    m.className = `plan-marker ${u.status}${unitHasOpenRfi(u) ? ' has-open-rfi' : ''}${isDoor(u) ? ' door' : ''}${u.louver === 'yes' ? ' has-louver' : ''}${isPlanned(u) ? ' planned' : ''}${extra}`;
     m.style.left = pos.x + '%';
     m.style.top  = pos.y + '%';
     {
@@ -3621,6 +3621,11 @@ const FEATURE_MODULES = [
    this is a read-only projection over data that's already there,
    so it's safe even for units created before this feature existed.
    ------------------------------------------------------------ */
+// True when a unit carries at least one open RFI row (ref/subject present, status open).
+// Drives the red glow ring on the plan marker — same signal Open Items / the banner use.
+function unitHasOpenRfi(u) {
+  return !!(u && Array.isArray(u.rfi) && u.rfi.some(m => (m.status || 'open') === 'open' && (m.ref || m.subject)));
+}
 function computeOpenItems() {
   if (typeof state === 'undefined' || !state || !Array.isArray(state.units)) return [];
   const items = [];
@@ -3667,11 +3672,18 @@ function openItemsModal() {
     ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('show'); });
   }
   const T = _openItemsT();
+  // GC (read-only) accounts can't edit RFI status — they only respond. In that mode we
+  // drop the edit affordances (no clickable→editable unit modal, no Edit/Usage buttons)
+  // and give each open item a Respond button that composes an email draft to the PM.
+  const ro = !!(window.CloudSync && typeof window.CloudSync.isReadOnly === 'function' && window.CloudSync.isReadOnly());
   const statusPill = (st) => { st = st || 'open'; const c = st === 'open' ? 'var(--red,#e5484d)' : (st === 'answered' ? 'var(--yellow,#d29922)' : 'var(--text-dim)'); return `<span style="font-size:10px;text-transform:uppercase;letter-spacing:.4px;border:1px solid ${c};color:${c};border-radius:20px;padding:1px 8px;white-space:nowrap">${esc(st)}</span>`; };
   // Read-only "thread" card — lists the info, no input boxes (Leo, 2026-07-23). Same
   // shape for unit + project items so each reads as one thread and nothing overlaps on mobile.
   const threadCard = (it) => {
-    const clickable = it.scope === 'unit' && it.unitKey;
+    const clickable = !ro && it.scope === 'unit' && it.unitKey;
+    const respondBtn = (ro && (it.status || 'open') === 'open')
+      ? `<div style="margin-top:8px"><button type="button" class="btn" data-unit="${esc(it.unitId || '')}" data-ref="${esc(it.ref || '')}" data-subject="${esc(it.subject || '')}" style="font-size:12px" onclick="event.stopPropagation();openRfiRespond(this.dataset.unit,this.dataset.ref,this.dataset.subject)">💬 Respond</button></div>`
+      : '';
     const head = it.scope === 'unit'
       ? `<b>${esc(it.unitId)}</b>${it.ref ? ` · <span style="color:var(--text-dim)">${esc(it.ref)}</span>` : ''}`
       : `<b>${esc(it.ref || '—')}</b> <span style="font-size:9px;color:var(--text-dim);border:1px solid var(--border);border-radius:20px;padding:1px 6px;margin-left:2px">PROJECT</span>`;
@@ -3686,6 +3698,7 @@ function openItemsModal() {
         ${it.subject ? `<div style="font-size:13px;margin-top:3px">${esc(it.subject)}</div>` : ''}
         ${meta.length ? `<div style="font-size:11.5px;color:var(--text-dim);margin-top:3px">${meta.join(' · ')}</div>` : ''}
         ${it.response ? `<div style="font-size:11.5px;color:var(--text-dim);margin-top:2px">↩ ${esc(it.response)}</div>` : ''}
+        ${respondBtn}
       </div>`;
   };
   const unitItems = computeOpenItems().filter(it => it.scope === 'unit');
@@ -3699,13 +3712,13 @@ function openItemsModal() {
     days: (m.status || 'open') === 'open' ? _daysOpen(m.date) : null
   })).filter(m => m.ref || m.subject);
   projAll.sort((a, b) => { const ao = a.status === 'open' ? 0 : 1, bo = b.status === 'open' ? 0 : 1; if (ao !== bo) return ao - bo; return (b.days == null ? -1 : b.days) - (a.days == null ? -1 : a.days); });
-  const editing = !!_projItemsEditMode;
+  const editing = !ro && !!_projItemsEditMode;
   const projRead = projAll.length ? projAll.map(threadCard).join('')
     : `<div style="padding:12px 2px;color:var(--text-dim);font-size:12px">${currentLang==='zh'?'暂无项目级事项。':(currentLang==='ko'?'프로젝트 항목 없음.':'No project-level items yet.')}</div>`;
   const projBody = editing
     ? `<div id="project-items-list"></div><button type="button" class="btn" style="font-size:12px;margin-top:8px" onclick="addProjectItemRow()">${T.addBtn}</button>`
     : projRead;
-  const editBtn = `<button type="button" class="btn${editing ? ' btn-primary' : ''}" style="margin-left:auto;font-size:12px" onclick="toggleProjectEdit()">${editing ? ('✓ ' + _modT().save) : '✏️ Edit'}</button>`;
+  const editBtn = ro ? '' : `<button type="button" class="btn${editing ? ' btn-primary' : ''}" style="margin-left:auto;font-size:12px" onclick="toggleProjectEdit()">${editing ? ('✓ ' + _modT().save) : '✏️ Edit'}</button>`;
   ov.innerHTML = `<div class="modal" style="max-width:640px">
       <h3 style="margin-bottom:12px">${T.title}</h3>
       <div style="max-height:44vh;overflow:auto">
@@ -3718,7 +3731,7 @@ function openItemsModal() {
         </div>
       </div>
       <div class="modal-actions" style="gap:8px;flex-wrap:wrap">
-        <button class="btn" type="button" onclick="openUsagePanel()" style="margin-right:auto" title="Opens tracking (editors only)">📊 Usage</button>
+        ${ro ? '' : `<button class="btn" type="button" onclick="openUsagePanel()" style="margin-right:auto" title="Opens tracking (editors only)">📊 Usage</button>`}
         <button class="btn" type="button" onclick="closeOpenItemsModal()">${_modT().cancel}</button>
       </div>
     </div>`;
@@ -3726,6 +3739,52 @@ function openItemsModal() {
   ov.classList.add('show');
 }
 function closeOpenItemsModal() { _projItemsEditMode = false; const ov = document.getElementById('openItemsModal'); if (ov) ov.classList.remove('show'); }
+
+/* -------- GC (read-only) RFI reply flow (F-033) --------
+   Read-only GC accounts can't write to shared cloud /state, so instead of editing an
+   RFI's status they respond: a small box to type their answer, sent as an email draft
+   to the install PM. No Firebase write, no rules change — mirrors the Daily Push tool. */
+const _GC_REPLY_TO = 'leosun@advfacade.com';
+function openRfiRespond(unitId, ref, subject) {
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  let ov = document.getElementById('rfiRespondModal');
+  if (!ov) {
+    ov = document.createElement('div'); ov.id = 'rfiRespondModal'; ov.className = 'modal-overlay';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('show'); });
+  }
+  ov.dataset.unit = unitId || ''; ov.dataset.ref = ref || ''; ov.dataset.subject = subject || '';
+  const label = [unitId, ref].filter(Boolean).join(' · ');
+  ov.innerHTML = `<div class="modal" style="max-width:520px">
+      <h3>💬 Respond to RFI</h3>
+      ${label ? `<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:4px">${esc(label)}</div>` : ''}
+      ${subject ? `<div style="font-size:13px;margin-bottom:10px">${esc(subject)}</div>` : ''}
+      <textarea id="rfiRespondText" placeholder="Type your response / direction here…" style="width:100%;min-height:150px;box-sizing:border-box;font-size:13.5px;line-height:1.5;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px"></textarea>
+      <div class="modal-actions" style="gap:8px;flex-wrap:wrap">
+        <button class="btn" type="button" onclick="document.getElementById('rfiRespondModal').classList.remove('show')">Cancel</button>
+        <button class="btn btn-primary" type="button" onclick="_sendRfiRespond()">✉️ Send response</button>
+      </div>
+    </div>`;
+  ov.classList.add('show');
+  setTimeout(() => { const ta = document.getElementById('rfiRespondText'); if (ta) ta.focus(); }, 30);
+}
+function _sendRfiRespond() {
+  const ov = document.getElementById('rfiRespondModal'); if (!ov) return;
+  const ta = document.getElementById('rfiRespondText');
+  const body = ta ? ta.value.trim() : '';
+  if (!body) { if (typeof toast === 'function') toast('Type a response first'); return; }
+  const unitId = ov.dataset.unit || '', ref = ov.dataset.ref || '', subject = ov.dataset.subject || '';
+  const tag = [unitId, ref].filter(Boolean).join(' · ') || 'RFI';
+  const subjectLine = `RFI response — ${tag}`;
+  const lines = [];
+  if (unitId) lines.push(`Unit: ${unitId}`);
+  if (ref) lines.push(`RFI: ${ref}`);
+  if (subject) lines.push(`Subject: ${subject}`);
+  lines.push('', 'Response:', body);
+  window.location.href = `mailto:${_GC_REPLY_TO}?subject=${encodeURIComponent(subjectLine)}&body=${encodeURIComponent(lines.join('\n'))}`;
+  ov.classList.remove('show');
+  if (typeof toast === 'function') toast('Opening email draft ✓');
+}
 
 /* -------- Project-level Open Items rows (F-032) --------
    Same row shape/UI convention as the unit RFI tab (renderRfiList/_rfiRowsRaw), just
@@ -3808,19 +3867,21 @@ function _injectOpenItemsBtn() {
    auto-popping modal (which read on desktop as a page glitch and did not fire reliably
    on mobile). Renders on every render(), reflects the live count, works on all sizes. */
 function _injectBlockerBanner() {
-  const main = document.querySelector('main'); if (!main) return;
+  // Live INSIDE the sticky <header> so the banner is truly pinned on all scroll positions.
+  // (A sticky element in <main> got covered by the header, which is itself position:sticky
+  // z-index:100; and body{overflow-x:hidden} on mobile breaks position:sticky outright.)
+  const header = document.querySelector('header');
+  const host = header || document.querySelector('main'); if (!host) return;
   let bn = document.getElementById('blockerBanner');
   const n = (typeof computeOpenItems === 'function') ? computeOpenItems().length : 0;
   if (n <= 0) { if (bn) bn.remove(); return; }
   const label = n === 1 ? '1 thing to solve' : `${n} things to solve`;
   if (!bn) {
     bn = document.createElement('div'); bn.id = 'blockerBanner';
-    // Pinned to the top of the scroll (Leo, global): position:sticky keeps it visible as
-    // you scroll down. Opaque background so page content can't show through the bar.
-    bn.style.cssText = 'position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:10px;cursor:pointer;margin:0 0 14px;padding:11px 15px;border-radius:9px;background:var(--panel,#161b22);border:1px solid var(--red,#e5484d);box-shadow:0 2px 10px rgba(0,0,0,.35),inset 0 0 0 999px rgba(229,72,77,.12);color:var(--red,#e5484d);font-weight:600;font-size:14px';
+    bn.style.cssText = 'display:flex;align-items:center;gap:10px;cursor:pointer;margin:12px 0 0;padding:10px 14px;border-radius:9px;background:var(--panel,#161b22);border:1px solid var(--red,#e5484d);box-shadow:inset 0 0 0 999px rgba(229,72,77,.12);color:var(--red,#e5484d);font-weight:600;font-size:14px';
     bn.onclick = openItemsModal;
-    main.insertBefore(bn, main.firstChild);
   }
+  if (bn.parentElement !== host) host.appendChild(bn); // ride the sticky header → always pinned
   bn.innerHTML = `<span style="font-size:16px">🔧</span><span>${label}</span><span style="margin-left:auto;font-weight:500;opacity:.85">Review →</span>`;
 }
 

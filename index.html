@@ -311,6 +311,7 @@
   body.gc-view .plan-marker { width: 13px; height: 13px; font-size: 0; border-width: 1.5px; }
   body.gc-view .plan-marker.has-louver::after { display: none !important; }
   body.gc-view .plan-marker.issue { box-shadow: 0 0 11px 3px var(--red), 0 0 5px var(--red); }
+  body.gc-view .plan-marker.has-open-rfi { box-shadow: 0 0 0 2px var(--red), 0 0 11px 3px var(--red); }
   @media (max-width: 820px) { body.gc-view .plan-marker { width: 11px; height: 11px; } }
 
   /* Two column layout */
@@ -414,6 +415,9 @@
   .plan-marker.in-progress { background: var(--yellow); }
   .plan-marker.issue { background: var(--red); animation: pulse 1.6s infinite; }
   .plan-marker.pending { background: #6c7682; opacity: 0.85; }
+  /* Open-RFI marker: keep the status fill (install colour) but add a pulsing red glow
+     ring so an open RFI reads at a glance without hiding the unit's install status. */
+  .plan-marker.has-open-rfi { box-shadow: 0 0 0 2px var(--red), 0 0 9px 2px var(--red); animation: pulse 1.6s infinite; }
   /* Doors (SD-prefixed) — square shape + cyan ring so they read distinctly from
      the round storefront markers, while the fill still encodes install status. */
   .plan-marker.door {
@@ -1464,7 +1468,7 @@ document.addEventListener('DOMContentLoaded', applyThemeUI);
       <a class="btn" href="friday-triage.html" title="Friday Glass Triage"><span data-i18n="btn_glass_triage">🪟 Glass Triage</span></a>
       <a class="btn" href="warehouse.html" title="Warehouse"><span data-i18n="btn_warehouse">📦 Warehouse</span></a>
       <button class="btn" type="button" onclick="openDrawings()" title="Project drawings"><span data-i18n="btn_drawings">📐 Drawings</span></button>
-      <button class="btn btn-primary" onclick="openAddLog()" data-om-id="17a02737:21"><span data-i18n="btn_add_log" data-om-id="17a02737:22">+ Add Daily Log</span></button>
+      <button class="btn btn-primary" onclick="openAddLog()" data-gc-hide data-om-id="17a02737:21"><span data-i18n="btn_add_log" data-om-id="17a02737:22">+ Add Daily Log</span></button>
     </div>
   </div>
 </header>
@@ -1571,7 +1575,7 @@ document.addEventListener('DOMContentLoaded', applyThemeUI);
   </section>
 
   <!-- Charts -->
-  <div class="grid-2" data-om-id="17a02737:167">
+  <div class="grid-2" data-om-id="17a02737:167" data-gc-hide>
     <div class="section" data-om-id="17a02737:168">
       <div class="section-header" data-om-id="17a02737:169">
         <div class="section-title" data-i18n="sec_trend" data-om-id="17a02737:170">Daily Installation Trend</div>
@@ -1592,7 +1596,7 @@ document.addEventListener('DOMContentLoaded', applyThemeUI);
  
 
   <!-- Glass Status Breakdown -->
-  <div class="section">
+  <div class="section" data-gc-hide>
     <div class="section-header">
       <div class="section-title">Glass Status Breakdown</div>
     </div>
@@ -1601,7 +1605,7 @@ document.addEventListener('DOMContentLoaded', applyThemeUI);
  </div>
 
   <!-- Unit Grid -->
-  <section class="section" data-om-id="17a02737:188">
+  <section class="section" data-om-id="17a02737:188" data-gc-hide>
     <div class="section-header" data-om-id="17a02737:189">
       <div class="section-title" data-i18n="sec_unit_map" data-om-id="17a02737:190">Unit Status Map · Click unit to update status</div>
       <button id="glassFlipBtn" class="btn glass-flip-btn" onclick="toggleCardFlip()" title="Flip cards to show glass panel numbers">🪟 Glass View</button>
