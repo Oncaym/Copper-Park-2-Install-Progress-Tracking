@@ -28,9 +28,9 @@ return {
 
   // Project strings that override the core i18n table
   i18n: {
-    en: { header_sub: "Broadway Builders · Ground Floor · Installed Framing & Louver Tracking", img_alt_gf: "Cooper Park 2 — Ground Floor Plan (from DXF)" },
-    zh: { header_sub: "Broadway Builders · 一层 · 框架与百叶安装追踪", img_alt_gf: "Cooper Park 2 — 一层平面图（来自 DXF）" },
-    ko: { header_sub: "Broadway Builders · 1층 · 프레임 및 루버 설치 추적", img_alt_gf: "Cooper Park 2 — 1층 평면도 (DXF)" }
+    en: { header_sub: "Broadway Builders · Ground Floor · Installed Framing & Louver Tracking", img_alt_gf: "Cooper Park 2 — Ground Floor Plan (from DXF)", legend_door: "Door" },
+    zh: { header_sub: "Broadway Builders · 一层 · 框架与百叶安装追踪", img_alt_gf: "Cooper Park 2 — 一层平面图（来自 DXF）", legend_door: "门" },
+    ko: { header_sub: "Broadway Builders · 1층 · 프레임 및 루버 설치 추적", img_alt_gf: "Cooper Park 2 — 1층 평면도 (DXF)", legend_door: "도어" }
   },
 
   // Scope baseline (seeds cloud/localStorage on first run or after /state reset)
