@@ -3949,7 +3949,11 @@ function openUsagePanel(){
 const _READONLY_HIDE = ['a[href="/chat"]', 'a[href="warehouse.html"]', '#modulesBtn', '#dailyPushBtn'];
 function applyReadOnlyUI(){
   const ro = !!(window.CloudSync && typeof window.CloudSync.isReadOnly === 'function' && window.CloudSync.isReadOnly());
-  if (!ro) return; // hide-only — never un-hide, so we don't clobber Modules' own toggling
+  // GC (read-only) simplified view — CSS (body.gc-view + [data-gc-hide]) collapses the
+  // dashboard to progress + map + Things to Solve. Safe to toggle both ways: it only
+  // drives CSS, never touches Modules' own element display.
+  document.body.classList.toggle('gc-view', ro);
+  if (!ro) return; // below is hide-only (inline) — never un-hide, so we don't clobber Modules' toggling
   _READONLY_HIDE.forEach(q => document.querySelectorAll(q).forEach(el => { el.style.display = 'none'; }));
 }
 // Let cloud-sync notify us the moment it flips a session to read-only.

@@ -297,6 +297,13 @@
   #planSection.plan-collapsed .plan-toolbar,
   #planSection.plan-collapsed #glassBatchBar,
   #planSection.plan-collapsed .plan-viewport { display: none !important; }
+  /* GC (read-only) simplified view: only progress KPIs + the map + Things to Solve.
+     Everything tagged data-gc-hide (charts, glass breakdown, unit-status grid, daily log,
+     detail table, non-progress KPI cards) is hidden; the plan keeps only its level switch
+     (first toolbar child) — all editor tools drop away. Editors never get body.gc-view. */
+  body.gc-view [data-gc-hide] { display: none !important; }
+  body.gc-view .plan-toolbar > *:not(:first-child) { display: none !important; }
+  body.gc-view .section-title { pointer-events: none; }
 
   /* Two column layout */
   .grid-2 {
@@ -1463,22 +1470,22 @@ document.addEventListener('DOMContentLoaded', applyThemeUI);
       <div class="kpi-sub" data-i18n="kpi_installed_sub" data-om-id="17a02737:30">Framing units completed</div>
     </div>
 
-    <div class="kpi-card red clickable" onclick="openKpiDetail('issue')" data-om-id="17a02737:35">
+    <div class="kpi-card red clickable" onclick="openKpiDetail('issue')" data-om-id="17a02737:35" data-gc-hide>
       <div class="kpi-label" data-i18n="kpi_issues" data-om-id="17a02737:36">Issues</div>
       <div class="kpi-value" id="kpi-issues" data-om-id="17a02737:37">5</div>
       <div class="kpi-sub" data-i18n="kpi_issues_sub" data-om-id="17a02737:38">Opening error / rework needed</div>
     </div>
-    <div class="kpi-card clickable" onclick="openKpiDetail('pending')" data-om-id="17a02737:39">
+    <div class="kpi-card clickable" onclick="openKpiDetail('pending')" data-om-id="17a02737:39" data-gc-hide>
       <div class="kpi-label" data-i18n="kpi_pending" data-om-id="17a02737:40">Pending</div>
       <div class="kpi-value" id="kpi-pending" data-om-id="17a02737:41">35</div>
       <div class="kpi-sub" data-i18n="kpi_pending_sub" data-om-id="17a02737:42">Not yet installed</div>
     </div>
-    <div class="kpi-card purple clickable" onclick="openKpiDetail('louvers')" data-om-id="17a02737:43">
+    <div class="kpi-card purple clickable" onclick="openKpiDetail('louvers')" data-om-id="17a02737:43" data-gc-hide>
       <div class="kpi-label" data-i18n="kpi_louvers" data-om-id="17a02737:44">Louvers Installed</div>
       <div class="kpi-value" id="kpi-louvers" data-om-id="17a02737:45">11</div>
       <div class="kpi-sub" data-i18n="kpi_louvers_sub" data-om-id="17a02737:46">Louver installation count</div>
     </div>
-    <div class="kpi-card green clickable" onclick="openKpiDetail('glass')">
+    <div class="kpi-card green clickable" onclick="openKpiDetail('glass')" data-gc-hide>
       <div class="kpi-label">Glass Installed</div>
       <div class="kpi-value" id="kpi-glass-installed">0</div>
       <div class="kpi-sub" id="kpi-glass-installed-sub">0 / 53 panels</div>
@@ -1556,7 +1563,7 @@ document.addEventListener('DOMContentLoaded', applyThemeUI);
   </section>
 
   <!-- Charts -->
-  <div class="grid-2" data-om-id="17a02737:167">
+  <div class="grid-2" data-om-id="17a02737:167" data-gc-hide>
     <div class="section" data-om-id="17a02737:168">
       <div class="section-header" data-om-id="17a02737:169">
         <div class="section-title" data-i18n="sec_trend" data-om-id="17a02737:170">Daily Installation Trend</div>
@@ -1577,7 +1584,7 @@ document.addEventListener('DOMContentLoaded', applyThemeUI);
  
 
   <!-- Glass Status Breakdown -->
-  <div class="section">
+  <div class="section" data-gc-hide>
     <div class="section-header">
       <div class="section-title">Glass Status Breakdown</div>
     </div>
@@ -1586,7 +1593,7 @@ document.addEventListener('DOMContentLoaded', applyThemeUI);
  </div>
 
   <!-- Unit Grid -->
-  <section class="section" data-om-id="17a02737:188">
+  <section class="section" data-om-id="17a02737:188" data-gc-hide>
     <div class="section-header" data-om-id="17a02737:189">
       <div class="section-title" data-i18n="sec_unit_map" data-om-id="17a02737:190">Unit Status Map · Click unit to update status</div>
       <button id="glassFlipBtn" class="btn glass-flip-btn" onclick="toggleCardFlip()" title="Flip cards to show glass panel numbers">🪟 Glass View</button>
