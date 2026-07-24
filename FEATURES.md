@@ -43,6 +43,15 @@ Status: ✅ live · ⬜ not enabled · ⚠ diverged (see note)
 | F-033 | **两周安装窗口 pilot 三件套**（2026-07-23，Opus）：①**每日 GC 推送生成器**——header 加 `📤` 按钮（`_injectDailyPushBtn`，随 `render` 注入,挨着 ⏳）→ `openDailyPush()` 弹窗,`buildDailyPushText()` 从**实时 state** 生成纯文本(今日安装=`status==='installed' && date===TODAY`、明日计划=`date===tomorrow`、open 卡点复用 `computeOpenItems()` 按天数排序、自动挑最久那条拼一句"Need your reply")→ textarea 可改 + 📋 复制(navigator.clipboard,execCommand 兜底)+ ✉️ mailto 草稿。纯读,不写 state。②**访问日志(opens tracking)**——`cloud-sync.js` 在 `.info/connected` 首次为 true 时(`window._accessLogged` guard 防重连重复)往 Firebase `access` push 一条 `{email,ts,ua}`;`firebase-database-rules.json` 新增 `access` 节点:写=任何登录用户但只能写自己那条且 append-only(`!data.exists()` + `newData.child('email')==auth.token.email`),读=仅 editor(allowlist);`openUsagePanel()`(⏳ 面板底部 `📊 Usage`,editor-only)读 `access` 聚合成每人 opens+last-seen。③**卡点优先落地**——`_injectOpenItemsBtn` 在有 open item 时把 ⏳ 按钮标红加粗;`_pilotAutoOpenBlockers()` 在 initApp 末尾按 `sessionStorage` 日期标记每浏览器 session 弹一次 Open Items(编辑者整天开着也只弹一次)。jsdom 测过 `buildDailyPushText`(今日/明日/卡点/GC ask 全部正确,旧日期 unit 不误算)。**部署前须做**:(a) Firebase Console 更新并发布新规则,否则 access 写不进;(b) 给 GC 建只读账号(现规则下不登录看不到看板)。运行手册见 `PILOT-2WK.md`。 | ⬜ | ✅ | **core(app.js + cloud-sync.js)+ 项目件(firebase-database-rules.json 需各项目自己发布)**,2026-07-23 首发 CP2,待同步到 AC3(rules 的 access 节点两边都要加)。**v2(2026-07-23 只读账号实测反馈)**:①卡点面板重命名 **Things to Solve**(⏳→🔧,标题去掉描述段);②取消 auto-pop modal(桌面像故障、手机不触发),改成 `_injectBlockerBanner()`——`<main>` 顶部常驻红色横幅"N things to solve → Review",随 render 反映实时数量,0 时移除,手机桌面都可靠;③project-level 输入框之前是白的(不在 `.form-row` 里没继承深色样式)——`_EVI_IN` 补上 bg/border/color/padding 跟 RFI tab 一致;④只读账号(GC/非 allowlist)隐藏 Chat/Warehouse/Modules/📤 Daily push——`applyReadOnlyUI()`(hide-only,不 un-hide 以免覆盖 Modules 自己的开关)随 render 跑 + cloud-sync `enterReadOnlyMode` 里通过 `window._onReadOnly` 即时触发;⑤Daily GC push 改为纯英文(内容+弹窗 chrome)。jsdom 14 断言全过。 |
 
 ## Notes
+- **2026-07-23 (Opus) — bugfix：边缘 marker 拖不动**（待同步 AC3）：编辑位置模式下,靠近平面图边缘的
+  marker(如最右侧 x≈96 那批 50/19/49/51/52)拖不动。根因:单个 marker 的 `mousemove` 里有
+  `if (x<0||x>100||y<0||y>100) return;`——0.9 缩放下平面居中、四周是黑边距,一拖光标就越过 wrap 边缘
+  →x>100→整个 move 被 return 掉,marker 冻住。多选拖拽路径本来就是 clamp(不 return)所以不受影响。
+  修法(第一版):单 marker 路径改成 clamp(0,100) 不再 return。**修正(Leo 要 marker 能放到平面图
+  外的黑边区域)**:不 clamp 到 0–100,改成把**光标 clamp 到 plan viewport**再算 %——位置可以为负
+  / 超过 100(落进缩放后平面四周的黑边距,`.plan-wrap` overflow visible 会渲染出来),但 marker 永远
+  拖不出可视 viewport(`.plan-viewport` overflow hidden)不会丢。多选拖拽的 nx/ny 也从 clamp(0,100)
+  放宽成 `_clampMarkerPct`=clamp(-50,150) 安全带。node --check + 视口 clamp 逻辑断言过。
 - **2026-07-23 (Opus) — 只读账号 + 手机实测第二轮修改**（都待同步 AC3）：
   1. **只读横幅移除**：`cloud-sync.js` `showReadOnlyBanner()` 直接 `return`（GC 视角无用噪音；编辑入口已由 `applyReadOnlyUI` 隐藏）。
   2. **删除 ↻ Reset 按钮**：`index.html` header 里 `resetData()` 按钮删掉（云模式下等于刷新页面，且对 GC 吓人）。`resetData()` 函数本身保留但无入口。

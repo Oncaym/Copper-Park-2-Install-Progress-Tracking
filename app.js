@@ -1415,6 +1415,10 @@ function setupPlanInteractions() {
   });
 }
 
+// Marker % positions may extend past the plan into the surrounding margin (Leo:
+// peripheral placement), but keep a generous safety band so a grouped drag can't fling
+// markers far off-screen where they'd be unreachable.
+function _clampMarkerPct(v) { return Math.max(-50, Math.min(150, v)); }
 document.addEventListener('mousemove', e => {
   // ----- Box-select drawing -----
   if (selBoxState) {
@@ -1437,9 +1441,17 @@ document.addEventListener('mousemove', e => {
   }
   if (!dragState) return;
   const { rect, el } = dragState;
-  const x = ((e.clientX - rect.left) / rect.width) * 100;
-  const y = ((e.clientY - rect.top)  / rect.height) * 100;
-  if (x < 0 || x > 100 || y < 0 || y > 100) return;
+  // Markers may sit BEYOND the drawn plan — in the black margin around the zoomed plan
+  // (Leo wants peripheral placement). So we clamp the CURSOR to the plan VIEWPORT, not to
+  // 0–100% of the image: positions can go negative / past 100 into the margins, but a
+  // marker can never be dragged fully off-screen (viewport clips) and lost. The old code
+  // aborted the whole move when the cursor left 0–100%, which froze edge markers.
+  const _vp = document.getElementById('planViewport');
+  const _vpr = _vp ? _vp.getBoundingClientRect() : { left:-1e6, top:-1e6, right:1e6, bottom:1e6 };
+  const _cx = Math.max(_vpr.left, Math.min(_vpr.right,  e.clientX));
+  const _cy = Math.max(_vpr.top,  Math.min(_vpr.bottom, e.clientY));
+  const x = ((_cx - rect.left) / rect.width)  * 100;
+  const y = ((_cy - rect.top)  / rect.height) * 100;
   if (dragState.glassMulti) {
     // Move all selected glass dots by the same delta from drag start
     const dx = x - dragState.startX;
@@ -1453,8 +1465,8 @@ document.addEventListener('mousemove', e => {
     const dx = x - dragState.startX;
     const dy = y - dragState.startY;
     Object.entries(dragState.multiStart).forEach(([key, sp]) => {
-      const nx = Math.max(0, Math.min(100, sp.x + dx));
-      const ny = Math.max(0, Math.min(100, sp.y + dy));
+      const nx = _clampMarkerPct(sp.x + dx);
+      const ny = _clampMarkerPct(sp.y + dy);
       if (dragState.multiEls[key]) {
         dragState.multiEls[key].style.left = nx + '%';
         dragState.multiEls[key].style.top  = ny + '%';
@@ -1538,8 +1550,8 @@ document.addEventListener('mouseup', () => {
       const dy = dragState.y - dragState.startY;
       Object.entries(dragState.multiStart).forEach(([key, sp]) => {
         state.positions[key] = {
-          x: Math.max(0, Math.min(100, sp.x + dx)),
-          y: Math.max(0, Math.min(100, sp.y + dy))
+          x: _clampMarkerPct(sp.x + dx),
+          y: _clampMarkerPct(sp.y + dy)
         };
       });
       saveState(false);
@@ -3239,12 +3251,21 @@ function toggleMapGlassMode() {
   const btn      = document.getElementById('glassMapBtn');
   const batchBtn = document.getElementById('glassBatchBtn');
   const hideSfBtn = document.getElementById('hideSfBtn');
+  const doorBtn = document.getElementById('doorModeBtn');
   if (mapGlassMode) {
     wrap.classList.add('glass-mode');
     clearMarkerSelection();   // drop any SF box-selection so it can't show under glass mode
     if (btn) { btn.textContent = '🗺 SF View'; btn.classList.add('btn-primary'); }
     if (batchBtn) batchBtn.style.display = '';
     if (hideSfBtn) hideSfBtn.style.display = '';
+    // Door Mode is irrelevant in glass view — turn it off (so it isn't stuck on with a
+    // hidden button) and hide its button.
+    if (typeof doorMode !== 'undefined' && doorMode) {
+      doorMode = false;
+      if (doorBtn) { doorBtn.textContent = '🚪 Door Mode'; doorBtn.classList.remove('btn-primary'); }
+      renderPlan();
+    }
+    if (doorBtn) doorBtn.style.display = 'none';
     renderGlassMarkers();
   } else {
     wrap.classList.remove('glass-mode');
@@ -3253,6 +3274,7 @@ function toggleMapGlassMode() {
     if (btn) { btn.textContent = '🪟 Glass Mode'; btn.classList.remove('btn-primary'); }
     if (batchBtn) { batchBtn.style.display = 'none'; batchBtn.textContent = '☑ Batch Select'; batchBtn.classList.remove('btn-primary'); }
     if (hideSfBtn) { hideSfBtn.style.display = 'none'; hideSfBtn.textContent = '🙈 Hide SF'; hideSfBtn.classList.remove('btn-primary'); }
+    if (doorBtn) doorBtn.style.display = '';        // restore Door Mode button in SF view
     mapGlassBatchMode = false;
     selectedGlassPanels = [];
     document.getElementById('glassBatchBar').style.display = 'none';
