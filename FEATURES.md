@@ -52,6 +52,14 @@ Status: ✅ live · ⬜ not enabled · ⚠ diverged (see note)
   viewport 内不受影响。结果:GC 只看到 顶部 Things to Solve 横幅/按钮 + Installed & Overall Progress 两个数 + 只读平面图。
   jsdom 3 断言(gc-view 加/不加/来回 toggle)过。**已知遗留**:GC 点 marker 仍打开可编辑的 unit 弹窗(Save 会被云端规则拒),
   暂未锁;如需只读弹窗再做。
+  **v2(2026-07-23 GC 实测反馈,方向调整——不再极简,保留信息但清理噪音)**:
+  ①保留全部 KPI 卡(Installed/Issues/Pending/Louvers/Glass/Overall)、趋势/状态/玻璃三图、Unit Status Map 网格——
+  上一版对这些打的 `data-gc-hide` 全部撤掉;②GC 只隐藏 **Daily Log + Unit Detail Table**(它们同在 grid-2 `17a02737:465`,
+  上一版漏打标记所以没隐藏,这次补上);③`body.gc-view #langSwitcher{display:none}` 隐藏语言切换,且 `applyReadOnlyUI`
+  里对 GC 强制 `applyLang('en')`(guard currentLang 防 render 循环);④**Things to Solve 横幅改 `position:sticky;top:0`
+  常驻顶部(全局,非仅 GC),背景改不透明(var(--panel)+红边+红字+内阴影红晕),往下滑不再消失;⑤GC 地图 marker 清理:
+  `font-size:0` 去掉编号、缩小到 13px(手机 11px)减少重叠、`.has-louver::after{display:none}` 去掉 louver 'L' 徽标、
+  `.issue` 加红色 glow(box-shadow)。GC 只剩 installed(绿)/pending(灰)/issue(红闪+红晕)/ready(黄)。jsdom 5 断言过。
 - **2026-07-23 (Opus) — bugfix：边缘 marker 拖不动**（待同步 AC3）：编辑位置模式下,靠近平面图边缘的
   marker(如最右侧 x≈96 那批 50/19/49/51/52)拖不动。根因:单个 marker 的 `mousemove` 里有
   `if (x<0||x>100||y<0||y>100) return;`——0.9 缩放下平面居中、四周是黑边距,一拖光标就越过 wrap 边缘

@@ -3815,7 +3815,9 @@ function _injectBlockerBanner() {
   const label = n === 1 ? '1 thing to solve' : `${n} things to solve`;
   if (!bn) {
     bn = document.createElement('div'); bn.id = 'blockerBanner';
-    bn.style.cssText = 'display:flex;align-items:center;gap:10px;cursor:pointer;margin:0 0 14px;padding:11px 15px;border-radius:9px;background:rgba(229,72,77,.13);border:1px solid var(--red,#e5484d);color:var(--red,#e5484d);font-weight:600;font-size:14px';
+    // Pinned to the top of the scroll (Leo, global): position:sticky keeps it visible as
+    // you scroll down. Opaque background so page content can't show through the bar.
+    bn.style.cssText = 'position:sticky;top:0;z-index:60;display:flex;align-items:center;gap:10px;cursor:pointer;margin:0 0 14px;padding:11px 15px;border-radius:9px;background:var(--panel,#161b22);border:1px solid var(--red,#e5484d);box-shadow:0 2px 10px rgba(0,0,0,.35),inset 0 0 0 999px rgba(229,72,77,.12);color:var(--red,#e5484d);font-weight:600;font-size:14px';
     bn.onclick = openItemsModal;
     main.insertBefore(bn, main.firstChild);
   }
@@ -3954,6 +3956,8 @@ function applyReadOnlyUI(){
   // drives CSS, never touches Modules' own element display.
   document.body.classList.toggle('gc-view', ro);
   if (!ro) return; // below is hide-only (inline) — never un-hide, so we don't clobber Modules' toggling
+  // GC is English-only: force EN once (guard on currentLang so applyLang's re-render can't loop).
+  if (typeof currentLang !== 'undefined' && currentLang !== 'en' && typeof applyLang === 'function') applyLang('en');
   _READONLY_HIDE.forEach(q => document.querySelectorAll(q).forEach(el => { el.style.display = 'none'; }));
 }
 // Let cloud-sync notify us the moment it flips a session to read-only.
