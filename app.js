@@ -1159,10 +1159,16 @@ function clampPlanPan() {
   }
   const minX = r.width  - r.width  * planView.s;
   const minY = r.height - r.height * planView.s;
-  if (planView.tx > 0) planView.tx = 0;
-  if (planView.tx < minX) planView.tx = minX;
-  if (planView.ty > 0) planView.ty = 0;
-  if (planView.ty < minY) planView.ty = minY;
+  // Extra pan slack on all four sides (half the viewport each way). Without it you can only
+  // pan exactly to the plan's edges, so markers sitting at the far edges — or dragged into
+  // the black margin, or hiding under the top zoom control — can never be pulled fully into
+  // view. This lets any marker be dragged toward the centre and clear the viewport edges.
+  const padX = r.width  * 0.5;
+  const padY = r.height * 0.5;
+  if (planView.tx > padX) planView.tx = padX;
+  if (planView.tx < minX - padX) planView.tx = minX - padX;
+  if (planView.ty > padY) planView.ty = padY;
+  if (planView.ty < minY - padY) planView.ty = minY - padY;
 }
 function planZoom(factor, cx, cy) {
   const vp = document.getElementById('planViewport');
