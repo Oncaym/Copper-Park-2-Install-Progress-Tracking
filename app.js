@@ -1140,6 +1140,11 @@ function applyPlanTransform() {
   const wrap = document.getElementById('planWrap');
   if (!wrap) return;
   wrap.style.transform = `translate(${planView.tx}px, ${planView.ty}px) scale(${planView.s})`;
+  // Counter-scale for markers: the wrap's scale spreads marker positions apart (good) but
+  // would also blow up marker size (overlap stays). Markers multiply their own transform by
+  // var(--mk) so their on-screen size stays fixed at the base-view size (MIN_ZOOM) at every
+  // zoom level — zoom in = more spacing, same-size dots, no overlap.
+  wrap.style.setProperty('--mk', String(MIN_ZOOM / planView.s));
   const lbl = document.getElementById('zoomLabel');
   if (lbl) lbl.textContent = Math.round(planView.s / MIN_ZOOM * 100) + '%';
 }

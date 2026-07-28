@@ -395,7 +395,7 @@
     border-radius: 50%;
     background: #4d5764;
     border: 2px solid #fff;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%) scale(var(--mk, 1));
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -408,7 +408,7 @@
     z-index: 5;
   }
   .plan-marker:hover {
-    transform: translate(-50%, -50%) scale(1.25);
+    transform: translate(-50%, -50%) scale(calc(1.25 * var(--mk, 1)));
     z-index: 10;
   }
   .plan-marker.installed { background: var(--green); }
@@ -1168,19 +1168,19 @@
     border: 2px solid rgba(0,0,0,0.45);
     box-shadow: 0 1px 3px rgba(0,0,0,0.5);
     cursor: pointer;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%) scale(var(--mk, 1));
     z-index: 6;
     transition: transform 0.15s, box-shadow 0.15s;
     user-select: none;
     color: #fff;
   }
-  .glass-marker:hover { transform: translate(-50%,-50%) scale(1.3); z-index: 10; }
+  .glass-marker:hover { transform: translate(-50%,-50%) scale(calc(1.3 * var(--mk, 1))); z-index: 10; }
   .glass-marker.gm-installed { background: var(--green); color: #fff; }
   .glass-marker.gm-ready     { background: var(--accent); color: #fff; }
   .glass-marker.gm-pending   { background: #4d5764; color: #ccc; }
   .glass-marker.gm-issue     { background: var(--red); color: #fff; animation: pulse 1.4s infinite; }
   .glass-marker.gm-unknown   { background: #2d333b; color: var(--text-dim); border-style: dashed; }
-  .glass-marker.selected     { box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--accent); transform: translate(-50%,-50%) scale(1.25); }
+  .glass-marker.selected     { box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--accent); transform: translate(-50%,-50%) scale(calc(1.25 * var(--mk, 1))); }
   .plan-wrap.edit-mode .glass-marker { cursor: grab; }
   .plan-wrap.edit-mode .glass-marker:active { cursor: grabbing; }
   /* dim SF markers in glass mode */
@@ -1411,7 +1411,7 @@
 
   /* Pointer/coarse — touch hover suppression */
   @media (hover: none) {
-    .plan-marker:hover { transform: translate(-50%, -50%); }
+    .plan-marker:hover { transform: translate(-50%, -50%) scale(var(--mk, 1)); }
     .unit-cell:hover { transform: none; border-color: var(--border); }
   }
 
