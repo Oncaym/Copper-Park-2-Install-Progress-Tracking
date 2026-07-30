@@ -2543,6 +2543,36 @@ function readRfiRows() { return _rfiRowsRaw().filter(m=>m.ref||m.subject); }
 function addRfiRow() { const rows=_rfiRowsRaw(); rows.push({date:new Date().toISOString().slice(0,10),status:'open'}); renderRfiList(rows); }
 function removeRfiRow(i) { const rows=_rfiRowsRaw(); rows.splice(i,1); renderRfiList(rows); }
 
+/* -------- Link a unit to project-level RFIs (F-036) --------
+   Project-level items (state.projectItems[]) carry a free-text "Related Units", but that
+   never actually tied a unit to the item. This picker lets each unit tick which project
+   RFIs affect it; the link is stored on u.projectLinks[] (by ref, else subject). A ticked
+   item that's still open lights up the unit's red RFI ring (see unitHasOpenRfi). */
+function _projLinkKey(m) { return String((m && (m.ref || m.subject)) || '').trim().toLowerCase(); }
+function renderUnitProjectLinks(u) {
+  const box = document.getElementById('unit-projlinks'); if (!box) return;
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const items = (Array.isArray(state.projectItems) ? state.projectItems : []).filter(m => m.ref || m.subject);
+  const linked = new Set((u && Array.isArray(u.projectLinks) ? u.projectLinks : []).map(k => String(k).trim().toLowerCase()));
+  if (!items.length) {
+    box.innerHTML = `<div style="font-size:12px;color:var(--text-dim)">No project-level RFIs yet — add them in the header 🔧 Things to Solve panel.</div>`;
+    return;
+  }
+  box.innerHTML = items.map(m => {
+    const key = m.ref || m.subject || '';
+    const st = m.status || 'open';
+    const stc = st === 'open' ? 'var(--red,#e5484d)' : (st === 'answered' ? 'var(--yellow,#d29922)' : 'var(--text-dim)');
+    return `<label style="display:flex;gap:8px;align-items:center;padding:5px 2px;margin:0;cursor:pointer">
+        <input type="checkbox" data-plk="${esc(key)}"${linked.has(key.trim().toLowerCase()) ? ' checked' : ''} style="width:auto;height:auto;flex:0 0 auto;margin:0;padding:0;accent-color:var(--accent,#58a6ff)">
+        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;color:var(--text)"><b>${esc(m.ref || '—')}</b>${m.subject ? ` · ${esc(m.subject)}` : ''}</span>
+        <span style="font-size:10px;text-transform:uppercase;letter-spacing:.4px;border:1px solid ${stc};color:${stc};border-radius:20px;padding:1px 7px;white-space:nowrap">${esc(st)}</span>
+      </label>`;
+  }).join('');
+}
+function readUnitProjectLinks() {
+  return Array.from(document.querySelectorAll('#unit-projlinks input[type="checkbox"]')).filter(c => c.checked).map(c => c.getAttribute('data-plk')).filter(Boolean);
+}
+
 function formatStatus(s) {
   return { installed:t('status_installed'), 'in-progress':t('status_in_progress'), issue:t('status_issue'), pending:t('status_pending') }[s] || s;
 }
@@ -2569,6 +2599,7 @@ function openUnit(id) {
   renderGlassPanelList(u.glassPanels && u.glassPanels.length ? u.glassPanels : (u.glass ? [{ panel: u.panels||'', status: u.glass }] : [{ panel:'', status:'' }]));
   renderRoList(Array.isArray(u.ro) ? u.ro : []);
   renderRfiList(Array.isArray(u.rfi) ? u.rfi : []);
+  renderUnitProjectLinks(u);
   setElevMode(false);
   switchModalTab('cal');
   document.getElementById('unitModal').classList.add('show');
@@ -2871,6 +2902,8 @@ function saveUnit() {
     u.rfi.forEach(row => upsertRfiLog(_scope, u.id, row));
     sweepOrphanRfiLogs(_scope, u.rfi);
   }
+  // F-036: which project-level RFIs this unit is linked to (marks the unit's RFI ring).
+  if (document.getElementById('unit-projlinks')) u.projectLinks = readUnitProjectLinks();
 
   // --- Auto-generate Daily Log entry from diff ---
   autoLogUnitChanges(u, {
@@ -3698,10 +3731,31 @@ const FEATURE_MODULES = [
    this is a read-only projection over data that's already there,
    so it's safe even for units created before this feature existed.
    ------------------------------------------------------------ */
-// True when a unit carries at least one open RFI row (ref/subject present, status open).
-// Drives the red glow ring on the plan marker — same signal Open Items / the banner use.
+// True when a unit carries at least one open RFI row (ref/subject present, status open),
+// OR is linked to an open project-level RFI (F-036). Drives the red glow ring on the plan
+// marker — same signal Open Items / the banner use.
 function unitHasOpenRfi(u) {
-  return !!(u && Array.isArray(u.rfi) && u.rfi.some(m => (m.status || 'open') === 'open' && (m.ref || m.subject)));
+  const own = !!(u && Array.isArray(u.rfi) && u.rfi.some(m => (m.status || 'open') === 'open' && (m.ref || m.subject)));
+  return own || unitLinkedOpenProject(u);
+}
+// Resolve a stored link key back to its project item (matched by ref, else subject).
+function _projItemByKey(key) {
+  const k = String(key || '').trim().toLowerCase(); if (!k) return null;
+  return (typeof state !== 'undefined' && state && Array.isArray(state.projectItems) ? state.projectItems : [])
+    .find(m => _projLinkKey(m) === k) || null;
+}
+// True when the unit links to at least one project item that is still open.
+function unitLinkedOpenProject(u) {
+  return !!(u && Array.isArray(u.projectLinks) && u.projectLinks.some(key => {
+    const m = _projItemByKey(key); return m && (m.status || 'open') === 'open';
+  }));
+}
+// Reverse lookup: unit IDs that have linked a given project item (for its read card).
+function _unitsLinkedTo(m) {
+  const k = _projLinkKey(m); if (!k) return '';
+  return (typeof state !== 'undefined' && state && Array.isArray(state.units) ? state.units : [])
+    .filter(u => Array.isArray(u.projectLinks) && u.projectLinks.some(x => String(x).trim().toLowerCase() === k))
+    .map(u => u.id).join(', ');
 }
 function computeOpenItems() {
   if (typeof state === 'undefined' || !state || !Array.isArray(state.units)) return [];
@@ -3768,6 +3822,7 @@ function openItemsModal() {
     const meta = [];
     if (it.party) meta.push(`👤 ${esc(it.party)}`);
     if (it.scope === 'project' && it.relatedUnits) meta.push(`Affects: ${esc(it.relatedUnits)}`);
+    if (it.scope === 'project' && it.linkedUnits) meta.push(`Linked units: ${esc(it.linkedUnits)}`);
     return `<div style="padding:10px 2px;border-bottom:1px solid var(--border,rgba(255,255,255,.08));${clickable ? 'cursor:pointer' : ''}"${clickable ? ` onclick="closeOpenItemsModal();openUnit('${esc(it.unitKey)}')"` : ''}>
         <div style="display:flex;align-items:center;gap:8px">
           <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">${head}</span>
@@ -3786,7 +3841,7 @@ function openItemsModal() {
   // Project-level read cards from the full records (carry status/response, unlike computeOpenItems).
   const projAll = (Array.isArray(state.projectItems) ? state.projectItems : []).map(m => ({
     scope: 'project', ref: m.ref || '', subject: m.subject || '', party: m.party || '',
-    relatedUnits: m.relatedUnits || '', status: m.status || 'open', thread: _threadFrom(m),
+    relatedUnits: m.relatedUnits || '', linkedUnits: _unitsLinkedTo(m), status: m.status || 'open', thread: _threadFrom(m),
     days: (m.status || 'open') === 'open' ? _daysOpen(m.date) : null
   })).filter(m => m.ref || m.subject);
   projAll.sort((a, b) => { const ao = a.status === 'open' ? 0 : 1, bo = b.status === 'open' ? 0 : 1; if (ao !== bo) return ao - bo; return (b.days == null ? -1 : b.days) - (a.days == null ? -1 : a.days); });
