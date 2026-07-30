@@ -1119,6 +1119,9 @@ function hidePlanTooltip() {
 /* ---- Plan zoom & pan (touch + buttons + wheel) ---- */
 let planView = { s: 0.9, tx: 0, ty: 0 };
 const MIN_ZOOM = 0.9, MAX_ZOOM = 6;
+// Absolute zoom-out floor, below the centred "fit" scale (MIN_ZOOM). Lets you zoom OUT past
+// fit to shrink the plan and reveal/grab markers that were dragged off the visible plan.
+const ZOOM_MIN = 0.35;
 
 // Returns the centered planView state at MIN_ZOOM (equal black border on all sides).
 // Uses wrap.offsetHeight (image natural height) so vertical centering works even when
@@ -1150,32 +1153,30 @@ function applyPlanTransform() {
 }
 function clampPlanPan() {
   const vp = document.getElementById('planViewport');
-  if (!vp) return;
+  const wrap = document.getElementById('planWrap');
+  if (!vp || !wrap) return;
   const r = vp.getBoundingClientRect();
-  if (planView.s <= MIN_ZOOM) {
-    // Snap back to centered at MIN_ZOOM
-    Object.assign(planView, getPlanCenterView());
-    return;
-  }
-  const minX = r.width  - r.width  * planView.s;
-  const minY = r.height - r.height * planView.s;
-  // Extra pan slack on all four sides (half the viewport each way). Without it you can only
-  // pan exactly to the plan's edges, so markers sitting at the far edges — or dragged into
-  // the black margin, or hiding under the top zoom control — can never be pulled fully into
-  // view. This lets any marker be dragged toward the centre and clear the viewport edges.
+  // Actual rendered content size (real plan dimensions × scale) — using the true wrap size
+  // instead of the viewport width fixes edge access when the plan isn't the same aspect as
+  // the viewport, and lets the clamp work correctly when zoomed OUT past fit (content smaller
+  // than the viewport). No snap-back-to-fit, so zoom-out sticks.
+  const cw = wrap.offsetWidth  * planView.s;
+  const ch = wrap.offsetHeight * planView.s;
+  // Half-viewport of slack on every side so far-edge / off-plan markers can be pulled fully
+  // into view and grabbed (also lets you pan while zoomed out).
   const padX = r.width  * 0.5;
   const padY = r.height * 0.5;
-  if (planView.tx > padX) planView.tx = padX;
-  if (planView.tx < minX - padX) planView.tx = minX - padX;
-  if (planView.ty > padY) planView.ty = padY;
-  if (planView.ty < minY - padY) planView.ty = minY - padY;
+  const minX = Math.min(0, r.width  - cw) - padX, maxX = Math.max(0, r.width  - cw) + padX;
+  const minY = Math.min(0, r.height - ch) - padY, maxY = Math.max(0, r.height - ch) + padY;
+  planView.tx = Math.max(minX, Math.min(maxX, planView.tx));
+  planView.ty = Math.max(minY, Math.min(maxY, planView.ty));
 }
 function planZoom(factor, cx, cy) {
   const vp = document.getElementById('planViewport');
   if (!vp) return;
   const r = vp.getBoundingClientRect();
   if (cx == null) { cx = r.width / 2; cy = r.height / 2; }
-  const newS = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, planView.s * factor));
+  const newS = Math.min(MAX_ZOOM, Math.max(ZOOM_MIN, planView.s * factor));
   if (newS === planView.s) return;
   // Keep the point under (cx,cy) fixed
   const f = newS / planView.s;
@@ -1276,8 +1277,9 @@ function setupPlanZoomPan() {
     if (!panActive) {
       if (Math.hypot(e.clientX - p.sx, e.clientY - p.sy) < PAN_THRESHOLD) return;
       panActive = true;
-      // At base zoom, auto-zoom on first drag so the gesture actually moves the map
-      if (planView.s <= MIN_ZOOM) {
+      // At exactly the fit scale, auto-zoom on first drag so the gesture actually moves the
+      // map. Don't fire when zoomed OUT past fit (user did that on purpose to see everything).
+      if (Math.abs(planView.s - MIN_ZOOM) < 1e-6) {
         const r = vp.getBoundingClientRect();
         planZoom(1.8, p.sx - r.left, p.sy - r.top);
       }
@@ -2433,6 +2435,70 @@ function _eviCell(label, inner) {
 // Things-to-Solve modal (which are NOT inside a .form-row) match the unit RFI tab
 // instead of rendering as default white.
 const _EVI_IN = 'style="width:100%;min-width:0;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-size:13px;font-family:inherit"';
+
+/* ---- Response THREAD (F-034) ------------------------------------------------
+   An RFI / project item's answer is a back-and-forth, not one box: we revise, GC
+   gives feedback, if it passes it's done, if not we revise again. So `response`
+   becomes `thread = [{ by:'us'|'gc'|'', text, date }]`. Legacy single-string
+   `response` migrates into a one-entry thread on first render (side left blank).
+   Editors maintain the thread in-app (GC is read-only and replies by email, which
+   the editor then logs as a `gc` entry). Shared by the unit RFI tab + project items. */
+const _THREAD_SIDES = [['', '—'], ['us', 'Us'], ['gc', 'GC']];
+function _sideLabel(by) { return by === 'us' ? 'Us' : (by === 'gc' ? 'GC' : '—'); }
+function _sideColor(by) { return by === 'us' ? 'var(--accent,#58a6ff)' : (by === 'gc' ? 'var(--purple,#a371f7)' : 'var(--text-dim)'); }
+// Normalize any item into a thread array, migrating a legacy `response` string.
+function _threadFrom(m) {
+  if (m && Array.isArray(m.thread)) return m.thread.map(e => ({ by: e.by || '', text: e.text || '', date: e.date || '' }));
+  if (m && m.response) return [{ by: '', text: String(m.response), date: m.dateAnswered || m.date || '' }];
+  return [];
+}
+// One editable thread entry (side select + note + date + remove).
+function _threadEntryHtml(e) {
+  e = e || {};
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const by = e.by || '';
+  return `<div class="thread-entry" style="display:grid;grid-template-columns:64px 1fr 138px auto;gap:6px;align-items:center;margin-top:5px">
+      <select data-tf="by" ${_EVI_IN}>${_THREAD_SIDES.map(([v, l]) => `<option value="${v}"${by === v ? ' selected' : ''}>${l}</option>`).join('')}</select>
+      <input data-tf="text" type="text" placeholder="what happened / feedback" value="${esc(e.text)}" autocomplete="off" ${_EVI_IN}>
+      <input data-tf="date" type="date" value="${esc(e.date)}" ${_EVI_IN}>
+      <button type="button" class="btn-remove" onclick="removeThreadEntry(this)" title="Remove" style="margin:0">×</button>
+    </div>`;
+}
+// The whole thread editor block for a row (entries + add button). Spans the row width.
+function _threadBoxHtml(entries) {
+  const rows = (entries && entries.length ? entries : []).map(_threadEntryHtml).join('');
+  return `<div class="thread-box" style="grid-column:1 / -1;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border,rgba(255,255,255,.14))">
+      <label style="display:block;font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.3px;margin:0 0 2px">Response thread</label>
+      <div class="thread-entries">${rows}</div>
+      <button type="button" class="btn" style="font-size:11px;margin-top:6px" onclick="addThreadEntry(this)">+ Add response</button>
+    </div>`;
+}
+// Read the thread entries out of a rendered row (scoped so it never clashes with the
+// row's scalar inputs, which live in .evi-line1 / .evi-line2). Blank-text rows dropped.
+function _readThread(row) {
+  return Array.from(row.querySelectorAll('.thread-entry')).map(te => {
+    const g = k => { const el = te.querySelector('[data-tf="' + k + '"]'); return el ? el.value : ''; };
+    return { by: g('by'), text: (g('text') || '').trim(), date: g('date') };
+  }).filter(e => e.text);
+}
+function addThreadEntry(btn) {
+  const box = btn.closest('.thread-box'); if (!box) return;
+  const list = box.querySelector('.thread-entries'); if (!list) return;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = _threadEntryHtml({ by: 'us', date: new Date().toISOString().slice(0, 10) });
+  const el = tmp.firstElementChild; if (el) list.appendChild(el);
+}
+function removeThreadEntry(btn) { const e = btn.closest('.thread-entry'); if (e) e.remove(); }
+// Read-only conversation view (used in the Things-to-Solve thread cards).
+function _threadReadHtml(entries) {
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  if (!entries || !entries.length) return '';
+  return `<div style="margin-top:6px;display:flex;flex-direction:column;gap:4px">` + entries.map(e => `
+      <div style="font-size:11.5px;line-height:1.4">
+        <b style="color:${_sideColor(e.by)}">${_sideLabel(e.by)}</b>${e.date ? ` <span style="color:var(--text-dim)">· ${esc(e.date)}</span>` : ''}
+        <span style="color:var(--text-dim)"> — ${esc(e.text)}</span>
+      </div>`).join('') + `</div>`;
+}
 function renderRfiList(rows) {
   const box = document.getElementById('rfi-list'); if (!box) return;
   const esc = s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -2452,12 +2518,11 @@ function renderRfiList(rows) {
         ${_eviCell('Status', `<select ${_EVI_IN}>${STATUS.map(s=>`<option value="${s}"${(m.status||'open')===s?' selected':''}>${s}</option>`).join('')}</select>`)}
         <span style="padding-bottom:6px">${(m.status||'open')==='open' ? _daysOpenBadge(_daysOpen(m.date)) : ''}</span>
       </div>
-      <div class="evi-line2" style="display:grid;grid-template-columns:1fr 2.2fr 1fr auto;gap:6px;margin-top:6px;align-items:end">
+      <div class="evi-line2" style="display:grid;grid-template-columns:1fr auto;gap:6px;margin-top:6px;align-items:end">
         ${_eviCell('Party', `<input type="text" placeholder="party e.g. GC" value="${esc(m.party)}" autocomplete="off" ${_EVI_IN}>`)}
-        ${_eviCell('Response', `<input type="text" placeholder="response" value="${esc(m.response)}" autocomplete="off" ${_EVI_IN}>`)}
-        ${_eviCell('Answered', `<input type="date" value="${esc(m.dateAnswered)}" ${_EVI_IN}>`)}
         <button type="button" class="btn-remove" onclick="removeRfiRow(${i})" title="Remove" style="margin-bottom:4px">×</button>
       </div>
+      ${_threadBoxHtml(_threadFrom(m))}
     </div>`).join('');
 }
 // NOTE (F-031/F-032): `party` input added to the RFI row grid — before F-031 it was in the
@@ -2469,8 +2534,9 @@ function renderRfiList(rows) {
 // dateAnswered.
 function _rfiRowsRaw() {
   return Array.from(document.querySelectorAll('#rfi-list .ro-row')).map(row=>{
-    const f = row.querySelectorAll('input,select');
-    return { ref:f[0].value.trim(), date:f[1].value, subject:f[2].value.trim(), status:f[3].value, party:f[4].value.trim(), response:f[5].value.trim(), dateAnswered:f[6].value };
+    // Scope to the scalar lines so the variable-length thread inputs never shift indices.
+    const f = row.querySelectorAll('.evi-line1 input, .evi-line1 select, .evi-line2 input, .evi-line2 select');
+    return { ref:f[0].value.trim(), date:f[1].value, subject:f[2].value.trim(), status:f[3].value, party:f[4].value.trim(), thread:_readThread(row) };
   });
 }
 function readRfiRows() { return _rfiRowsRaw().filter(m=>m.ref||m.subject); }
@@ -3647,6 +3713,7 @@ function computeOpenItems() {
       items.push({
         scope: 'unit', unitId: u.id, unitKey: u.key,
         ref: m.ref || '', subject: m.subject || '', party: m.party || '',
+        thread: _threadFrom(m),
         date: m.date || '', days: _daysOpen(m.date)
       });
     });
@@ -3708,7 +3775,7 @@ function openItemsModal() {
         </div>
         ${it.subject ? `<div style="font-size:13px;margin-top:3px">${esc(it.subject)}</div>` : ''}
         ${meta.length ? `<div style="font-size:11.5px;color:var(--text-dim);margin-top:3px">${meta.join(' · ')}</div>` : ''}
-        ${it.response ? `<div style="font-size:11.5px;color:var(--text-dim);margin-top:2px">↩ ${esc(it.response)}</div>` : ''}
+        ${(it.thread && it.thread.length) ? _threadReadHtml(it.thread) : ''}
         ${respondBtn}
       </div>`;
   };
@@ -3719,7 +3786,7 @@ function openItemsModal() {
   // Project-level read cards from the full records (carry status/response, unlike computeOpenItems).
   const projAll = (Array.isArray(state.projectItems) ? state.projectItems : []).map(m => ({
     scope: 'project', ref: m.ref || '', subject: m.subject || '', party: m.party || '',
-    relatedUnits: m.relatedUnits || '', status: m.status || 'open', response: m.response || '',
+    relatedUnits: m.relatedUnits || '', status: m.status || 'open', thread: _threadFrom(m),
     days: (m.status || 'open') === 'open' ? _daysOpen(m.date) : null
   })).filter(m => m.ref || m.subject);
   projAll.sort((a, b) => { const ao = a.status === 'open' ? 0 : 1, bo = b.status === 'open' ? 0 : 1; if (ao !== bo) return ao - bo; return (b.days == null ? -1 : b.days) - (a.days == null ? -1 : a.days); });
@@ -3826,19 +3893,19 @@ function renderProjectItemsList(rows) {
         ${_eviCell('Status', `<select ${_EVI_IN}>${STATUS.map(s=>`<option value="${s}"${(m.status||'open')===s?' selected':''}>${s}</option>`).join('')}</select>`)}
         <span style="padding-bottom:6px">${(m.status||'open')==='open' ? _daysOpenBadge(_daysOpen(m.date)) : ''}</span>
       </div>
-      <div class="evi-line2" style="display:grid;grid-template-columns:1fr 1.3fr 1.8fr 1fr auto;gap:6px;margin-top:6px;align-items:end">
+      <div class="evi-line2" style="display:grid;grid-template-columns:1fr 1.3fr auto;gap:6px;margin-top:6px;align-items:end">
         ${_eviCell('Party', `<input type="text" placeholder="party e.g. Architect" value="${esc(m.party)}" autocomplete="off" ${_EVI_IN}>`)}
         ${_eviCell('Related Units', `<input type="text" placeholder="e.g. all SD* doors" value="${esc(m.relatedUnits)}" autocomplete="off" ${_EVI_IN}>`)}
-        ${_eviCell('Response', `<input type="text" placeholder="response" value="${esc(m.response)}" autocomplete="off" ${_EVI_IN}>`)}
-        ${_eviCell('Answered', `<input type="date" value="${esc(m.dateAnswered)}" ${_EVI_IN}>`)}
         <button type="button" class="btn-remove" onclick="removeProjectItemRow(${i})" title="Remove" style="margin-bottom:4px">×</button>
       </div>
+      ${_threadBoxHtml(_threadFrom(m))}
     </div>`).join('');
 }
 function _projectItemRowsRaw() {
   return Array.from(document.querySelectorAll('#project-items-list .ro-row')).map(row=>{
-    const f = row.querySelectorAll('input,select');
-    return { ref:f[0].value.trim(), date:f[1].value, subject:f[2].value.trim(), status:f[3].value, party:f[4].value.trim(), relatedUnits:f[5].value.trim(), response:f[6].value.trim(), dateAnswered:f[7].value };
+    // Scope to the scalar lines so thread inputs don't shift the positional indices.
+    const f = row.querySelectorAll('.evi-line1 input, .evi-line1 select, .evi-line2 input, .evi-line2 select');
+    return { ref:f[0].value.trim(), date:f[1].value, subject:f[2].value.trim(), status:f[3].value, party:f[4].value.trim(), relatedUnits:f[5].value.trim(), thread:_readThread(row) };
   });
 }
 function readProjectItemRows() { return _projectItemRowsRaw().filter(m=>m.ref||m.subject); }
