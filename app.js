@@ -2527,14 +2527,23 @@ function _planSrcFor(key) {
   const f = getFloors().find(x => x.key === key);
   return (f && f.img) ? f.img : base;
 }
-// Latest "opening ready" acknowledgment per unit id, from the GC inbox (F-037).
+/* Latest "opening ready" state per unit, from the GC inbox (F-037).
+   v2 (Leo mis-tapped ✓ and couldn't undo): the ack is a TOGGLE. Firebase rules let a
+   non-editor create entries but not edit or delete them, so un-marking appends a new
+   `kind:'ready', cleared:true` record instead of removing the old one — the latest
+   record wins, and the whole marked/un-marked sequence stays in the audit trail. */
 function _openingAcks() {
-  const out = {};
+  const latest = {}, out = {};
   _gcItems().filter(x => x && x.kind === 'ready' && x.unitId).forEach(x => {
     const k = String(x.unitId).trim().toLowerCase();
-    if (!out[k] || (x.ts || 0) > (out[k].ts || 0)) out[k] = x;
+    if (!latest[k] || (x.ts || 0) >= (latest[k].ts || 0)) latest[k] = x;
   });
+  Object.keys(latest).forEach(k => { if (!latest[k].cleared) out[k] = latest[k]; });
   return out;
+}
+function _openingAckedBy(unitId) {
+  const a = _openingAcks()[String(unitId || '').trim().toLowerCase()];
+  return a ? (a.by || '') : null;
 }
 // Every unit we've issued a required R.O. for, in plan order, with its ack state.
 function openingsRows() {
@@ -2577,9 +2586,12 @@ function openOpeningsSheet() {
       </div>`;
   };
   const ackCell = (r) => {
-    if (r.ack) return `<span style="color:var(--green,#2ea043);white-space:nowrap">✓ ready ${esc(_gcTsDate(r.ack.ts))}</span>`;
+    if (r.ack && !ro) return `<span style="color:var(--green,#2ea043);white-space:nowrap">✓ ready ${esc(_gcTsDate(r.ack.ts))}</span>`;
     if (!ro) return `<span style="color:var(--text-dim)">awaiting GC</span>`;
-    return `<button type="button" class="btn op-noprint" style="font-size:11px;padding:3px 9px;white-space:nowrap" onclick="markOpeningReady('${esc(r.id)}')">✓ Opening ready</button>`;
+    // GC: the ack is a toggle — a mis-tap has to be undoable.
+    return r.ack
+      ? `<button type="button" class="btn op-noprint" style="font-size:11px;padding:3px 9px;white-space:nowrap;color:var(--green,#2ea043);border-color:var(--green,#2ea043)" title="Tap to undo" onclick="markOpeningReady('${esc(r.id)}')">✓ ready — tap to undo</button>`
+      : `<button type="button" class="btn op-noprint" style="font-size:11px;padding:3px 9px;white-space:nowrap" onclick="markOpeningReady('${esc(r.id)}')">✓ Opening ready</button>`;
   };
   const body = rows.length ? rows.map(r => `<tr>
       <td style="font-weight:600">${esc(r.id)}</td>
@@ -2639,14 +2651,35 @@ function exportOpeningsCsv() {
   document.body.appendChild(a); a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
 }
-// GC one-tap acknowledgment — no typing. Lands in /gcItems as kind:'ready' (F-037).
-function markOpeningReady(unitId) {
+/* GC one-tap acknowledgment — no typing, and reversible (a mis-tap must be undoable).
+   Toggles: ready → not ready → ready, each step appended to /gcItems. */
+function markOpeningReady(unitId, force) {
   const CS = window.CloudSync;
   if (!CS || typeof CS.submitGcItem !== 'function') { if (typeof toast === 'function') toast('Cloud not ready'); return; }
-  CS.submitGcItem({ kind: 'ready', unitId: unitId, subject: 'Opening ready',
-    text: `GC confirms the rough opening at ${unitId} is prepared per the issued dimensions.` })
-    .then(() => { if (typeof toast === 'function') toast('Marked ready ✓'); openOpeningsSheet(); })
-    .catch(err => { console.warn('[F-038] ready ack failed:', err && err.message); if (typeof toast === 'function') toast('Could not send — check your connection'); });
+  const isReady = !!_openingAcks()[String(unitId || '').trim().toLowerCase()];
+  const clearing = (force === undefined) ? isReady : !force;
+  const payload = clearing
+    ? { kind: 'ready', cleared: true, unitId: unitId, subject: 'Opening ready — undone',
+        text: `GC withdrew the ready confirmation for ${unitId}.` }
+    : { kind: 'ready', unitId: unitId, subject: 'Opening ready',
+        text: `GC confirms the rough opening at ${unitId} is prepared per the issued dimensions.` };
+  return CS.submitGcItem(payload)
+    .then(() => {
+      if (typeof toast === 'function') toast(clearing ? 'Ready mark removed' : 'Marked ready ✓');
+      _refreshOpeningViews(unitId);
+    })
+    .catch(err => { console.warn('[F-038] ready toggle failed:', err && err.message); if (typeof toast === 'function') toast('Could not send — check your connection'); });
+}
+// Repaint whatever opening surfaces are currently on screen after a toggle.
+function _refreshOpeningViews(unitId) {
+  try { if (_lens() === 'openings') renderPlan(); } catch (e) {}
+  const sheet = document.getElementById('openingsModal');
+  if (sheet && sheet.classList.contains('show')) { openOpeningsSheet(); return; }
+  const card = document.getElementById('unitViewModal');
+  if (card && card.classList.contains('show') && unitId) {
+    const u = (state.units || []).find(x => x.id === unitId || x.key === unitId);
+    if (u) openUnitReadOnly(u);
+  }
 }
 /* ==================== end F-038 ==================== */
 
@@ -2715,10 +2748,10 @@ function _lensMarkerClass(u, lens) {
   const acked = !!_openingAcks()[String(u.id).trim().toLowerCase()];
   return ' lens-dim' + (acked ? ' lens-ready' : '');
 }
-function _lensMarkerLabel(u, lens) {
-  if (lens === 'openings') { const r = _roReqOf(u); return _roReqDims(r) || u.id.replace(/^SF/, ''); }
-  return u.id.replace(/^SF/, '');
-}
+// v2 (Leo, 2026-07-31): tag number only in every lens. Putting the dimension on the
+// marker looked clever but crowded the plan into unreadable overlapping pills — the
+// dimensions belong in the 📋 List, which is why that button now glows.
+function _lensMarkerLabel(u, lens) { return u.id.replace(/^SF/, ''); }
 function _lensMarkerTitle(u, lens) {
   if (lens === 'openings') {
     const r = _roReqOf(u); const ack = _openingAcks()[String(u.id).trim().toLowerCase()];
@@ -2747,7 +2780,7 @@ function renderPlanLensBar() {
   const opts = lens === 'issues' ? _lensRfiOptions() : [];
   const extras = lens === 'openings'
     ? `<div class="lens-extras">
-         <button type="button" class="btn" onclick="openOpeningsSheet()" title="Full list with the key plan">📋 List</button>
+         <button type="button" class="btn lens-cta" onclick="openOpeningsSheet()" title="Every opening with its dimensions">📋 Opening sizes</button>
          <button type="button" class="btn" onclick="openOpeningsSheet();setTimeout(printOpenings,80)" title="Print the openings sheet">🖨</button>
        </div>`
     : (lens === 'issues'
@@ -2765,7 +2798,7 @@ function renderPlanLensBar() {
       ${tab('progress', '✓ Progress', null)}
     </div>${extras}
     <div class="lens-hint">${lens === 'openings'
-      ? 'Each tag is the rough opening we need at that location. Green = you marked it ready. Tap one to confirm or flag a problem.'
+      ? 'Tags mark the openings we need. Tap 📋 Opening sizes for the dimensions, or tap a tag to confirm it or flag a problem. Green = you marked it ready.'
       : (lens === 'issues' ? 'Only units with an open issue are shown. Tap one to see the thread or add your response.'
         : 'Installation status by unit.')}</div>`;
 }
@@ -3016,10 +3049,10 @@ function openUnitReadOnly(u) {
       <div style="font-size:19px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums">${esc(_roReqDims(rq))}${rq.tol ? ` <span style="font-size:12px;font-weight:400;color:var(--text-dim)">${esc(rq.tol)}</span>` : ''}</div>
       ${rq.note ? `<div style="font-size:12px;color:var(--text-dim);margin-top:3px">${esc(rq.note)}</div>` : ''}
       <div style="font-size:11px;color:var(--text-dim);margin-top:4px">Issued ${esc(rq.issued || '—')}${rq.rev ? ` · rev ${esc(rq.rev)}` : ''}</div>
-      <div style="margin-top:8px">${ack
-        ? `<span style="font-size:12px;color:var(--green,#2ea043)">✓ Marked ready ${esc(_gcTsDate(ack.ts))}</span>`
+      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">${ack
+        ? `<button type="button" class="btn" style="font-size:12px;color:var(--green,#2ea043);border-color:var(--green,#2ea043)" title="Tap to undo" onclick="markOpeningReady('${esc(u.id)}')">✓ Marked ready ${esc(_gcTsDate(ack.ts))} — tap to undo</button>`
         : `<button type="button" class="btn" style="font-size:12px" onclick="markOpeningReady('${esc(u.id)}')">✓ Opening ready</button>`}
-        <button type="button" class="btn" style="font-size:12px;margin-left:6px" onclick="openOpeningsSheet()">📐 All openings</button></div>
+        <button type="button" class="btn" style="font-size:12px" onclick="openOpeningsSheet()">📋 All sizes</button></div>
     </div>`;
   const facts = [];
   if (u.date) facts.push(['Install date', u.date]);
@@ -3055,18 +3088,32 @@ function openUnitReadOnly(u) {
   // Scoped to their own email — one outside party never sees another's traffic.
   const _me = (window.CloudSync && typeof window.CloudSync.currentUser === 'function' && window.CloudSync.currentUser() && window.CloudSync.currentUser().email) || '';
   const mine = _gcItemsForUnit(u.id).filter(x => x.by === _me);
-  ov.innerHTML = `<div class="modal" style="max-width:560px">
-      <div style="display:flex;align-items:center;gap:10px">
-        <h3 style="margin:0;flex:1;min-width:0">${esc(u.id)}</h3>${stPill}
-      </div>
-      ${roBlock}
-      ${factHtml}
-      <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border)">
+  /* v2 (Leo): the card used to dump R.O. + facts + issues together regardless of why
+     they tapped. Now it answers only the question the current lens is asking, with a
+     one-line bridge to the other lens when there IS something over there. */
+  const lens = _lens();
+  const openIssueCount = own.filter(m => (m.status || 'open') === 'open').length + linked.filter(m => (m.status || 'open') === 'open').length;
+  const issuesSection = `<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border)">
         <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px">Issues on this unit</div>
         ${issues || `<div style="padding:10px 2px;color:var(--text-dim);font-size:12.5px">No open issues logged on this unit.</div>`}
       </div>
       ${mine.length ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
-        <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px">Sent to Advanced Facade</div>${mine.map(_gcItemReadCard).join('')}</div>` : ''}
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px">Sent to Advanced Facade</div>${mine.map(_gcItemReadCard).join('')}</div>` : ''}`;
+  const bridge = (label, toLens) => `<div style="margin-top:12px"><button type="button" class="btn" style="font-size:12px" onclick="setPlanLens('${toLens}');openUnit('${esc(u.key)}')">${label}</button></div>`;
+  let bodyHtml;
+  if (lens === 'openings') {
+    bodyHtml = (roBlock || `<div style="margin-top:12px;color:var(--text-dim);font-size:12.5px">No rough opening has been issued for this unit yet.</div>`)
+      + (openIssueCount ? bridge(`🔧 ${openIssueCount} open issue${openIssueCount === 1 ? '' : 's'} on this unit →`, 'issues') : '');
+  } else if (lens === 'issues') {
+    bodyHtml = issuesSection + (!_roReqEmpty(rq) ? bridge('📐 Required opening for this unit →', 'openings') : '');
+  } else {
+    bodyHtml = factHtml || `<div style="margin-top:12px;color:var(--text-dim);font-size:12.5px">Nothing logged on this unit yet.</div>`;
+  }
+  ov.innerHTML = `<div class="modal" style="max-width:560px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <h3 style="margin:0;flex:1;min-width:0">${esc(u.id)}</h3>${lens === 'progress' ? stPill : ''}
+      </div>
+      ${bodyHtml}
       <div class="modal-actions" style="gap:8px;flex-wrap:wrap">
         <button class="btn btn-primary" type="button" style="margin-right:auto" onclick="openGcIssueForm('${esc(u.id)}')">➕ Raise an issue</button>
         <button class="btn" type="button" onclick="document.getElementById('unitViewModal').classList.remove('show')">Close</button>
