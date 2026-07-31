@@ -1052,6 +1052,10 @@ function render() {
 
 /* ---- Floor Plan rendering ---- */
 function renderPlan() {
+  // F-039 v3: make sure the plan is showing the asset that matches the current theme.
+  // Cheap (only touches src when it differs) and covers the first paint, where a day-mode
+  // user restored from localStorage would otherwise get the white-linework plan on white.
+  try { applyPlanTheme(); } catch (e) {}
   const wrap = document.getElementById('planWrap');
   // remove existing markers (keep image + tooltip)
   wrap.querySelectorAll('.plan-marker').forEach(el => el.remove());
@@ -1148,9 +1152,21 @@ function getPlanCenterView() {
   };
 }
 
+/* F-039 v3: `will-change: transform` is applied only WHILE a gesture is running, then
+   dropped ~180ms after it settles. During the drag/pinch it keeps the cached layer (smooth
+   60fps); once released, removing it forces the browser to re-rasterize the plan at the
+   final scale, so what the GC actually reads is sharp instead of an upscaled bitmap. */
+let _planGestureTimer = null;
+function planGestureActive() {
+  const wrap = document.getElementById('planWrap'); if (!wrap) return;
+  wrap.style.willChange = 'transform';
+  if (_planGestureTimer) clearTimeout(_planGestureTimer);
+  _planGestureTimer = setTimeout(() => { wrap.style.willChange = ''; _planGestureTimer = null; }, 180);
+}
 function applyPlanTransform() {
   const wrap = document.getElementById('planWrap');
   if (!wrap) return;
+  planGestureActive();
   wrap.style.transform = `translate(${planView.tx}px, ${planView.ty}px) scale(${planView.s})`;
   // Counter-scale for markers: the wrap's scale spreads marker positions apart (good) but
   // would also blow up marker size (overlap stays). Markers multiply their own transform by
@@ -1668,16 +1684,36 @@ const PLAN_L2_SRC = PROJECT.planL2 || "data:image/png;base64,iVBORw0KGgoAAAANSUh
 // guarantees switching back to GF always returns to the exact same image and
 // works offline / when the assets/ folder is missing.
 let PLAN_GF_SRC = null;
+/* F-039 v3: theme-appropriate plan asset, no CSS filter.
+   `filter:invert(1)` produced the dark-theme plan, but a filtered element is rasterized
+   into its own layer that iOS Safari bitmap-scales during pinch-zoom — the plan blurred
+   out exactly where the GC needs it sharp (finding an opening at 400%). We ship a
+   pre-inverted twin instead and pick by theme. `data-plan-light` is the original
+   black-linework file, `data-plan-dark` its white counterpart. */
+function _planLightSrc() {
+  const img = document.getElementById('planImg'); if (!img) return '';
+  return img.getAttribute('data-plan-light') || PLAN_GF_SRC || img.getAttribute('src') || '';
+}
+function _floorImgSrc(lvl) {
+  const img = document.getElementById('planImg');
+  if (lvl !== firstFloorKey()) { const f = getFloors().find(x => x.key === lvl); if (f && f.img) return f.img; }
+  const dark = img && img.getAttribute('data-plan-dark');
+  return (dark && !isDayMode()) ? dark : _planLightSrc();
+}
+// Re-point the plan at the right asset (called on floor change and on theme toggle).
+function applyPlanTheme() {
+  const img = document.getElementById('planImg'); if (!img) return;
+  const want = _floorImgSrc(currentLevel);
+  if (want && img.getAttribute('src') !== want) img.setAttribute('src', want);
+  img.style.filter = '';   // never filter the plan — see comment above
+}
 function setLevel(lvl) {
   clearMarkerSelection();
   const img = document.getElementById('planImg');
-  if (PLAN_GF_SRC === null) PLAN_GF_SRC = img.src;
+  if (PLAN_GF_SRC === null) PLAN_GF_SRC = _planLightSrc();
   currentLevel = lvl;
   document.querySelectorAll('.level-btn').forEach(b => b.classList.toggle('active', b.dataset.level === lvl));
-  const _f = getFloors().find(x => x.key === lvl);
-  img.src = (lvl === firstFloorKey()) ? PLAN_GF_SRC : ((_f && _f.img) ? _f.img : PLAN_GF_SRC);
-  // Both GF (transparent PNG) and L2 (white SVG) need invert for dark theme
-  img.style.filter = 'invert(1)';
+  applyPlanTheme();
   renderPlan();
 }
 
@@ -2519,10 +2555,11 @@ function applyRoRequired(u, next) {
    the GC's super does not know our unit numbers, so a bare list of "SF06N — 7'-0 1/4"
    is useless to him. Print-friendly (one 🖨 button → the sheet, nothing else) and
    CSV-exportable, so the number can leave the browser and go on a clipboard. */
+// The printable sheet always uses the LIGHT (black-linework) asset — it gets CSS-inverted
+// for the dark UI and printed as-is on white paper. It is not pinch-zoomed, so the filter
+// layer that hurts the main plan (F-039 v3) is harmless here.
 function _planSrcFor(key) {
-  const img = document.getElementById('planImg');
-  if (typeof PLAN_GF_SRC !== 'undefined' && PLAN_GF_SRC === null && img) PLAN_GF_SRC = img.getAttribute('src');
-  const base = (typeof PLAN_GF_SRC !== 'undefined' && PLAN_GF_SRC) ? PLAN_GF_SRC : (img ? img.getAttribute('src') : '');
+  const base = _planLightSrc();
   if (key === firstFloorKey()) return base;
   const f = getFloors().find(x => x.key === key);
   return (f && f.img) ? f.img : base;

@@ -147,7 +147,8 @@
   body.day-mode .glass-installed { background:rgba(26,127,55,0.10);  color:#1a7f37; }
   body.day-mode .glass-issue     { background:rgba(207,34,46,0.10);  color:#cf222e; }
   body.day-mode .cat-chip:hover  { border-color:#8c959f; }
-  body.day-mode .plan-img { filter: none !important; }
+  /* Plan images are pre-inverted assets now (F-039 v3) — never filter them, at any theme. */
+  .plan-img, body.day-mode .plan-img { filter: none !important; }
   body.day-mode .plan-viewport { background: #ffffff; }
   body.day-mode .plan-zoom-controls { background: rgba(255,255,255,0.85); }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -476,7 +477,10 @@
     width: 100%;
     transform-origin: 0 0;
     transform: translate(0,0) scale(1);
-    will-change: transform;
+    /* NO `will-change: transform` (F-039 v3). It pins the plan into a cached raster layer,
+       so pinch-zoom scaled that bitmap instead of re-rendering the image at the new scale —
+       the plan turned to mush past ~200%, exactly where the GC needs to read opening
+       locations. Dropping it costs a little pan smoothness and buys a sharp plan. */
   }
   .plan-img {
     display: block;
@@ -1542,6 +1546,7 @@ function toggleTheme(){
   const day = document.body.classList.toggle('day-mode');
   localStorage.setItem(((window.PROJECT||{}).code||'tracker').toLowerCase()+'_theme', day ? 'day' : 'night');
   applyThemeUI();
+  try { if (typeof applyPlanTheme === 'function') applyPlanTheme(); } catch(e){}  // F-039 v3: swap the pre-inverted plan asset
   try { if (typeof renderCharts === 'function') renderCharts(); } catch(e){}
   try { if (typeof renderGlassChart === 'function') renderGlassChart(); } catch(e){}
 }
@@ -1552,7 +1557,7 @@ document.addEventListener('DOMContentLoaded', applyThemeUI);
   <div class="header-inner" data-om-id="17a02737:6">
     <div class="header-title" data-om-id="17a02737:7">
       <h1 data-om-id="17a02737:8">Cooper Park 2 — Installation Progress Monitor</h1>
-      <p data-i18n="header_sub" data-om-id="17a02737:9">Broadway Builder · Ground Floor · Installed Framing &amp; Louver Tracking</p>
+      <p data-i18n="header_sub" data-om-id="17a02737:9">Broadway Builders</p>
     </div>
     <div class="header-actions" data-om-id="17a02737:10">
       <button class="btn" type="button" id="themeToggle" onclick="toggleTheme()" title="日间/夜间模式 Day/Night">☀️</button>
@@ -1663,7 +1668,11 @@ document.addEventListener('DOMContentLoaded', applyThemeUI);
       </div>
       <div id="selBox"></div>
       <div class="plan-wrap" id="planWrap" data-om-id="17a02737:92">
-      <img src="gf-plan.png" style="filter:invert(1)" alt="Cooper Park 2 — Ground Floor Plan (from DXF)" data-i18n-alt="img_alt_gf" class="plan-img" id="planImg" data-plan-gf="" data-om-id="17a02737:93">
+      <!-- F-039 v3: `filter:invert(1)` used to make the dark-theme plan, but a CSS filter
+           forces the browser to rasterize the plan into a layer that iOS Safari then
+           BITMAP-scales on pinch-zoom → the mush the GC saw at 400%. We now ship a
+           pre-inverted twin (gf-plan-white.png) and swap the src by theme, no filter. -->
+      <img src="gf-plan-white.png" data-plan-light="gf-plan.png" data-plan-dark="gf-plan-white.png" alt="Cooper Park 2 — Ground Floor Plan (from DXF)" data-i18n-alt="img_alt_gf" class="plan-img" id="planImg" data-plan-gf="" data-om-id="17a02737:93">
       <div class="plan-tooltip" id="planTooltip" style="left: 1006.14px; top: 195.922px; display: none;" data-om-id="17a02737:94"><strong>SF01R</strong> · Storefront · North<br>
     <span style="color:var(--text-dim)">Installed · 5/13</span>
     <br><span style="color:var(--text-dim);font-size:10px">Framing 5/13 · Louver → 5/18</span></div>
