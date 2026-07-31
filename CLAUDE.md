@@ -69,5 +69,9 @@ CP2 特有：`defaultPositions` 有平面图预置坐标（requirePlacedMarkers=
   `7'-0 1/4"`）→ Save → 点 header 📐 看清单（平面图 tag 是不是全称、表格对不对）→ 🖨 打印预览
   （应该只剩清单、平面图是黑线白底）→ 用 GC 账号点 ✓ Opening ready → tag 变绿。
   **Leo 待办**：把各 unit 的 R.O. 尺寸录进去（可以直接给我列表，我批量写进 project-config SEED）。
+- [ ] **F-039（平面图 lens 栏）本地验一遍**：平面图上方应有 `[📐 Openings] [🔧 Issues] [✓ Progress]`。
+  Openings → marker 变成写着尺寸的胶囊（要先有 R.O. 数据才看得到，否则是空的）；Issues → 出现 RFI
+  下拉，选一条只亮对应 unit；Progress → 跟以前一样。GC 账号登录应直接落在 Openings，且 📐 Drawings
+  按钮不可见。待同步到 AC3（app.js）。
 - [ ] Leo：把安装窗口**结束日期**告诉当前会话，好设"最后一天"收尾对话提醒（super/PM 访谈，
   问题清单在 PILOT-2WK.md 第四节）。GC 依赖清单给我可批量录入 project-config SEED。

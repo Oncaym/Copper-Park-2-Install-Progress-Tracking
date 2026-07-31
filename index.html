@@ -309,10 +309,48 @@
   /* GC map: only installed / not-installed / issue matter. Drop unit numbers, shrink the
      markers so they don't overlap, remove the louver 'L' badge, and make issues glow red. */
   body.gc-view .plan-marker { width: 13px; height: 13px; font-size: 0; border-width: 1.5px; }
+  /* …except in the Openings lens (F-039), where the label IS the deliverable. */
+  body.gc-view .plan-wrap.lens-openings .plan-marker { width:auto; height:auto; font-size:10px; border-width:1px; }
+  @media (max-width: 820px) { body.gc-view .plan-wrap.lens-openings .plan-marker { font-size:8.5px; } }
   body.gc-view .plan-marker.has-louver::after { display: none !important; }
   body.gc-view .plan-marker.issue { box-shadow: 0 0 11px 3px var(--red), 0 0 5px var(--red); }
   body.gc-view .plan-marker.has-open-rfi { box-shadow: 0 0 0 2px var(--red), 0 0 11px 3px var(--red); }
   @media (max-width: 820px) { body.gc-view .plan-marker { width: 11px; height: 11px; } }
+
+  /* ---- F-039: plan lens bar — the GC's single control ----
+     Sits ABOVE .plan-toolbar on purpose: gc-view hides every toolbar child but the
+     first, and the lens bar must survive that. */
+  .plan-lens-bar { display:flex; align-items:center; gap:10px 14px; flex-wrap:wrap; margin-bottom:10px; }
+  .plan-lens-bar .lens-tabs { display:flex; gap:6px; flex-wrap:wrap; }
+  .plan-lens-bar .lens-btn {
+    display:inline-flex; align-items:center; gap:6px; cursor:pointer;
+    background:var(--panel-2); color:var(--text-dim); border:1px solid var(--border);
+    border-radius:20px; padding:7px 14px; font-size:13px; font-weight:600; font-family:inherit;
+    transition:all .15s;
+  }
+  .plan-lens-bar .lens-btn:hover { color:var(--text); border-color:var(--accent); }
+  .plan-lens-bar .lens-btn.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .plan-lens-bar .lens-count { font-size:11px; background:rgba(255,255,255,.14); border-radius:20px; padding:1px 7px; }
+  .plan-lens-bar .lens-btn.active .lens-count { background:rgba(0,0,0,.22); }
+  .plan-lens-bar .lens-extras { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .plan-lens-bar .lens-select {
+    background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:8px;
+    padding:6px 10px; font-size:12.5px; font-family:inherit; max-width:min(360px, 60vw);
+  }
+  .plan-lens-bar .lens-hint { flex-basis:100%; font-size:12px; color:var(--text-dim); }
+  /* Openings lens: the marker stops being a dot and becomes the dimension itself —
+     the GC gets the answer without clicking anything. */
+  .plan-wrap.lens-openings .plan-marker {
+    width:auto; height:auto; border-radius:5px; padding:3px 6px; font-size:10px;
+    border-width:1px; white-space:nowrap; background:var(--accent,#58a6ff);
+    box-shadow:0 2px 6px rgba(0,0,0,.45);
+  }
+  .plan-wrap.lens-openings .plan-marker.lens-ready { background:var(--green,#2ea043); }
+  .plan-wrap.lens-openings .plan-marker.has-louver::after { display:none; }
+  @media (max-width: 820px) {
+    .plan-wrap.lens-openings .plan-marker { font-size:8.5px; padding:2px 4px; }
+    .plan-lens-bar .lens-btn { padding:6px 11px; font-size:12px; }
+  }
 
   /* ---- F-038: Openings sheet (📐) — key plan with full unit tags + table ----
      The GC's super doesn't know our unit numbers, so the tags spell out the full id
@@ -336,7 +374,9 @@
   body.day-mode #openingsSheet .op-plan img { filter:none; }
   body.day-mode #openingsSheet .op-plan { background:#fff; }
   #openingsSheet .op-table { width:100%; border-collapse:collapse; font-size:12.5px; margin-top:6px; }
-  #openingsSheet .op-table th { text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.4px; color:var(--text-dim); font-weight:600; padding:6px 8px; border-bottom:1px solid var(--border); }
+  /* Override the global `th` rule: its var(--panel-2) fill stays dark on the printed
+     sheet (print forces text to #000, not backgrounds) → unreadable header bar. */
+  #openingsSheet .op-table th { text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.4px; color:var(--text); font-weight:700; padding:7px 8px; background:transparent; border-bottom:2px solid var(--border); }
   #openingsSheet .op-table td { padding:7px 8px; border-bottom:1px solid var(--border,rgba(255,255,255,.07)); vertical-align:middle; }
   @media (max-width: 820px) {
     #openingsSheet .op-table { font-size:11.5px; }
@@ -353,7 +393,7 @@
     body.printing-openings #openingsSheet .op-scroll { max-height:none !important; overflow:visible !important; }
     body.printing-openings #openingsSheet .op-plan { background:#fff !important; border-color:#999 !important; }
     body.printing-openings #openingsSheet .op-plan img { filter:none !important; }   /* black linework on white paper */
-    body.printing-openings #openingsSheet .op-table th,
+    body.printing-openings #openingsSheet .op-table th { background:#fff !important; color:#000 !important; border-bottom:2px solid #333 !important; }
     body.printing-openings #openingsSheet .op-table td { border-bottom:1px solid #bbb !important; }
     body.printing-openings .op-noprint { display:none !important; }
     body.printing-openings #openingsSheet .op-floor { page-break-inside:avoid; }

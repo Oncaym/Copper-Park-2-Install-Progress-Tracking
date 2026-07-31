@@ -1072,10 +1072,16 @@ function renderPlan() {
   }
   const hidePending = document.getElementById('hidePendingChk').checked;
   const hl = window._highlightedSfIds; // Set<string> or null
+  const lens = _lens();                                    // F-039
+  wrap.classList.toggle('lens-openings', lens === 'openings');
+  wrap.classList.toggle('lens-issues', lens === 'issues');
   state.units.forEach(u => {
     if ((u.level || firstFloorKey()) !== currentLevel) return;
-    if (hidePending && u.status === 'pending') return;
-    if (doorMode && !isDoor(u)) return;   // Door Mode: hide storefront markers
+    if (!_lensShows(u, lens)) return;      // F-039: lens filter — hide what this view isn't about
+    if (lens === 'progress') {
+      if (hidePending && u.status === 'pending') return;
+      if (doorMode && !isDoor(u)) return;   // Door Mode: hide storefront markers
+    }
     if (PROJECT.requirePlacedMarkers && !state.positions[u.key]) return;  // opt-in: skip markers not placed on the plan
     const pos = state.positions[u.key] || { x: 50, y: 50 };
     const m = document.createElement('div');
@@ -1083,15 +1089,18 @@ function renderPlan() {
     if (hl && hl.size) {
       extra = hl.has((u.id || '').toUpperCase()) ? ' highlighted' : ' dimmed';
     }
+    extra += _lensMarkerClass(u, lens);
     m.className = `plan-marker ${u.status}${unitHasOpenRfi(u) ? ' has-open-rfi' : ''}${isDoor(u) ? ' door' : ''}${u.louver === 'yes' ? ' has-louver' : ''}${isPlanned(u) ? ' planned' : ''}${extra}`;
     m.style.left = pos.x + '%';
     m.style.top  = pos.y + '%';
     {
-      // Strip SF prefix only — sub-IDs are entered manually by the user, no auto suffix
-      m.textContent = u.id.replace(/^SF/, '');
+      // Strip SF prefix only — sub-IDs are entered manually by the user, no auto suffix.
+      // In the Openings lens the label is the dimension itself (F-039) — the answer the
+      // GC is looking for, with no click required.
+      m.textContent = _lensMarkerLabel(u, lens);
     }
     m.dataset.unit = u.key;
-    m.title = `${u.id} · ${formatStatus(u.status)}${u.date ? ' · ' + formatDate(u.date) : ''}`;
+    m.title = _lensMarkerTitle(u, lens);
     // hover tooltip
     m.addEventListener('mouseenter', e => showPlanTooltip(e, u));
     m.addEventListener('mouseleave', hidePlanTooltip);
@@ -2558,7 +2567,9 @@ function openOpeningsSheet() {
     const tags = mine.map(r => {
       const p = r.pos || { x: 50, y: 50 };
       const done = !!r.ack;
-      return `<span class="op-tag${done ? ' op-tag-ready' : ''}" style="left:${p.x}%;top:${p.y}%" title="${esc(r.id)} · ${esc(_roReqDims(r))}">${esc(r.id)}</span>`;
+      // Number only (SF prefix stripped, same as the dashboard markers) — the full id was
+      // wide enough that neighbouring openings overlapped into an unreadable blob.
+      return `<span class="op-tag${done ? ' op-tag-ready' : ''}" style="left:${p.x}%;top:${p.y}%" title="${esc(r.id)} · ${esc(_roReqDims(r))}">${esc(String(r.id).replace(/^SF/i, ''))}</span>`;
     }).join('');
     return `<div class="op-floor">
         <div class="op-floor-name">${esc(floorLabel(f))}</div>
@@ -2596,7 +2607,7 @@ function openOpeningsSheet() {
             <thead><tr><th>Unit</th><th>Floor</th><th>Required W</th><th>Required H</th><th>Tol.</th><th>Note</th><th>Issued</th><th>GC status</th></tr></thead>
             <tbody>${body}</tbody>
           </table>
-          <div style="font-size:11px;color:var(--text-dim);margin-top:10px">Dimensions are rough-opening sizes in feet-inches. Tags on the key plan mark each opening; green = the GC has marked it ready.</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:10px">Dimensions are rough-opening sizes in feet-inches. Tags on the key plan show the unit number without the "SF" prefix (tag <b>42</b> = unit SF42); green = the GC has marked it ready.</div>
         </div>
       </div>
       <div class="modal-actions op-noprint" style="gap:8px;flex-wrap:wrap">
@@ -2637,16 +2648,128 @@ function markOpeningReady(unitId) {
     .then(() => { if (typeof toast === 'function') toast('Marked ready ✓'); openOpeningsSheet(); })
     .catch(err => { console.warn('[F-038] ready ack failed:', err && err.message); if (typeof toast === 'function') toast('Could not send — check your connection'); });
 }
-function _injectOpeningsBtn() {
-  if (document.getElementById('openingsBtn')) return;
-  const bar = document.querySelector('.header-actions'); if (!bar) return;
-  const b = document.createElement('button');
-  b.className = 'btn'; b.id = 'openingsBtn'; b.type = 'button';
-  b.textContent = '📐'; b.title = 'Required Rough Openings';
-  b.onclick = openOpeningsSheet;
-  bar.appendChild(b);
-}
 /* ==================== end F-038 ==================== */
+
+/* ==================== F-039: plan lenses ======================================
+   Leo, 2026-07-31: "GC 需要一打开就会用." The GC had grown four entry points — the
+   map, the 🔧 banner, the 📐 sheet, and the unit card — each answering a different
+   question. A GC super only ever asks two: *what do I have to prepare* and *what is
+   blocking me*. So the plan gets ONE control, a lens bar, and every other surface
+   becomes a projection of it:
+
+     [ 📐 Openings (n) ] [ 🔧 Issues (n) ] [ ✓ Progress ]
+
+   - Openings: only units with a required R.O.; the marker LABEL is the dimension, so
+     the answer needs no click. Blue = awaiting them, green = they marked it ready.
+   - Issues: only units with an open RFI. A picker appears listing the open RFIs —
+     pick one and only the units it affects stay lit (Leo's original idea, scoped to
+     the lens where an RFI number means something).
+   - Progress: the install view we already had, untouched, default for editors.
+
+   Purely a view state: nothing here writes to `state`, so it never syncs and can't
+   conflict. GC lands on Openings, editors on Progress. */
+const _LENSES = ['progress', 'openings', 'issues'];
+let _planLens = null;          // null = not chosen yet → resolve by role on first read
+let _lensUserPicked = false;   // once they click a lens, we stop overriding it
+let _lensRfi = '';             // selected RFI key inside the Issues lens ('' = all)
+function _lens() {
+  if (_planLens && _LENSES.indexOf(_planLens) !== -1) return _planLens;
+  // First paint: the GC's job is preparing openings, so that's where they land.
+  _planLens = _isRO() ? 'openings' : 'progress';
+  return _planLens;
+}
+function setPlanLens(l) {
+  if (_LENSES.indexOf(l) === -1) return;
+  _planLens = l; _lensUserPicked = true;
+  if (l !== 'issues') _lensRfi = '';
+  renderPlanLensBar(); renderPlan();
+}
+function setLensRfi(v) { _lensRfi = v || ''; renderPlanLensBar(); renderPlan(); }
+// Every open RFI in the project, unit-level and project-level, as picker options.
+function _lensRfiOptions() {
+  const seen = {}, out = [];
+  const add = (m, unitId) => {
+    if (!m || (m.status || 'open') !== 'open' || !(m.ref || m.subject)) return;
+    const k = _projLinkKey(m); if (!k || seen[k]) { if (seen[k]) return; }
+    seen[k] = true;
+    out.push({ key: k, label: (m.ref || m.subject) + (m.ref && m.subject ? ' · ' + m.subject : ''), scope: unitId ? 'unit' : 'project' });
+  };
+  (state && Array.isArray(state.units) ? state.units : []).forEach(u => (Array.isArray(u.rfi) ? u.rfi : []).forEach(m => add(m, u.id)));
+  (state && Array.isArray(state.projectItems) ? state.projectItems : []).forEach(m => add(m, null));
+  return out;
+}
+// Does this unit belong to the currently selected RFI?
+function _unitMatchesLensRfi(u) {
+  if (!_lensRfi) return unitHasOpenRfi(u);
+  const own = Array.isArray(u.rfi) && u.rfi.some(m => (m.status || 'open') === 'open' && _projLinkKey(m) === _lensRfi);
+  const linked = Array.isArray(u.projectLinks) && u.projectLinks.some(k => String(k).trim().toLowerCase() === _lensRfi);
+  return own || linked;
+}
+function _lensShows(u, lens) {
+  if (lens === 'openings') return !_roReqEmpty(_roReqOf(u));
+  if (lens === 'issues') return _unitMatchesLensRfi(u);
+  return true;
+}
+function _lensMarkerClass(u, lens) {
+  if (lens !== 'openings') return '';
+  const acked = !!_openingAcks()[String(u.id).trim().toLowerCase()];
+  return ' lens-dim' + (acked ? ' lens-ready' : '');
+}
+function _lensMarkerLabel(u, lens) {
+  if (lens === 'openings') { const r = _roReqOf(u); return _roReqDims(r) || u.id.replace(/^SF/, ''); }
+  return u.id.replace(/^SF/, '');
+}
+function _lensMarkerTitle(u, lens) {
+  if (lens === 'openings') {
+    const r = _roReqOf(u); const ack = _openingAcks()[String(u.id).trim().toLowerCase()];
+    return `${u.id} · required R.O. ${_roReqDims(r)}${r.tol ? ' ' + r.tol : ''}${ack ? ' · GC marked ready ' + _gcTsDate(ack.ts) : ' · awaiting the GC'}`;
+  }
+  return `${u.id} · ${formatStatus(u.status)}${u.date ? ' · ' + formatDate(u.date) : ''}`;
+}
+function _lensCounts() {
+  const units = (state && Array.isArray(state.units) ? state.units : []);
+  return {
+    openings: units.filter(u => !_roReqEmpty(_roReqOf(u))).length,
+    issues: units.filter(u => unitHasOpenRfi(u)).length + (typeof computeOpenItems === 'function' ? computeOpenItems().filter(i => i.scope !== 'unit').length : 0),
+  };
+}
+function renderPlanLensBar() {
+  const sec = document.getElementById('planSection'); if (!sec) return;
+  const tb = sec.querySelector('.plan-toolbar'); if (!tb) return;
+  let bar = document.getElementById('planLensBar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'planLensBar'; bar.className = 'plan-lens-bar';
+    tb.parentNode.insertBefore(bar, tb);   // sits ABOVE the editor toolbar, so gc-view keeps it
+  }
+  const lens = _lens(), c = _lensCounts(), esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const tab = (k, label, n) => `<button type="button" class="lens-btn${lens === k ? ' active' : ''}" onclick="setPlanLens('${k}')">${label}${n != null ? ` <span class="lens-count">${n}</span>` : ''}</button>`;
+  const opts = lens === 'issues' ? _lensRfiOptions() : [];
+  const extras = lens === 'openings'
+    ? `<div class="lens-extras">
+         <button type="button" class="btn" onclick="openOpeningsSheet()" title="Full list with the key plan">📋 List</button>
+         <button type="button" class="btn" onclick="openOpeningsSheet();setTimeout(printOpenings,80)" title="Print the openings sheet">🖨</button>
+       </div>`
+    : (lens === 'issues'
+      ? `<div class="lens-extras">
+           <select class="lens-select" onchange="setLensRfi(this.value)" title="Show only the units one RFI affects">
+             <option value=""${_lensRfi ? '' : ' selected'}>All open issues</option>
+             ${opts.map(o => `<option value="${esc(o.key)}"${_lensRfi === o.key ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}
+           </select>
+           <button type="button" class="btn" onclick="openItemsModal()" title="Details and history">🔧 Details</button>
+         </div>`
+      : '');
+  bar.innerHTML = `<div class="lens-tabs">
+      ${tab('openings', '📐 Openings', c.openings)}
+      ${tab('issues', '🔧 Issues', c.issues)}
+      ${tab('progress', '✓ Progress', null)}
+    </div>${extras}
+    <div class="lens-hint">${lens === 'openings'
+      ? 'Each tag is the rough opening we need at that location. Green = you marked it ready. Tap one to confirm or flag a problem.'
+      : (lens === 'issues' ? 'Only units with an open issue are shown. Tap one to see the thread or add your response.'
+        : 'Installation status by unit.')}</div>`;
+}
+/* ==================== end F-039 ==================== */
 
 /* Note: the R.O. tab/UI above was retired by AC3's M3 (replaced by the RFI tab below).
    CP2 kept the R.O. tab (no elevation data yet), so openUnit()/saveUnit() do call
@@ -4707,13 +4830,23 @@ function openUsagePanel(){
 // push generator (a Leo tool). CloudSync.isReadOnly() flips async after the allowlist
 // check, so this runs on every render() and is also re-fired from cloud-sync's
 // enterReadOnlyMode() via window._onReadOnly (below).
-const _READONLY_HIDE = ['a[href="/chat"]', 'a[href="warehouse.html"]', '#modulesBtn', '#dailyPushBtn'];
+// F-039: Drawings goes too (Leo) — a OneDrive link list is our internal reference, not
+// something the GC should be poking at, and it was the fourth 📐-ish button competing
+// for their attention.
+const _READONLY_HIDE = ['a[href="/chat"]', 'a[href="warehouse.html"]', '#modulesBtn', '#dailyPushBtn', 'button[onclick="openDrawings()"]'];
 function applyReadOnlyUI(){
   const ro = !!(window.CloudSync && typeof window.CloudSync.isReadOnly === 'function' && window.CloudSync.isReadOnly());
   // GC (read-only) simplified view — CSS (body.gc-view + [data-gc-hide]) collapses the
   // dashboard to progress + map + Things to Solve. Safe to toggle both ways: it only
   // drives CSS, never touches Modules' own element display.
   document.body.classList.toggle('gc-view', ro);
+  // F-039: read-only resolves asynchronously (allowlist check), so the first paint may
+  // already have landed on the editor default. Snap a GC to the Openings lens once we
+  // know — unless they've clicked a lens themselves, in which case leave them alone.
+  if (ro && !_lensUserPicked && _planLens !== 'openings') {
+    _planLens = 'openings';
+    try { renderPlanLensBar(); renderPlan(); } catch (e) {}
+  }
   if (!ro) return; // below is hide-only (inline) — never un-hide, so we don't clobber Modules' toggling
   // GC is English-only: force EN once (guard on currentLang so applyLang's re-render can't loop).
   if (typeof currentLang !== 'undefined' && currentLang !== 'en' && typeof applyLang === 'function') applyLang('en');
@@ -4791,7 +4924,7 @@ function _injectModulesBtn(){
 }
 // Re-apply after every render so remote toggles from teammates take effect live.
 const _renderBase = render;
-render = function(){ _renderBase(); applyFeatures(); _injectModulesBtn(); _injectOpenItemsBtn(); _injectDailyPushBtn(); _injectOpeningsBtn(); _injectBlockerBanner(); applyReadOnlyUI(); };
+render = function(){ _renderBase(); applyFeatures(); _injectModulesBtn(); _injectOpenItemsBtn(); _injectDailyPushBtn(); renderPlanLensBar(); _injectBlockerBanner(); applyReadOnlyUI(); };
 
 /* boot */
 function initApp() {
