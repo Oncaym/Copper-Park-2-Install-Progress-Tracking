@@ -18,7 +18,7 @@ const I18N = {
     kpi_progress: "Ready",
     kpi_progress_sub: "Ready to install",
     kpi_issues: "Issues",
-    kpi_issues_sub: "Opening error / rework needed",
+    kpi_issues_sub: "Open items on the board",
     kpi_pending: "Pending",
     kpi_pending_sub: "Not yet installed",
     kpi_louvers: "Louvers Installed",
@@ -167,7 +167,7 @@ const I18N = {
     kpi_progress: "就绪",
     kpi_progress_sub: "准备安装",
     kpi_issues: "问题",
-    kpi_issues_sub: "开口误差 / 待返工",
+    kpi_issues_sub: "看板上待解决的事项",
     kpi_pending: "待装",
     kpi_pending_sub: "尚未安装",
     kpi_louvers: "百叶已装",
@@ -316,7 +316,7 @@ const I18N = {
     kpi_progress: "준비됨",
     kpi_progress_sub: "설치 준비 완료",
     kpi_issues: "문제",
-    kpi_issues_sub: "개구부 오차 / 재작업 필요",
+    kpi_issues_sub: "보드의 미해결 항목",
     kpi_pending: "대기",
     kpi_pending_sub: "미설치",
     kpi_louvers: "루버 설치",
@@ -1694,11 +1694,48 @@ function _planLightSrc() {
   const img = document.getElementById('planImg'); if (!img) return '';
   return img.getAttribute('data-plan-light') || PLAN_GF_SRC || img.getAttribute('src') || '';
 }
+function _floorLightSrc(lvl) {
+  if (lvl !== firstFloorKey()) { const f = getFloors().find(x => x.key === lvl); if (f && f.img) return f.img; }
+  return _planLightSrc();
+}
+/* Other floors (F-040): only the ground-floor plan ships a pre-inverted twin — the upper
+   levels are base64 PNGs baked into core app.js, so we can't hand-invert them without a
+   huge diff to a shared file. Instead invert them at runtime on a canvas once and cache
+   the result. Same end state as the old `filter:invert(1)` (dark plan) but it's a plain
+   bitmap, so pinch-zoom still re-rasterizes sharp. Falls back to the CSS filter if the
+   canvas route ever fails. */
+const _INVERT_CACHE = {};
+function _invertedSrc(src) {
+  if (!src) return Promise.resolve(null);
+  if (_INVERT_CACHE[src]) return Promise.resolve(_INVERT_CACHE[src]);
+  return new Promise(resolve => {
+    try {
+      const im = new Image();
+      im.onload = () => {
+        try {
+          const c = document.createElement('canvas');
+          c.width = im.naturalWidth; c.height = im.naturalHeight;
+          const ctx = c.getContext('2d');
+          ctx.drawImage(im, 0, 0);
+          const d = ctx.getImageData(0, 0, c.width, c.height);
+          const px = d.data;
+          for (let i = 0; i < px.length; i += 4) { px[i] = 255 - px[i]; px[i + 1] = 255 - px[i + 1]; px[i + 2] = 255 - px[i + 2]; }
+          ctx.putImageData(d, 0, 0);
+          const out = c.toDataURL('image/png');
+          _INVERT_CACHE[src] = out; resolve(out);
+        } catch (e) { resolve(null); }
+      };
+      im.onerror = () => resolve(null);
+      im.src = src;
+    } catch (e) { resolve(null); }
+  });
+}
 function _floorImgSrc(lvl) {
   const img = document.getElementById('planImg');
-  if (lvl !== firstFloorKey()) { const f = getFloors().find(x => x.key === lvl); if (f && f.img) return f.img; }
-  const dark = img && img.getAttribute('data-plan-dark');
-  return (dark && !isDayMode()) ? dark : _planLightSrc();
+  const light = _floorLightSrc(lvl);
+  if (isDayMode()) return light;
+  if (lvl === firstFloorKey()) { const dark = img && img.getAttribute('data-plan-dark'); if (dark) return dark; }
+  return _INVERT_CACHE[light] || light;    // upper floors: cached inversion, else invert async below
 }
 // Re-point the plan at the right asset (called on floor change and on theme toggle).
 function applyPlanTheme() {
@@ -1706,6 +1743,23 @@ function applyPlanTheme() {
   const want = _floorImgSrc(currentLevel);
   if (want && img.getAttribute('src') !== want) img.setAttribute('src', want);
   img.style.filter = '';   // never filter the plan — see comment above
+  // Upper floor in dark mode with no cached inversion yet → build it, then swap in.
+  const light = _floorLightSrc(currentLevel);
+  const needsRuntimeInvert = !isDayMode()
+    && !(currentLevel === firstFloorKey() && img.getAttribute('data-plan-dark'))
+    && !_INVERT_CACHE[light];
+  if (needsRuntimeInvert) {
+    // Wear the CSS filter immediately so the plan is never briefly white-on-white while
+    // the canvas inversion runs — then drop it the moment the real bitmap is ready. If
+    // the canvas route never completes (or is unavailable), the filter just stays: the
+    // old behaviour, correct but soft at high zoom, rather than an unreadable plan.
+    img.style.filter = 'invert(1)';
+    _invertedSrc(light).then(out => {
+      const el = document.getElementById('planImg'); if (!el) return;
+      if (isDayMode() || currentLevel === firstFloorKey()) return;   // theme/floor changed meanwhile
+      if (out) { el.setAttribute('src', out); el.style.filter = ''; }
+    });
+  }
 }
 function setLevel(lvl) {
   clearMarkerSelection();
@@ -1728,7 +1782,15 @@ function renderKPIs() {
   const pct = total ? Math.round((installed / total) * 100) : 0;
   { const el=document.getElementById('kpi-installed'); if(el) el.textContent = installed; }
   const _progEl = document.getElementById('kpi-progress'); if(_progEl) _progEl.textContent = inProg;
-  { const el=document.getElementById('kpi-issues'); if(el) el.textContent = issues; }
+  /* F-040 (Leo: "issues 显示为 0，没有和 things to solve 连起来"): the Issues KPI counted
+     units whose *install status* is 'issue' — a different thing from the Things to Solve
+     board (open RFIs + project items + GC submissions), so the header said 3 while this
+     card said 0. One number now: the board's. The old unit-status count is still what
+     drives the red markers, it just isn't a headline KPI any more. */
+  { const el=document.getElementById('kpi-issues');
+    if(el) el.textContent = (typeof computeOpenItems === 'function') ? computeOpenItems().length : issues; }
+  { const el=document.getElementById('kpi-issues-sub');
+    if(el) el.textContent = t('kpi_issues_sub'); }
   { const el=document.getElementById('kpi-pending'); if(el) el.textContent = pending; }
   { const el=document.getElementById('kpi-louvers'); if(el) el.textContent = louvers; }
   { const el=document.getElementById('kpi-percent'); if(el) el.textContent = pct + '%'; }
@@ -2800,7 +2862,10 @@ function _lensCounts() {
   const units = (state && Array.isArray(state.units) ? state.units : []);
   return {
     openings: units.filter(u => !_roReqEmpty(_roReqOf(u))).length,
-    issues: units.filter(u => unitHasOpenRfi(u)).length + (typeof computeOpenItems === 'function' ? computeOpenItems().filter(i => i.scope !== 'unit').length : 0),
+    // F-040: same number as the 🔧 badge, the red banner and the Issues KPI. It used to
+    // count affected UNITS (one project RFI linked to 22 units read as "22 issues"),
+    // which made every counter on the page disagree with every other one.
+    issues: (typeof computeOpenItems === 'function') ? computeOpenItems().length : 0,
   };
 }
 function renderPlanLensBar() {
@@ -4483,7 +4548,7 @@ function openItemsModal() {
       </div>
       <div class="modal-actions" style="gap:8px;flex-wrap:wrap">
         ${ro ? `<button class="btn btn-primary" type="button" style="margin-right:auto" onclick="closeOpenItemsModal();openGcIssueForm('')">➕ Raise an issue</button>`
-             : `<button class="btn" type="button" onclick="openUsagePanel()" style="margin-right:auto" title="Opens tracking (editors only)">📊 Usage</button>`}
+             : `<button class="btn" type="button" onclick="openUsagePanel()" style="margin-right:auto" title="Who opened it, and every GC action (editors only)">📊 Activity</button>`}
         <button class="btn" type="button" onclick="closeOpenItemsModal()">${_modT().cancel}</button>
       </div>
     </div>`;
@@ -4881,6 +4946,22 @@ function _injectDailyPushBtn(){
 // Usage viewer (F-033): reads the append-only /access log Firebase collects on each
 // authed page load, aggregated per email → open count + last seen. Presence panel
 // already shows who's live; this shows who has opened it over the pilot.
+/* ---- Activity panel (F-040) --------------------------------------------------
+   Leo: "可以看到别人的编辑历史吗（主要是 GC，GC 也分 PM 和 super）".
+   Three separate trails existed and none of them were visible together:
+     • our own edits      → /history (cs-history, editors only) — button below
+     • GC actions          → /gcItems, each stamped with `by` (email) + ts
+     • who even opened it  → /access (F-033 opens tracking)
+   This panel puts the last two side by side. People are told apart BY EMAIL, so a GC
+   PM and a GC super only show up separately if each has their own login — worth
+   insisting on when you hand out accounts. Editors only (the /access rules say so). */
+function _gcActionLabel(x, zh) {
+  const u = x.unitId ? ` ${x.unitId}` : '';
+  if (x.kind === 'ready') return x.cleared ? (zh ? `撤销了${u}的「开口已备好」` : `un-marked${u} ready`)
+                                           : (zh ? `确认${u}开口已备好` : `marked${u} ready`);
+  if (x.kind === 'reply') return zh ? `回复了 ${x.ref || 'RFI'}${u}` : `responded to ${x.ref || 'an RFI'}${u}`;
+  return zh ? `提了一条事项${u}` : `raised an issue${u}`;
+}
 function openUsagePanel(){
   let ov = document.getElementById('usageModal');
   if (!ov){
@@ -4889,7 +4970,33 @@ function openUsagePanel(){
     ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('show'); });
   }
   const zh = currentLang==='zh';
-  ov.innerHTML = `<div class="modal" style="max-width:560px"><h3>📊 ${zh?'使用情况':'Usage'}</h3><div id="usageBody" style="font-size:13px;color:var(--text-dim)">${zh?'加载中…':'Loading…'}</div><div class="modal-actions"><button class="btn" type="button" onclick="document.getElementById('usageModal').classList.remove('show')">${zh?'关闭':'Close'}</button></div></div>`;
+  const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  // GC actions come from the already-mirrored window.GC_ITEMS — no extra cloud read.
+  const acts = _gcItems().slice().sort((a,b)=>(b.ts||0)-(a.ts||0));
+  const actBy = {};
+  acts.forEach(x => { const e = x.by || '?'; if (!actBy[e]) actBy[e] = { n:0, last:0 }; actBy[e].n++; if ((x.ts||0) > actBy[e].last) actBy[e].last = x.ts||0; });
+  const feed = acts.slice(0, 40).map(x => `<div style="padding:6px 2px;border-bottom:1px solid var(--border,rgba(255,255,255,.06));font-size:12.5px">
+      ${_gcSourceBadge(x.source)} <b>${esc(x.by || '?')}</b> <span style="color:var(--text-dim)">${esc(_gcActionLabel(x, zh))}</span>
+      <div style="color:var(--text-dim);font-size:11px">${x.ts ? esc(new Date(x.ts).toLocaleString()) : ''}${x.subject ? ' · ' + esc(x.subject) : ''}${x.handled ? (zh?' · 已处理':' · triaged') : ''}</div>
+    </div>`).join('');
+  ov.innerHTML = `<div class="modal" style="max-width:620px">
+      <h3>📊 ${zh?'活动记录':'Activity'}</h3>
+      <div style="font-size:11.5px;color:var(--text-dim);margin:-4px 0 10px">${zh
+        ? '按邮箱区分人 —— GC 的 PM 和 super 各自有账号才分得开。我方的逐条编辑记录在右上角用户菜单 → Edit History。'
+        : 'People are identified by email — a GC PM and super only appear separately if each has their own login. Our own field-by-field edits live in the user menu → Edit History.'}</div>
+      <div style="max-height:52vh;overflow:auto">
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:6px">${zh?'谁在用':'Who is using it'}</div>
+        <div id="usageBody" style="font-size:13px;color:var(--text-dim)">${zh?'加载中…':'Loading…'}</div>
+        <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+          <div style="font-size:12px;color:var(--text-dim);margin-bottom:6px">${zh?'最近动作':'Recent actions'} ${acts.length ? `(${acts.length})` : ''}</div>
+          ${feed || `<div style="font-size:12.5px;color:var(--text-dim);padding:8px 2px">${zh?'还没有 GC 侧的动作。':'No GC-side actions yet.'}</div>`}
+        </div>
+      </div>
+      <div class="modal-actions" style="gap:8px;flex-wrap:wrap">
+        <button class="btn" type="button" style="margin-right:auto" onclick="try{CloudSync.openHistory()}catch(e){}">📝 ${zh?'我方编辑历史':'Our edit history'}</button>
+        <button class="btn" type="button" onclick="document.getElementById('usageModal').classList.remove('show')">${zh?'关闭':'Close'}</button>
+      </div>
+    </div>`;
   ov.classList.add('show');
   try {
     const db = (window.firebase && firebase.apps && firebase.apps.length) ? firebase.database() : null;
@@ -4898,12 +5005,13 @@ function openUsagePanel(){
       const rows = Object.values(snap.val() || {});
       const by = {};
       rows.forEach(r => { const e = (r && r.email) || '?'; if (!by[e]) by[e] = { n:0, last:0 }; by[e].n++; if ((r.ts||0) > by[e].last) by[e].last = r.ts||0; });
+      Object.keys(actBy).forEach(e => { if (!by[e]) by[e] = { n:0, last:actBy[e].last }; });
       const list = Object.entries(by).sort((a,b)=> b[1].last - a[1].last);
       const body = document.getElementById('usageBody'); if (!body) return;
       if (!list.length){ body.textContent = zh?'还没有访问记录。':'No visits logged yet.'; return; }
-      body.innerHTML = `<div style="display:grid;grid-template-columns:1fr auto auto;gap:6px 16px;align-items:center">
-        <b>${zh?'用户':'User'}</b><b style="text-align:right">${zh?'打开次数':'Opens'}</b><b style="text-align:right">${zh?'最近':'Last seen'}</b>
-        ${list.map(([e,v])=>`<span>${e}</span><span style="text-align:right">${v.n}</span><span style="text-align:right;color:var(--text-dim)">${v.last?new Date(v.last).toLocaleString():'—'}</span>`).join('')}
+      body.innerHTML = `<div style="display:grid;grid-template-columns:1fr auto auto auto;gap:6px 14px;align-items:center">
+        <b>${zh?'用户':'User'}</b><b style="text-align:right">${zh?'打开':'Opens'}</b><b style="text-align:right">${zh?'动作':'Actions'}</b><b style="text-align:right">${zh?'最近':'Last seen'}</b>
+        ${list.map(([e,v])=>`<span style="overflow:hidden;text-overflow:ellipsis">${esc(e)}</span><span style="text-align:right">${v.n}</span><span style="text-align:right">${(actBy[e]&&actBy[e].n)||0}</span><span style="text-align:right;color:var(--text-dim)">${v.last?esc(new Date(v.last).toLocaleDateString()):'—'}</span>`).join('')}
       </div>`;
     }).catch(err => { const body=document.getElementById('usageBody'); if(body) body.textContent = (zh?'读取失败: ':'Read failed: ')+(err&&err.message||err); });
   } catch(e){ const body=document.getElementById('usageBody'); if(body) body.textContent = String(e); }

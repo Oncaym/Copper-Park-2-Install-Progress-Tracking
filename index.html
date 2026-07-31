@@ -346,9 +346,14 @@
      an issue is not what we're asking them to look at. */
   .plan-wrap.lens-openings .plan-marker {
     background:var(--accent,#58a6ff);
-    box-shadow:0 2px 6px rgba(0,0,0,.4) !important;
+    /* Glow, but in the lens's own colours — the red halo from .issue/.has-open-rfi is
+       about something else and must not leak in here. */
+    box-shadow:0 0 0 2px var(--accent,#58a6ff), 0 0 10px 3px rgba(88,166,255,.75) !important;
   }
-  .plan-wrap.lens-openings .plan-marker.lens-ready { background:var(--green,#2ea043); }
+  .plan-wrap.lens-openings .plan-marker.lens-ready {
+    background:var(--green,#2ea043);
+    box-shadow:0 0 0 2px var(--green,#2ea043), 0 0 10px 3px rgba(46,160,67,.7) !important;
+  }
   .plan-wrap.lens-openings .plan-marker.has-louver::after { display:none; }
   /* The 📋 List is where the numbers actually are — pull the eye to it. */
   .plan-lens-bar .lens-cta {
@@ -1584,10 +1589,10 @@ document.addEventListener('DOMContentLoaded', applyThemeUI);
       <div class="kpi-sub" data-i18n="kpi_installed_sub" data-om-id="17a02737:30">Framing units completed</div>
     </div>
 
-    <div class="kpi-card red clickable" onclick="openKpiDetail('issue')" data-om-id="17a02737:35">
+    <div class="kpi-card red clickable" onclick="openItemsModal()" title="Open the Things to Solve board" data-om-id="17a02737:35">
       <div class="kpi-label" data-i18n="kpi_issues" data-om-id="17a02737:36">Issues</div>
       <div class="kpi-value" id="kpi-issues" data-om-id="17a02737:37">5</div>
-      <div class="kpi-sub" data-i18n="kpi_issues_sub" data-om-id="17a02737:38">Opening error / rework needed</div>
+      <div class="kpi-sub" id="kpi-issues-sub" data-i18n="kpi_issues_sub" data-om-id="17a02737:38">Open items on the board</div>
     </div>
     <div class="kpi-card clickable" onclick="openKpiDetail('pending')" data-om-id="17a02737:39">
       <div class="kpi-label" data-i18n="kpi_pending" data-om-id="17a02737:40">Pending</div>
