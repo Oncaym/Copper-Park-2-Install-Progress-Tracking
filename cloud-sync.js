@@ -65,6 +65,32 @@
     isReadOnly() { return isReadOnly; },
     logout() { if (auth) auth.signOut(); },
     openHistory() { openHistoryPanel(); },
+
+    /* ---- F-037: GC inbox (/gcItems) ----
+       /state stays editor-only, so read-only (GC) accounts write here instead: an
+       append-only node any signed-in user can add their OWN entries to, and only
+       allowlist editors can update/delete. The app mirrors it into window.GC_ITEMS. */
+    submitGcItem(payload) {
+      if (!db) return Promise.reject(new Error('cloud not initialized'));
+      if (!currentUser) return Promise.reject(new Error('not signed in'));
+      const rec = Object.assign({}, payload || {}, {
+        by: currentUser.email,
+        // AF vs GC comes from the same allowlist check that drives read-only mode.
+        source: isReadOnly ? 'gc' : 'af',
+        ts: firebase.database.ServerValue.TIMESTAMP,
+      });
+      Object.keys(rec).forEach(k => { if (rec[k] === undefined || rec[k] === '') delete rec[k]; });
+      if (!rec.text) return Promise.reject(new Error('empty'));
+      return db.ref('gcItems').push(rec).then(r => r.key);
+    },
+    updateGcItem(id, patch) {
+      if (!db || !id) return Promise.reject(new Error('cloud not initialized'));
+      return db.ref('gcItems/' + id).update(patch || {});
+    },
+    removeGcItem(id) {
+      if (!db || !id) return Promise.reject(new Error('cloud not initialized'));
+      return db.ref('gcItems/' + id).remove();
+    },
   };
 
   // ---------- Auth gate UI ----------
@@ -190,6 +216,7 @@
       updateBadge();
       subscribeToState();
       subscribeToPresence();
+      subscribeToGcItems();
     } else {
       // Clear read-only flag + banner so the next sign-in starts clean.
       isReadOnly = false;
@@ -199,6 +226,8 @@
       showAuthGate();
       // Stop listening (Firebase auto-unsubs when ref handle is dropped, but be defensive)
       if (db) try { db.ref('state').off(); } catch(e){}
+      if (db) try { db.ref('gcItems').off(); } catch(e){}
+      window.GC_ITEMS = [];
     }
   }
 
@@ -317,6 +346,26 @@
         enterReadOnlyMode('Your account is not on the allowlist — read-only mode');
       }
     });
+  }
+
+  // ---------- GC inbox subscription (F-037) ----------
+  // Mirrors /gcItems into window.GC_ITEMS (oldest first) and pokes the app to re-render.
+  // If the rules haven't been published yet the listen just fails — GC_ITEMS stays empty
+  // and everything else keeps working, so this is safe to ship ahead of the rules update.
+  function subscribeToGcItems() {
+    if (!db) return;
+    try {
+      db.ref('gcItems').limitToLast(300).on('value', (snap) => {
+        const val = snap.val() || {};
+        const list = Object.keys(val).map(k => Object.assign({ _id: k }, val[k]));
+        list.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+        window.GC_ITEMS = list;
+        try { if (typeof window._onGcItems === 'function') window._onGcItems(list); } catch (e) {}
+      }, (err) => {
+        console.warn('[CloudSync] gcItems listen failed (rules not published?):', err && err.message);
+        window.GC_ITEMS = [];
+      });
+    } catch (e) { window.GC_ITEMS = []; }
   }
 
   // ---------- Read-only mode ----------

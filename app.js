@@ -2399,6 +2399,255 @@ function removeRoPhoto(i, pi) {
   rows[i].photos.splice(pi, 1);
   renderRoList(rows);
 }
+/* ==================== F-038: Required R.O. (issued to the GC) ==================
+   Leo, 2026-07-31: the GC prepares the openings for us, so they need the dimension we
+   are asking them to build to — and we need a dated record that we published it.
+   `u.ro[]` above is the wrong home for that: it records what we MEASURED on site
+   (as-built actuals), not what we PROMISED. So required dims get their own field:
+
+     u.roRequired = { w, h, tol, note, issued(date), rev(int) }
+
+   Imperial per Leo (feet-inches). Input is forgiving — 84.25 / 84 1/4 / 7-0 1/4 /
+   7'0 1/4" all normalize to 7'-0 1/4" — because this gets typed on a phone. Every
+   change appends (never overwrites) a log entry, so the evidence trail shows
+   "issued 7'-0 1/4" × 3'-0" on 7/31, rev 2 on 8/12" with the editor's name attached. */
+const _IMP_DEN = 16;   // round to the nearest 1/16"
+// Parse a forgiving imperial string into total inches. Returns null if unparseable.
+function _impParse(s) {
+  if (s == null) return null;
+  let str = String(s).trim().toLowerCase();
+  if (!str) return null;
+  str = str.replace(/[”″]/g, '"').replace(/[’′]/g, "'").replace(/\bft\b|\bfeet\b|\bfoot\b/g, "'").replace(/\bin\b|\binch(es)?\b/g, '"');
+  let feet = 0, rest = str;
+  const fm = rest.match(/^\s*(\d+(?:\.\d+)?)\s*'/);            // leading feet
+  if (fm) { feet = parseFloat(fm[1]); rest = rest.slice(fm[0].length); }
+  else {
+    const dm = rest.match(/^\s*(\d+)\s*-\s*(\d+(?:\s+\d+\/\d+)?)\s*"?\s*$/); // 7-0 1/4
+    if (dm) { feet = parseFloat(dm[1]); rest = dm[2]; }
+  }
+  rest = rest.replace(/^[\s\-]+/, '').replace(/"\s*$/, '').trim();
+  let inches = 0;
+  if (rest) {
+    const m = rest.match(/^(\d+(?:\.\d+)?)?\s*(?:(\d+)\s*\/\s*(\d+))?$/);
+    if (!m || (m[1] === undefined && m[2] === undefined)) return null;
+    if (m[1] !== undefined) inches += parseFloat(m[1]);
+    if (m[2] !== undefined && m[3] !== undefined && +m[3] !== 0) inches += parseInt(m[2], 10) / parseInt(m[3], 10);
+  }
+  const total = feet * 12 + inches;
+  return isFinite(total) ? total : null;
+}
+// Total inches → canonical 7'-0 1/4" (or 0 1/4" when under a foot).
+function _impFormat(total) {
+  if (total == null || !isFinite(total)) return '';
+  const neg = total < 0; total = Math.abs(total);
+  let sixteenths = Math.round(total * _IMP_DEN);
+  let whole = Math.floor(sixteenths / _IMP_DEN); let num = sixteenths - whole * _IMP_DEN;
+  let den = _IMP_DEN;
+  while (num && num % 2 === 0) { num /= 2; den /= 2; }
+  const ft = Math.floor(whole / 12), inch = whole - ft * 12;
+  const frac = num ? ` ${num}/${den}` : '';
+  const body = ft ? `${ft}'-${inch}${frac}"` : `${inch}${frac}"`;
+  return (neg ? '−' : '') + body;
+}
+// Free text → canonical string. Unparseable input is returned trimmed but untouched,
+// so a note like "see detail 3/A501" is never silently destroyed.
+function _impNorm(s) { const v = _impParse(s); return v == null ? String(s == null ? '' : s).trim() : _impFormat(v); }
+function _roReqOf(u) {
+  const r = (u && u.roRequired) || {};
+  return { w: r.w || '', h: r.h || '', tol: r.tol || '', note: r.note || '', issued: r.issued || '', rev: r.rev || 0 };
+}
+function _roReqEmpty(r) { return !(r && (r.w || r.h || r.tol || r.note)); }
+// "7'-0 1/4" × 3'-0"" — the one string the GC actually needs.
+function _roReqDims(r) { return (r && (r.w || r.h)) ? `${r.w || '—'} × ${r.h || '—'}` : ''; }
+function renderRoRequired(u) {
+  const box = document.getElementById('ro-required'); if (!box) return;
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const r = _roReqOf(u);
+  box.innerHTML = `<div class="form-row">
+      <label>Required R.O. — issued to the GC (what they build to). Imperial; 84.25 or 7-0 1/4 both work.</label>
+      <div id="ro-req-row" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;align-items:end">
+        ${_eviCell('Width', `<input type="text" id="ro-req-w" placeholder="e.g. 7-0 1/4" value="${esc(r.w)}" autocomplete="off" onblur="_roReqBlur(this)" ${_EVI_IN}>`)}
+        ${_eviCell('Height', `<input type="text" id="ro-req-h" placeholder="e.g. 3-0" value="${esc(r.h)}" autocomplete="off" onblur="_roReqBlur(this)" ${_EVI_IN}>`)}
+        ${_eviCell('Tolerance (optional)', `<input type="text" id="ro-req-tol" placeholder='e.g. +1/4" / −0' value="${esc(r.tol)}" autocomplete="off" ${_EVI_IN}>`)}
+      </div>
+      <div style="margin-top:6px">${_eviCell('Note to the GC (optional)', `<input type="text" id="ro-req-note" placeholder="e.g. measure to face of slab, not to the shoring" value="${esc(r.note)}" autocomplete="off" ${_EVI_IN}>`)}</div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:6px">${r.issued ? `Issued ${esc(r.issued)}${r.rev ? ` · rev ${r.rev}` : ''} — appears on the GC's 📐 Openings sheet.` : 'Not issued yet — fill in width/height and Save to publish it to the GC.'}</div>
+    </div>`;
+}
+function _roReqBlur(el) { if (el && el.value) el.value = _impNorm(el.value); }
+function readRoRequired() {
+  const g = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  if (!document.getElementById('ro-req-w')) return null;   // tab not present (AC3) — leave untouched
+  return { w: _impNorm(g('ro-req-w')), h: _impNorm(g('ro-req-h')), tol: g('ro-req-tol'), note: g('ro-req-note') };
+}
+/* Apply an edited Required R.O. to a unit. Bumps rev + re-stamps `issued` only when a
+   dimension/tolerance/note actually changed, and appends (never rewrites) a log entry so
+   each revision stays visible in the Daily Log as evidence of what we published when. */
+function applyRoRequired(u, next) {
+  if (!u || !next) return false;
+  const prev = _roReqOf(u);
+  const same = ['w', 'h', 'tol', 'note'].every(k => (prev[k] || '') === (next[k] || ''));
+  if (same) return false;
+  if (_roReqEmpty(next)) { delete u.roRequired; }
+  else {
+    const today = new Date().toISOString().slice(0, 10);
+    u.roRequired = { w: next.w, h: next.h, tol: next.tol, note: next.note, issued: today, rev: (prev.rev || 0) + (_roReqEmpty(prev) ? 0 : 1) };
+  }
+  const r = _roReqOf(u);
+  if (Array.isArray(state.log)) {
+    state.log.push({
+      kind: 'ro-req', auto: true, unitKey: u.key, date: r.issued || new Date().toISOString().slice(0, 10),
+      category: 'field-verify', categories: ['field-verify'],
+      content: _roReqEmpty(r)
+        ? `${u.id} · Required R.O. withdrawn`
+        : `${u.id} · Required R.O. issued to GC: ${_roReqDims(r)}${r.tol ? ` (${r.tol})` : ''}${r.rev ? ` · rev ${r.rev}` : ''}${r.note ? ` · ${r.note}` : ''}`,
+    });
+  }
+  return true;
+}
+/* -------- F-038: the Openings sheet (what the GC actually opens) ----------------
+   A key plan with FULL unit tags plus a table of required openings. The plan matters:
+   the GC's super does not know our unit numbers, so a bare list of "SF06N — 7'-0 1/4"
+   is useless to him. Print-friendly (one 🖨 button → the sheet, nothing else) and
+   CSV-exportable, so the number can leave the browser and go on a clipboard. */
+function _planSrcFor(key) {
+  const img = document.getElementById('planImg');
+  if (typeof PLAN_GF_SRC !== 'undefined' && PLAN_GF_SRC === null && img) PLAN_GF_SRC = img.getAttribute('src');
+  const base = (typeof PLAN_GF_SRC !== 'undefined' && PLAN_GF_SRC) ? PLAN_GF_SRC : (img ? img.getAttribute('src') : '');
+  if (key === firstFloorKey()) return base;
+  const f = getFloors().find(x => x.key === key);
+  return (f && f.img) ? f.img : base;
+}
+// Latest "opening ready" acknowledgment per unit id, from the GC inbox (F-037).
+function _openingAcks() {
+  const out = {};
+  _gcItems().filter(x => x && x.kind === 'ready' && x.unitId).forEach(x => {
+    const k = String(x.unitId).trim().toLowerCase();
+    if (!out[k] || (x.ts || 0) > (out[k].ts || 0)) out[k] = x;
+  });
+  return out;
+}
+// Every unit we've issued a required R.O. for, in plan order, with its ack state.
+function openingsRows() {
+  const acks = _openingAcks();
+  return (state && Array.isArray(state.units) ? state.units : [])
+    .filter(u => !_roReqEmpty(_roReqOf(u)))
+    .map(u => {
+      const r = _roReqOf(u);
+      const ack = acks[String(u.id).trim().toLowerCase()] || null;
+      return { key: u.key, id: u.id, level: u.level || firstFloorKey(), w: r.w, h: r.h, tol: r.tol,
+        note: r.note, issued: r.issued, rev: r.rev, ack: ack, pos: (state.positions && state.positions[u.key]) || null };
+    })
+    .sort((a, b) => a.level === b.level ? String(a.id).localeCompare(String(b.id), undefined, { numeric: true }) : String(a.level).localeCompare(String(b.level)));
+}
+function openOpeningsSheet() {
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  let ov = document.getElementById('openingsModal');
+  if (!ov) {
+    ov = document.createElement('div'); ov.id = 'openingsModal'; ov.className = 'modal-overlay';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('show'); });
+  }
+  const ro = _isRO();
+  const rows = openingsRows();
+  const floors = getFloors().filter(f => rows.some(r => r.level === f.key));
+  // Key plan per floor — tags carry the FULL unit id (the dashboard strips the SF prefix
+  // to keep markers small; here legibility wins over density).
+  const planFor = (f) => {
+    const mine = rows.filter(r => r.level === f.key);
+    const tags = mine.map(r => {
+      const p = r.pos || { x: 50, y: 50 };
+      const done = !!r.ack;
+      return `<span class="op-tag${done ? ' op-tag-ready' : ''}" style="left:${p.x}%;top:${p.y}%" title="${esc(r.id)} · ${esc(_roReqDims(r))}">${esc(r.id)}</span>`;
+    }).join('');
+    return `<div class="op-floor">
+        <div class="op-floor-name">${esc(floorLabel(f))}</div>
+        <div class="op-plan"><img src="${esc(_planSrcFor(f.key))}" alt="${esc(floorLabel(f))} key plan">${tags}</div>
+      </div>`;
+  };
+  const ackCell = (r) => {
+    if (r.ack) return `<span style="color:var(--green,#2ea043);white-space:nowrap">✓ ready ${esc(_gcTsDate(r.ack.ts))}</span>`;
+    if (!ro) return `<span style="color:var(--text-dim)">awaiting GC</span>`;
+    return `<button type="button" class="btn op-noprint" style="font-size:11px;padding:3px 9px;white-space:nowrap" onclick="markOpeningReady('${esc(r.id)}')">✓ Opening ready</button>`;
+  };
+  const body = rows.length ? rows.map(r => `<tr>
+      <td style="font-weight:600">${esc(r.id)}</td>
+      <td style="color:var(--text-dim)">${esc(r.level)}</td>
+      <td style="white-space:nowrap;font-variant-numeric:tabular-nums">${esc(r.w || '—')}</td>
+      <td style="white-space:nowrap;font-variant-numeric:tabular-nums">${esc(r.h || '—')}</td>
+      <td style="color:var(--text-dim)">${esc(r.tol || '')}</td>
+      <td style="color:var(--text-dim)">${esc(r.note || '')}</td>
+      <td style="color:var(--text-dim);white-space:nowrap">${esc(r.issued || '')}${r.rev ? ` <span style="opacity:.7">rev ${esc(r.rev)}</span>` : ''}</td>
+      <td>${ackCell(r)}</td>
+    </tr>`).join('')
+    : `<tr><td colspan="8" style="color:var(--text-dim);padding:14px 6px">No required openings issued yet.</td></tr>`;
+  const title = ((window.PROJECT || {}).name) || 'Installation Tracker';
+  ov.innerHTML = `<div class="modal" style="max-width:1000px">
+      <div id="openingsSheet">
+        <div class="op-head">
+          <div>
+            <h3 style="margin:0">📐 Required Rough Openings</h3>
+            <div style="font-size:12px;color:var(--text-dim);margin-top:2px">${esc(title)} · issued to the GC · ${rows.length} opening${rows.length === 1 ? '' : 's'} · printed ${new Date().toISOString().slice(0, 10)}</div>
+          </div>
+        </div>
+        <div class="op-scroll">
+          ${floors.map(planFor).join('')}
+          <table class="op-table">
+            <thead><tr><th>Unit</th><th>Floor</th><th>Required W</th><th>Required H</th><th>Tol.</th><th>Note</th><th>Issued</th><th>GC status</th></tr></thead>
+            <tbody>${body}</tbody>
+          </table>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:10px">Dimensions are rough-opening sizes in feet-inches. Tags on the key plan mark each opening; green = the GC has marked it ready.</div>
+        </div>
+      </div>
+      <div class="modal-actions op-noprint" style="gap:8px;flex-wrap:wrap">
+        <button class="btn" type="button" onclick="printOpenings()" style="margin-right:auto">🖨 Print</button>
+        <button class="btn" type="button" onclick="exportOpeningsCsv()">⬇ CSV</button>
+        <button class="btn" type="button" onclick="document.getElementById('openingsModal').classList.remove('show')">Close</button>
+      </div>
+    </div>`;
+  ov.classList.add('show');
+}
+function printOpenings() {
+  document.body.classList.add('printing-openings');
+  const cleanup = () => { document.body.classList.remove('printing-openings'); window.removeEventListener('afterprint', cleanup); };
+  window.addEventListener('afterprint', cleanup);
+  setTimeout(() => { try { window.print(); } catch (e) {} setTimeout(cleanup, 1500); }, 60);
+}
+function _openingsCsv() {
+  const q = s => '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"';
+  const lines = [['Unit', 'Floor', 'Required Width', 'Required Height', 'Tolerance', 'Note', 'Issued', 'Rev', 'GC status'].map(q).join(',')];
+  openingsRows().forEach(r => lines.push([r.id, r.level, r.w, r.h, r.tol, r.note, r.issued, r.rev || '',
+    r.ack ? ('ready ' + _gcTsDate(r.ack.ts)) : 'awaiting GC'].map(q).join(',')));
+  return lines.join('\r\n');
+}
+function exportOpeningsCsv() {
+  const blob = new Blob(['﻿' + _openingsCsv()], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `openings-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+}
+// GC one-tap acknowledgment — no typing. Lands in /gcItems as kind:'ready' (F-037).
+function markOpeningReady(unitId) {
+  const CS = window.CloudSync;
+  if (!CS || typeof CS.submitGcItem !== 'function') { if (typeof toast === 'function') toast('Cloud not ready'); return; }
+  CS.submitGcItem({ kind: 'ready', unitId: unitId, subject: 'Opening ready',
+    text: `GC confirms the rough opening at ${unitId} is prepared per the issued dimensions.` })
+    .then(() => { if (typeof toast === 'function') toast('Marked ready ✓'); openOpeningsSheet(); })
+    .catch(err => { console.warn('[F-038] ready ack failed:', err && err.message); if (typeof toast === 'function') toast('Could not send — check your connection'); });
+}
+function _injectOpeningsBtn() {
+  if (document.getElementById('openingsBtn')) return;
+  const bar = document.querySelector('.header-actions'); if (!bar) return;
+  const b = document.createElement('button');
+  b.className = 'btn'; b.id = 'openingsBtn'; b.type = 'button';
+  b.textContent = '📐'; b.title = 'Required Rough Openings';
+  b.onclick = openOpeningsSheet;
+  bar.appendChild(b);
+}
+/* ==================== end F-038 ==================== */
+
 /* Note: the R.O. tab/UI above was retired by AC3's M3 (replaced by the RFI tab below).
    CP2 kept the R.O. tab (no elevation data yet), so openUnit()/saveUnit() do call
    renderRoList/readRoRows for CP2 — guarded, so this stays a no-op on projects
@@ -2444,8 +2693,35 @@ const _EVI_IN = 'style="width:100%;min-width:0;box-sizing:border-box;background:
    Editors maintain the thread in-app (GC is read-only and replies by email, which
    the editor then logs as a `gc` entry). Shared by the unit RFI tab + project items. */
 const _THREAD_SIDES = [['', '—'], ['us', 'Us'], ['gc', 'GC']];
-function _sideLabel(by) { return by === 'us' ? 'Us' : (by === 'gc' ? 'GC' : '—'); }
-function _sideColor(by) { return by === 'us' ? 'var(--accent,#58a6ff)' : (by === 'gc' ? 'var(--purple,#a371f7)' : 'var(--text-dim)'); }
+/* F-037 (Leo, 2026-07-31): the side box was a hard <select> of Us/GC/— , but real threads
+   involve the architect, the owner, the door supplier, the EOR… Now it's a typeable combobox
+   (text input + shared <datalist> of the common parties). Stored value stays 'us'/'gc' for the
+   two canonical sides (so existing colours/labels/badges keep working) and is free text for
+   anything else. Everything downstream goes through _sideNorm/_sideLabel/_sideColor. */
+const _THREAD_SIDE_SUGGEST = ['Us', 'GC', 'Architect', 'Owner', 'EOR', 'Supplier', 'Glazier'];
+function _sideNorm(v) {
+  const s = String(v == null ? '' : v).trim(); const l = s.toLowerCase();
+  if (l === 'us' || l === 'af' || l === 'we') return 'us';
+  if (l === 'gc') return 'gc';
+  return s;
+}
+function _sideLabel(by) { const v = _sideNorm(by); return v === 'us' ? 'Us' : (v === 'gc' ? 'GC' : (v || '—')); }
+function _sideColor(by) {
+  const v = _sideNorm(by);
+  if (v === 'us') return 'var(--accent,#58a6ff)';
+  if (v === 'gc') return 'var(--purple,#a371f7)';
+  return v ? 'var(--yellow,#d29922)' : 'var(--text-dim)';   // any other named party
+}
+// One shared datalist for every thread box on the page (ids must be unique, so it can't
+// live inside _threadEntryHtml). Created lazily; harmless to call repeatedly.
+function _ensureSideDatalist() {
+  if (typeof document === 'undefined' || !document.body) return;
+  if (document.getElementById('thread-side-opts')) return;
+  const dl = document.createElement('datalist');
+  dl.id = 'thread-side-opts';
+  dl.innerHTML = _THREAD_SIDE_SUGGEST.map(s => `<option value="${s}"></option>`).join('');
+  document.body.appendChild(dl);
+}
 // Normalize any item into a thread array, migrating a legacy `response` string.
 function _threadFrom(m) {
   if (m && Array.isArray(m.thread)) return m.thread.map(e => ({ by: e.by || '', text: e.text || '', date: e.date || '' }));
@@ -2456,9 +2732,10 @@ function _threadFrom(m) {
 function _threadEntryHtml(e) {
   e = e || {};
   const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  const by = e.by || '';
-  return `<div class="thread-entry" style="display:grid;grid-template-columns:64px 1fr 138px auto;gap:6px;align-items:center;margin-top:5px">
-      <select data-tf="by" ${_EVI_IN}>${_THREAD_SIDES.map(([v, l]) => `<option value="${v}"${by === v ? ' selected' : ''}>${l}</option>`).join('')}</select>
+  // Free text (F-037): show the pretty label, blank when the side was never set.
+  const by = _sideLabel(e.by) === '—' ? '' : _sideLabel(e.by);
+  return `<div class="thread-entry" style="display:grid;grid-template-columns:96px 1fr 138px auto;gap:6px;align-items:center;margin-top:5px">
+      <input data-tf="by" type="text" list="thread-side-opts" placeholder="Us / GC / …" value="${esc(by)}" autocomplete="off" ${_EVI_IN}>
       <input data-tf="text" type="text" placeholder="what happened / feedback" value="${esc(e.text)}" autocomplete="off" ${_EVI_IN}>
       <input data-tf="date" type="date" value="${esc(e.date)}" ${_EVI_IN}>
       <button type="button" class="btn-remove" onclick="removeThreadEntry(this)" title="Remove" style="margin:0">×</button>
@@ -2466,6 +2743,7 @@ function _threadEntryHtml(e) {
 }
 // The whole thread editor block for a row (entries + add button). Spans the row width.
 function _threadBoxHtml(entries) {
+  _ensureSideDatalist();
   const rows = (entries && entries.length ? entries : []).map(_threadEntryHtml).join('');
   return `<div class="thread-box" style="grid-column:1 / -1;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border,rgba(255,255,255,.14))">
       <label style="display:block;font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.3px;margin:0 0 2px">Response thread</label>
@@ -2478,10 +2756,11 @@ function _threadBoxHtml(entries) {
 function _readThread(row) {
   return Array.from(row.querySelectorAll('.thread-entry')).map(te => {
     const g = k => { const el = te.querySelector('[data-tf="' + k + '"]'); return el ? el.value : ''; };
-    return { by: g('by'), text: (g('text') || '').trim(), date: g('date') };
+    return { by: _sideNorm(g('by')), text: (g('text') || '').trim(), date: g('date') };
   }).filter(e => e.text);
 }
 function addThreadEntry(btn) {
+  _ensureSideDatalist();
   const box = btn.closest('.thread-box'); if (!box) return;
   const list = box.querySelector('.thread-entries'); if (!list) return;
   const tmp = document.createElement('div');
@@ -2583,9 +2862,101 @@ function categoryLabel(c) {
 }
 
 /* -------- Modals -------- */
+// Single source of truth for "is this session a read-only (GC) account?".
+function _isRO() {
+  return !!(window.CloudSync && typeof window.CloudSync.isReadOnly === 'function' && window.CloudSync.isReadOnly());
+}
+
+/* -------- GC unit view (F-037, Leo 2026-07-31) --------------------------------
+   Before this, a GC clicking a red marker landed in the full editable unit modal —
+   every field live, Save present (and rejected by the cloud rules only after the fact).
+   Wrong mental model: the GC clicks a glowing unit to SEE the issue, not to edit it.
+   openUnit() now routes read-only accounts to this card: unit facts + its open RFIs
+   (own + linked project-level) as read-only threads, plus one action — raise/answer
+   an issue, which goes to /gcItems (see F-037 write path below). */
+function openUnitReadOnly(u) {
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  let ov = document.getElementById('unitViewModal');
+  if (!ov) {
+    ov = document.createElement('div'); ov.id = 'unitViewModal'; ov.className = 'modal-overlay';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('show'); });
+  }
+  const stColor = { installed: 'var(--green,#2ea043)', 'in-progress': 'var(--yellow,#d29922)', issue: 'var(--red,#e5484d)', pending: 'var(--text-dim)' }[u.status] || 'var(--text-dim)';
+  const stPill = `<span style="font-size:10px;text-transform:uppercase;letter-spacing:.4px;border:1px solid ${stColor};color:${stColor};border-radius:20px;padding:2px 9px;white-space:nowrap">${esc((CAL_STATUS_LABEL && CAL_STATUS_LABEL[u.status]) || u.status || 'pending')}</span>`;
+  // F-038: the required opening is the single most useful thing on this card for a GC
+  // preparing the opening — so it sits above the facts grid, not buried in it.
+  const rq = _roReqOf(u);
+  const ack = _openingAcks()[String(u.id).trim().toLowerCase()] || null;
+  const roBlock = _roReqEmpty(rq) ? '' : `<div style="margin-top:12px;border:1px solid var(--accent,#58a6ff);border-radius:10px;padding:10px 12px">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--text-dim)">Required rough opening</div>
+      <div style="font-size:19px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums">${esc(_roReqDims(rq))}${rq.tol ? ` <span style="font-size:12px;font-weight:400;color:var(--text-dim)">${esc(rq.tol)}</span>` : ''}</div>
+      ${rq.note ? `<div style="font-size:12px;color:var(--text-dim);margin-top:3px">${esc(rq.note)}</div>` : ''}
+      <div style="font-size:11px;color:var(--text-dim);margin-top:4px">Issued ${esc(rq.issued || '—')}${rq.rev ? ` · rev ${esc(rq.rev)}` : ''}</div>
+      <div style="margin-top:8px">${ack
+        ? `<span style="font-size:12px;color:var(--green,#2ea043)">✓ Marked ready ${esc(_gcTsDate(ack.ts))}</span>`
+        : `<button type="button" class="btn" style="font-size:12px" onclick="markOpeningReady('${esc(u.id)}')">✓ Opening ready</button>`}
+        <button type="button" class="btn" style="font-size:12px;margin-left:6px" onclick="openOpeningsSheet()">📐 All openings</button></div>
+    </div>`;
+  const facts = [];
+  if (u.date) facts.push(['Install date', u.date]);
+  if (u.louver && u.louver !== 'na') facts.push(['Louver', u.louver]);
+  const gp = Array.isArray(u.glassPanels) ? u.glassPanels.filter(g => g && (g.panel || g.status)) : [];
+  if (gp.length) facts.push(['Glass', gp.map(g => [g.panel, g.status].filter(Boolean).join(': ')).join(' · ')]);
+  else if (u.glass) facts.push(['Glass', u.glass]);
+  if (u.note) facts.push(['Note', u.note]);
+  const factHtml = facts.length
+    ? `<div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:12.5px;margin-top:10px">`
+      + facts.map(([k, v]) => `<span style="color:var(--text-dim)">${esc(k)}</span><span>${esc(v)}</span>`).join('') + `</div>`
+    : '';
+  // Issue cards: this unit's own RFIs, then any project-level items it's linked to.
+  const own = (Array.isArray(u.rfi) ? u.rfi : []).filter(m => m.ref || m.subject);
+  const linked = (Array.isArray(u.projectLinks) ? u.projectLinks : []).map(_projItemByKey).filter(Boolean);
+  const card = (m, isProject) => {
+    const st = m.status || 'open';
+    const c = st === 'open' ? 'var(--red,#e5484d)' : (st === 'answered' ? 'var(--yellow,#d29922)' : 'var(--text-dim)');
+    const th = _threadFrom(m);
+    return `<div style="padding:10px 2px;border-bottom:1px solid var(--border,rgba(255,255,255,.08))">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis"><b>${esc(m.ref || '—')}</b>${isProject ? ` <span style="font-size:9px;color:var(--text-dim);border:1px solid var(--border);border-radius:20px;padding:1px 6px">PROJECT</span>` : ''}</span>
+          <span style="font-size:10px;text-transform:uppercase;letter-spacing:.4px;border:1px solid ${c};color:${c};border-radius:20px;padding:1px 8px">${esc(st)}</span>${st === 'open' ? _daysOpenBadge(_daysOpen(m.date)) : ''}
+        </div>
+        ${m.subject ? `<div style="font-size:13px;margin-top:3px">${esc(m.subject)}</div>` : ''}
+        ${m.party ? `<div style="font-size:11.5px;color:var(--text-dim);margin-top:3px">👤 ${esc(m.party)}</div>` : ''}
+        ${th.length ? _threadReadHtml(th) : ''}
+        <div style="margin-top:8px"><button type="button" class="btn" style="font-size:12px" onclick="openRfiRespond('${esc(u.id)}','${esc(m.ref || '')}','${esc(m.subject || '')}')">💬 Respond</button></div>
+      </div>`;
+  };
+  const issues = own.map(m => card(m, false)).join('') + linked.map(m => card(m, true)).join('');
+  // Anything this account already sent in on this unit, so they can see it landed.
+  // Scoped to their own email — one outside party never sees another's traffic.
+  const _me = (window.CloudSync && typeof window.CloudSync.currentUser === 'function' && window.CloudSync.currentUser() && window.CloudSync.currentUser().email) || '';
+  const mine = _gcItemsForUnit(u.id).filter(x => x.by === _me);
+  ov.innerHTML = `<div class="modal" style="max-width:560px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <h3 style="margin:0;flex:1;min-width:0">${esc(u.id)}</h3>${stPill}
+      </div>
+      ${roBlock}
+      ${factHtml}
+      <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px">Issues on this unit</div>
+        ${issues || `<div style="padding:10px 2px;color:var(--text-dim);font-size:12.5px">No open issues logged on this unit.</div>`}
+      </div>
+      ${mine.length ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px">Sent to Advanced Facade</div>${mine.map(_gcItemReadCard).join('')}</div>` : ''}
+      <div class="modal-actions" style="gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" type="button" style="margin-right:auto" onclick="openGcIssueForm('${esc(u.id)}')">➕ Raise an issue</button>
+        <button class="btn" type="button" onclick="document.getElementById('unitViewModal').classList.remove('show')">Close</button>
+      </div>
+    </div>`;
+  ov.classList.add('show');
+}
+
 function openUnit(id) {
   const u = state.units.find(x=>x.key===id);
   if (!u) return;
+  // GC / non-allowlist accounts never reach the editor (F-037).
+  if (_isRO()) { openUnitReadOnly(u); return; }
   editingUnitId = id;
   document.getElementById('modalTitle').textContent = t('edit_unit_title').replace('{id}', u.id);
   // Calendar-tab header fields (M3 — replaces the old Details/Framing tab's id/note/louver/facecap)
@@ -2597,6 +2968,7 @@ function openUnit(id) {
   // R.O. superseded by RFI) but CP2 kept both tabs (no elevation data yet) — seed them here
   // if present, guarded so this is a no-op on projects without those tab elements.
   renderGlassPanelList(u.glassPanels && u.glassPanels.length ? u.glassPanels : (u.glass ? [{ panel: u.panels||'', status: u.glass }] : [{ panel:'', status:'' }]));
+  renderRoRequired(u);                       // F-038: required (issued) R.O. block
   renderRoList(Array.isArray(u.ro) ? u.ro : []);
   renderRfiList(Array.isArray(u.rfi) ? u.rfi : []);
   renderUnitProjectLinks(u);
@@ -2892,6 +3264,8 @@ function saveUnit() {
   // --- Glass panels + R.O. rows: CP2 kept these tabs (see openUnit comment above) ---
   { const _gl = document.getElementById('glass-panels-list'); if (_gl) u.glassPanels = readGlassPanels(); }
   { const _ro = document.getElementById('ro-list'); if (_ro) u.ro = readRoRows(); }
+  // F-038: required (issued) R.O. — bumps rev + appends its own log line when changed.
+  { const _rr = readRoRequired(); if (_rr) applyRoRequired(u, _rr); }
 
   // --- RFI rows (F-032): full upsert + orphan sweep on every save — not just newly
   // added rows — so editing status/party/response on an existing RFI updates its log
@@ -3772,6 +4146,16 @@ function computeOpenItems() {
       });
     });
   });
+  // F-037: pending GC-submitted entries count as things to solve too (they drive the
+  // header 🔧 badge + the red banner), but they render in their own inbox section.
+  _gcOpenItems().forEach(x => {
+    const d = _gcTsDate(x.ts);
+    items.push({
+      scope: 'gc', unitId: x.unitId || null, unitKey: null,
+      ref: x.ref || '', subject: x.subject || String(x.text || '').slice(0, 60),
+      party: 'GC', date: d, days: _daysOpen(d)
+    });
+  });
   // F-032: project-level items — not tied to any unit (submittal revisions, structural
   // calc reviews, etc. that don't map to a single unit key).
   (Array.isArray(state.projectItems) ? state.projectItems : []).forEach(m => {
@@ -3852,10 +4236,37 @@ function openItemsModal() {
     ? `<div id="project-items-list"></div><button type="button" class="btn" style="font-size:12px;margin-top:8px" onclick="addProjectItemRow()">${T.addBtn}</button>`
     : projRead;
   const editBtn = ro ? '' : `<button type="button" class="btn${editing ? ' btn-primary' : ''}" style="margin-left:auto;font-size:12px" onclick="toggleProjectEdit()">${editing ? ('✓ ' + _modT().save) : '✏️ Edit'}</button>`;
+  // F-037 GC inbox: entries the GC (or an AF phone) posted to /gcItems and nobody has
+  // triaged yet. Editors get merge/clear actions; GC just sees that theirs landed.
+  // Read-only viewers only see their own submissions (never another party's traffic).
+  const _me = (window.CloudSync && typeof window.CloudSync.currentUser === 'function' && window.CloudSync.currentUser() && window.CloudSync.currentUser().email) || '';
+  const gcPending = ro ? _gcOpenItems().filter(x => x.by === _me) : _gcOpenItems();
+  const gcCard = (x) => {
+    const d = _gcTsDate(x.ts);
+    const tag = [x.unitId, x.ref].filter(Boolean).join(' · ');
+    const actions = ro ? '' : `<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" class="btn btn-primary" style="font-size:12px" onclick="mergeGcItem('${esc(x._id)}')" title="Append to the matching RFI thread, or promote to a new project-level item">⤵ ${x.ref ? 'Merge into thread' : 'Promote to item'}</button>
+        <button type="button" class="btn" style="font-size:12px" onclick="markGcItemHandled('${esc(x._id)}')" title="Dismiss without adding it to the board">✓ Clear</button>
+      </div>`;
+    return `<div style="padding:10px 2px;border-bottom:1px solid var(--border,rgba(255,255,255,.08))">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis">${_gcSourceBadge(x.source)} <b>${esc(x.subject || (x.kind === 'reply' ? 'Response' : 'Issue'))}</b>${tag ? ` <span style="color:var(--text-dim);font-size:11.5px">${esc(tag)}</span>` : ''}</span>
+          ${d ? _daysOpenBadge(_daysOpen(d)) : ''}
+        </div>
+        <div style="font-size:12.5px;color:var(--text-dim);margin-top:3px">${esc(x.text || '')}</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:3px">${esc(x.by || '')}${d ? ` · ${esc(d)}` : ''}</div>
+        ${actions}
+      </div>`;
+  };
+  const gcSection = gcPending.length ? `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">${ro ? 'Sent to Advanced Facade — awaiting review' : `📥 From the GC — needs triage (${gcPending.length})`}</div>
+        ${gcPending.map(gcCard).join('')}
+      </div>` : '';
   ov.innerHTML = `<div class="modal" style="max-width:640px">
       <h3 style="margin-bottom:12px">${T.title}</h3>
       <div style="max-height:44vh;overflow:auto">
         ${unitCards}
+        ${gcSection}
         <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
             <span style="font-size:12px;color:var(--text-dim)">${T.projectHeader}</span>${editBtn}
@@ -3864,7 +4275,8 @@ function openItemsModal() {
         </div>
       </div>
       <div class="modal-actions" style="gap:8px;flex-wrap:wrap">
-        ${ro ? '' : `<button class="btn" type="button" onclick="openUsagePanel()" style="margin-right:auto" title="Opens tracking (editors only)">📊 Usage</button>`}
+        ${ro ? `<button class="btn btn-primary" type="button" style="margin-right:auto" onclick="closeOpenItemsModal();openGcIssueForm('')">➕ Raise an issue</button>`
+             : `<button class="btn" type="button" onclick="openUsagePanel()" style="margin-right:auto" title="Opens tracking (editors only)">📊 Usage</button>`}
         <button class="btn" type="button" onclick="closeOpenItemsModal()">${_modT().cancel}</button>
       </div>
     </div>`;
@@ -3873,12 +4285,165 @@ function openItemsModal() {
 }
 function closeOpenItemsModal() { _projItemsEditMode = false; const ov = document.getElementById('openItemsModal'); if (ov) ov.classList.remove('show'); }
 
-/* -------- GC (read-only) RFI reply flow (F-033) --------
-   Read-only GC accounts can't write to shared cloud /state, so instead of editing an
-   RFI's status they respond: a small box to type their answer, sent as an email draft
-   to the install PM. No Firebase write, no rules change — mirrors the Daily Push tool. */
+/* ==================== F-037: GC inbox (/gcItems) ==============================
+   Leo, 2026-07-31: the GC needs to RAISE issues, not just read ours. /state stays
+   editor-only (an outside account must never be able to overwrite install data), so
+   GC writes land in a separate append-only Firebase node `/gcItems`:
+
+     { kind:'issue'|'reply', unitId, ref, subject, text, by(email), source:'gc'|'af', ts,
+       handled?:true, handledBy? }
+
+   Rules: any signed-in user may CREATE their own entry; only allowlist editors may
+   update/delete (triage). cloud-sync mirrors the node into window.GC_ITEMS and calls
+   window._onGcItems on change. AF vs GC is the allowlist check we already have —
+   `source` is stamped at submit time so the board can badge them apart.
+   Nothing here touches /state until an editor promotes/merges an entry. */
+window.GC_ITEMS = window.GC_ITEMS || [];
+function _gcItems() { return Array.isArray(window.GC_ITEMS) ? window.GC_ITEMS : []; }
+// Things needing triage. `ready` acks (F-038) are informational, not blockers — they
+// belong on the Openings sheet, so they never enter the Things-to-Solve inbox/count.
+function _gcOpenItems() { return _gcItems().filter(x => x && !x.handled && x.kind !== 'ready'); }
+function _gcItemsForUnit(unitId) {
+  const k = String(unitId || '').trim().toLowerCase(); if (!k) return [];
+  return _gcOpenItems().filter(x => String(x.unitId || '').trim().toLowerCase() === k);
+}
+function _gcTsDate(ts) { const d = ts ? new Date(ts) : null; return (d && !isNaN(d.getTime())) ? d.toISOString().slice(0, 10) : ''; }
+function _gcSourceBadge(src) {
+  const gc = src !== 'af';
+  const c = gc ? 'var(--purple,#a371f7)' : 'var(--accent,#58a6ff)';
+  return `<span style="font-size:9px;letter-spacing:.4px;border:1px solid ${c};color:${c};border-radius:20px;padding:1px 6px">${gc ? 'GC' : 'AF'}</span>`;
+}
+// Compact read card used in the GC's own unit view ("here's what you already sent").
+function _gcItemReadCard(it) {
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const d = _gcTsDate(it.ts);
+  return `<div style="font-size:12px;padding:6px 2px;border-bottom:1px solid var(--border,rgba(255,255,255,.06))">
+      ${_gcSourceBadge(it.source)} <b>${esc(it.subject || (it.kind === 'reply' ? 'Response' : 'Issue'))}</b>${d ? ` <span style="color:var(--text-dim)">· ${esc(d)}</span>` : ''}
+      <div style="color:var(--text-dim);margin-top:2px">${esc(it.text || '')}</div>
+    </div>`;
+}
+// Submit form — used both for "raise an issue" (no ref) and "respond to RFI" (with ref).
+function openGcIssueForm(unitId, ref, subject, forceReply) {
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  let ov = document.getElementById('gcIssueModal');
+  if (!ov) {
+    ov = document.createElement('div'); ov.id = 'gcIssueModal'; ov.className = 'modal-overlay';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('show'); });
+  }
+  const isReply = !!(forceReply || ref || subject);
+  ov.dataset.unit = unitId || ''; ov.dataset.ref = ref || ''; ov.dataset.subject = subject || '';
+  ov.dataset.kind = isReply ? 'reply' : 'issue';
+  const units = (typeof state !== 'undefined' && state && Array.isArray(state.units)) ? state.units : [];
+  const unitPicker = isReply ? '' : `<label style="display:block;font-size:11px;color:var(--text-dim);margin:0 0 3px">Unit (optional)</label>
+      <input id="gcIssueUnit" list="gc-unit-opts" type="text" value="${esc(unitId || '')}" placeholder="e.g. SF06N — leave blank for a project-wide item" autocomplete="off" ${_EVI_IN}>
+      <datalist id="gc-unit-opts">${units.map(u => `<option value="${esc(u.id)}"></option>`).join('')}</datalist>
+      <label style="display:block;font-size:11px;color:var(--text-dim);margin:10px 0 3px">Subject</label>
+      <input id="gcIssueSubject" type="text" placeholder="short title, e.g. Hinge finish mismatch at east entry" autocomplete="off" ${_EVI_IN}>`;
+  ov.innerHTML = `<div class="modal" style="max-width:520px">
+      <h3>${isReply ? '💬 Respond to RFI' : '➕ Raise an issue'}</h3>
+      ${isReply && (unitId || ref) ? `<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:4px">${esc([unitId, ref].filter(Boolean).join(' · '))}</div>` : ''}
+      ${isReply && subject ? `<div style="font-size:13px;margin-bottom:10px">${esc(subject)}</div>` : ''}
+      ${unitPicker}
+      <label style="display:block;font-size:11px;color:var(--text-dim);margin:10px 0 3px">${isReply ? 'Your response' : 'What is the issue?'}</label>
+      <textarea id="gcIssueText" placeholder="${isReply ? 'Type your response / direction here…' : 'Describe the problem, what you need from Advanced Facade, and by when…'}" style="width:100%;min-height:140px;box-sizing:border-box;font-size:13.5px;line-height:1.5;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px"></textarea>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:6px">Goes straight to the Advanced Facade team's board. It won't change any install data.</div>
+      <div class="modal-actions" style="gap:8px;flex-wrap:wrap">
+        <button class="btn" type="button" onclick="document.getElementById('gcIssueModal').classList.remove('show')">Cancel</button>
+        <button class="btn btn-primary" type="button" onclick="_submitGcItem()">${isReply ? '💬 Send response' : '➕ Submit'}</button>
+      </div>
+    </div>`;
+  ov.classList.add('show');
+  setTimeout(() => { const ta = document.getElementById('gcIssueText'); if (ta) ta.focus(); }, 30);
+}
+function _submitGcItem() {
+  const ov = document.getElementById('gcIssueModal'); if (!ov) return;
+  const ta = document.getElementById('gcIssueText');
+  const text = ta ? ta.value.trim() : '';
+  if (!text) { if (typeof toast === 'function') toast('Type something first'); return; }
+  const kind = ov.dataset.kind || 'issue';
+  const unitEl = document.getElementById('gcIssueUnit'), subjEl = document.getElementById('gcIssueSubject');
+  const payload = {
+    kind: kind,
+    unitId: (unitEl ? unitEl.value.trim() : (ov.dataset.unit || '')),
+    ref: ov.dataset.ref || '',
+    subject: (subjEl ? subjEl.value.trim() : (ov.dataset.subject || '')),
+    text: text,
+  };
+  const CS = window.CloudSync;
+  if (!CS || typeof CS.submitGcItem !== 'function') { _gcItemMailtoFallback(payload); ov.classList.remove('show'); return; }
+  CS.submitGcItem(payload).then(() => {
+    ov.classList.remove('show');
+    if (typeof toast === 'function') toast('Sent to Advanced Facade ✓');
+    const uv = document.getElementById('unitViewModal');
+    if (uv && uv.classList.contains('show') && payload.unitId) {
+      const u = (state.units || []).find(x => x.id === payload.unitId); if (u) openUnitReadOnly(u);
+    }
+  }).catch(err => {
+    // Rules not published yet / offline — never lose what they typed.
+    console.warn('[F-037] gcItems write failed, falling back to email:', err && err.message);
+    _gcItemMailtoFallback(payload);
+    ov.classList.remove('show');
+  });
+}
 const _GC_REPLY_TO = 'leosun@advfacade.com';
+function _gcItemMailtoFallback(p) {
+  const tag = [p.unitId, p.ref].filter(Boolean).join(' · ') || 'CP2';
+  const subjectLine = (p.kind === 'reply' ? 'RFI response — ' : 'New issue — ') + tag;
+  const lines = [];
+  if (p.unitId) lines.push(`Unit: ${p.unitId}`);
+  if (p.ref) lines.push(`RFI: ${p.ref}`);
+  if (p.subject) lines.push(`Subject: ${p.subject}`);
+  lines.push('', p.kind === 'reply' ? 'Response:' : 'Issue:', p.text);
+  window.location.href = `mailto:${_GC_REPLY_TO}?subject=${encodeURIComponent(subjectLine)}&body=${encodeURIComponent(lines.join('\n'))}`;
+  if (typeof toast === 'function') toast('Opening email draft ✓');
+}
+// Editor triage: merge a GC entry into the matching RFI thread, or promote it to a new
+// project-level item when nothing matches. Either way the entry is then marked handled.
+function mergeGcItem(id) {
+  const it = _gcItems().find(x => x._id === id); if (!it) return;
+  const entry = { by: it.source === 'af' ? 'us' : 'gc', text: String(it.text || '').trim(), date: _gcTsDate(it.ts) || new Date().toISOString().slice(0, 10) };
+  const k = String(it.ref || it.subject || '').trim().toLowerCase();
+  let target = null, owner = null;
+  if (it.unitId) {
+    const u = (state.units || []).find(x => x.id === it.unitId || x.key === it.unitId);
+    if (u && Array.isArray(u.rfi) && k) target = u.rfi.find(m => _projLinkKey(m) === k) || null;
+    if (target) owner = { scope: u.key, label: u.id };
+  }
+  if (!target && k) { const m = _projItemByKey(k); if (m) { target = m; owner = { scope: 'project', label: 'PROJECT' }; } }
+  if (!target) {
+    // No matching RFI — promote to a new project-level item so it lands on the board.
+    if (!Array.isArray(state.projectItems)) state.projectItems = [];
+    target = { ref: it.ref || '', subject: it.subject || String(it.text || '').slice(0, 60), party: it.source === 'af' ? '' : 'GC',
+      status: 'open', date: entry.date, relatedUnits: it.unitId || '', thread: [] };
+    state.projectItems.push(target);
+    owner = { scope: 'project', label: 'PROJECT' };
+  }
+  target.thread = _threadFrom(target).concat([entry]);
+  try { upsertRfiLog(owner.scope, owner.label, target); } catch (e) {}
+  saveState();
+  markGcItemHandled(id, true);
+}
+function markGcItemHandled(id, quiet) {
+  const CS = window.CloudSync;
+  if (!CS || typeof CS.updateGcItem !== 'function') { if (typeof toast === 'function') toast('Cloud not ready'); return; }
+  const who = (CS.currentUser && CS.currentUser() && CS.currentUser().email) || '';
+  CS.updateGcItem(id, { handled: true, handledBy: who }).then(() => {
+    if (typeof toast === 'function') toast(quiet ? 'Merged ✓' : 'Cleared ✓');
+    openItemsModal();
+  }).catch(err => { console.warn('[F-037] gcItems update failed:', err && err.message); if (typeof toast === 'function') toast('Could not update — check Firebase rules'); });
+}
+/* ==================== end F-037 write path ==================== */
+
+/* -------- GC (read-only) RFI reply flow (F-033) --------
+   Read-only GC accounts respond to an RFI here. F-037: this now posts to /gcItems so
+   the reply lands on our board directly; the old mailto path survives as the fallback
+   when the write is denied (rules not published yet) or CloudSync isn't available. */
 function openRfiRespond(unitId, ref, subject) {
+  if (window.CloudSync && typeof window.CloudSync.submitGcItem === 'function') { openGcIssueForm(unitId, ref, subject, true); return; }
+  return _openRfiRespondMailto(unitId, ref, subject);
+}
+function _openRfiRespondMailto(unitId, ref, subject) {
   const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   let ov = document.getElementById('rfiRespondModal');
   if (!ov) {
@@ -4156,6 +4721,16 @@ function applyReadOnlyUI(){
 }
 // Let cloud-sync notify us the moment it flips a session to read-only.
 window._onReadOnly = function(){ try { applyReadOnlyUI(); } catch(e){} };
+// F-037: /gcItems changed (someone raised an issue / an editor triaged one) — refresh the
+// 🔧 badge, the red banner and, if it's on screen, the Things to Solve panel itself.
+window._onGcItems = function(){
+  try {
+    if (typeof _injectOpenItemsBtn === 'function') _injectOpenItemsBtn();
+    if (typeof _injectBlockerBanner === 'function') _injectBlockerBanner();
+    const ov = document.getElementById('openItemsModal');
+    if (ov && ov.classList.contains('show') && !_projItemsEditMode) openItemsModal();
+  } catch(e){}
+};
 
 // Mobile collapse/expand for the floor-plan section (Leo, 2026-07-23). The button is
 // CSS-hidden on desktop, so this only matters on phones.
@@ -4216,7 +4791,7 @@ function _injectModulesBtn(){
 }
 // Re-apply after every render so remote toggles from teammates take effect live.
 const _renderBase = render;
-render = function(){ _renderBase(); applyFeatures(); _injectModulesBtn(); _injectOpenItemsBtn(); _injectDailyPushBtn(); _injectBlockerBanner(); applyReadOnlyUI(); };
+render = function(){ _renderBase(); applyFeatures(); _injectModulesBtn(); _injectOpenItemsBtn(); _injectDailyPushBtn(); _injectOpeningsBtn(); _injectBlockerBanner(); applyReadOnlyUI(); };
 
 /* boot */
 function initApp() {

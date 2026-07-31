@@ -82,6 +82,20 @@
       }
     },
 
+    // ---------- GC 收件箱 (F-037: GC 提问 / 回复) ----------
+    // /state 永远只有 editor 能写；GC（非 allowlist）要提事项就写这里。
+    // 读：任何登录用户（GC 也要能看到自己提交的条目落地了）
+    // 创建：任何登录用户，但 by 必须等于自己的邮箱（防冒名）
+    // 修改/删除：仅 editor（triage：merge 进 thread 后标 handled，或清掉）
+    "gcItems": {
+      ".read": "auth != null",
+      ".indexOn": ["ts"],
+      "$id": {
+        ".write": "auth != null && (!data.exists() || root.child('allowlist').child(auth.token.email.replace('.', ',')).exists())",
+        ".validate": "newData.hasChildren(['by','ts','text']) && (data.exists() || newData.child('by').val() == auth.token.email)"
+      }
+    },
+
     // ---------- 白名单本身 ----------
     // 整体不可读（防止枚举所有 editor 邮箱）
     // 但允许登录用户读自己那条（用来判断当前账号是不是 editor）
