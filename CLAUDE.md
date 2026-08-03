@@ -73,5 +73,12 @@ CP2 特有：`defaultPositions` 有平面图预置坐标（requirePlacedMarkers=
   Openings → marker 变成写着尺寸的胶囊（要先有 R.O. 数据才看得到，否则是空的）；Issues → 出现 RFI
   下拉，选一条只亮对应 unit；Progress → 跟以前一样。GC 账号登录应直接落在 Openings，且 📐 Drawings
   按钮不可见。待同步到 AC3（app.js）。
+- [ ] **F-041（Caulking / Face Cover 进度）本地验一遍**：顶部 banner 应有「Caulking Done / Face Cover Done」
+  两张卡（百分比 + `x / y units · n in progress`），点开是逐单元清单；平面图 marker 上，caulking 装完的
+  出现**左上琥珀弧**、face cover 装完的出现**右下钢灰弧**，进行中是虚线，都没开始则无环。数据来自 unit 弹窗
+  Calendar tab 的 Caulking / Face Cover 两行——**先在几个 unit 上把这两行设成 Installed/Ready 再看图**，
+  否则整张图不会有环（这是设计如此，不是坏了）。不需要改 Firebase 规则。待同步到 AC3（app.js + index.html
+  的 KPI 卡/CSS/图例；AC3 用 facecap 而不是 faceCover，同步时要确认字段名）。
+  验证脚本：`npm i jsdom && node test-scope-kpi.cjs`（36 断言）。
 - [ ] Leo：把安装窗口**结束日期**告诉当前会话，好设"最后一天"收尾对话提醒（super/PM 访谈，
   问题清单在 PILOT-2WK.md 第四节）。GC 依赖清单给我可批量录入 project-config SEED。

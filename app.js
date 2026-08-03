@@ -26,9 +26,15 @@ const I18N = {
     kpi_percent: "Overall Progress",
     kpi_percent_sub: "— Overall",
     kpi_percent_sub_dyn: "{installed} / {total} units · Ground FL",
+    kpi_caulk: "Caulking Done",
+    kpi_facecover: "Face Cover Done",
+    kpi_scope_sub_dyn: "{done} / {total} units{wip}",
+    kpi_scope_sub_wip: " · {n} in progress",
     sec_plan_title: "Floor Plan (from DXF) · Click marker to edit / drag to reposition",
     legend_louver: "Louver",
     legend_facecap: "Face Cap",
+    legend_caulk: "Caulking",
+    legend_facecover: "Face Cover",
     level_gf: "Ground Floor",
     level_l2: "Other Levels",
     tool_edit_pos: "📍 Edit marker position (drag)",
@@ -128,6 +134,8 @@ const I18N = {
     kpi_detail_title_progress: "Ready Units",
     kpi_detail_title_issues: "Issue Units",
     kpi_detail_title_louvers: "Louver-Installed Units",
+    kpi_detail_title_caulking: "Caulking — Unit by Unit",
+    kpi_detail_title_facecover: "Face Cover — Unit by Unit",
     kpi_detail_title_glass: "Glass-Installed Panels",
     kpi_detail_title_percent: "All Units",
     kpi_detail_empty: "Nothing to show.",
@@ -175,9 +183,15 @@ const I18N = {
     kpi_percent: "总进度",
     kpi_percent_sub: "— 总进度",
     kpi_percent_sub_dyn: "{installed} / {total} 单元 · 一层",
+    kpi_caulk: "打胶完成",
+    kpi_facecover: "盖板完成",
+    kpi_scope_sub_dyn: "{done} / {total} 单元{wip}",
+    kpi_scope_sub_wip: " · {n} 进行中",
     sec_plan_title: "平面图（来自 DXF）· 点击标记编辑 / 拖拽调整位置",
     legend_louver: "百叶",
     legend_facecap: "压条",
+    legend_caulk: "打胶",
+    legend_facecover: "盖板",
     level_gf: "一层",
     level_l2: "其他楼层",
     tool_edit_pos: "📍 编辑标记位置（拖拽）",
@@ -277,6 +291,8 @@ const I18N = {
     kpi_detail_title_progress: "就绪单元",
     kpi_detail_title_issues: "问题单元明细",
     kpi_detail_title_louvers: "已装百叶单元",
+    kpi_detail_title_caulking: "打胶 — 逐单元",
+    kpi_detail_title_facecover: "盖板 — 逐单元",
     kpi_detail_title_glass: "已装玻璃面板",
     kpi_detail_title_percent: "全部单元",
     kpi_detail_empty: "暂无数据。",
@@ -324,9 +340,15 @@ const I18N = {
     kpi_percent: "전체 진행률",
     kpi_percent_sub: "— 전체",
     kpi_percent_sub_dyn: "{installed} / {total} 유닛 · 1층",
+    kpi_caulk: "코킹 완료",
+    kpi_facecover: "페이스 커버 완료",
+    kpi_scope_sub_dyn: "{done} / {total} 유닛{wip}",
+    kpi_scope_sub_wip: " · {n} 진행 중",
     sec_plan_title: "평면도 (DXF) · 마커 클릭하여 편집 / 드래그하여 위치 조정",
     legend_louver: "루버",
     legend_facecap: "페이스 캡",
+    legend_caulk: "코킹",
+    legend_facecover: "페이스 커버",
     level_gf: "1층",
     level_l2: "기타 층",
     tool_edit_pos: "📍 마커 위치 편집 (드래그)",
@@ -426,6 +448,8 @@ const I18N = {
     kpi_detail_title_progress: "준비 유닛",
     kpi_detail_title_issues: "문제 유닛 상세",
     kpi_detail_title_louvers: "루버 설치 유닛",
+    kpi_detail_title_caulking: "코킹 — 유닛별",
+    kpi_detail_title_facecover: "페이스 커버 — 유닛별",
     kpi_detail_title_glass: "유리 설치 패널",
     kpi_detail_title_percent: "전체 유닛",
     kpi_detail_empty: "데이터 없음.",
@@ -1094,7 +1118,7 @@ function renderPlan() {
       extra = hl.has((u.id || '').toUpperCase()) ? ' highlighted' : ' dimmed';
     }
     extra += _lensMarkerClass(u, lens);
-    m.className = `plan-marker ${u.status}${unitHasOpenRfi(u) ? ' has-open-rfi' : ''}${isDoor(u) ? ' door' : ''}${u.louver === 'yes' ? ' has-louver' : ''}${isPlanned(u) ? ' planned' : ''}${extra}`;
+    m.className = `plan-marker ${u.status}${unitHasOpenRfi(u) ? ' has-open-rfi' : ''}${isDoor(u) ? ' door' : ''}${u.louver === 'yes' ? ' has-louver' : ''}${isPlanned(u) ? ' planned' : ''}${_scopeRingClass(u)}${extra}`;
     m.style.left = pos.x + '%';
     m.style.top  = pos.y + '%';
     {
@@ -1114,10 +1138,32 @@ function renderPlan() {
   if (typeof mapGlassMode !== 'undefined' && mapGlassMode) renderGlassMarkers();
 }
 
+/* Ring classes for caulking (upper-left arc) + face cover (lower-right arc). Only 'installed'
+   and 'in-progress' draw anything — pending / N/A leave the marker exactly as it was. */
+function _scopeRingClass(u) {
+  let c = '';
+  const ca = scopeStatusOf(u, 'caulking');
+  if (ca === 'installed') c += ' scope-caulk';
+  else if (ca === 'in-progress') c += ' scope-caulk scope-caulk-wip';
+  const fc = scopeStatusOf(u, 'faceCover');
+  if (fc === 'installed') c += ' scope-fc';
+  else if (fc === 'in-progress') c += ' scope-fc scope-fc-wip';
+  return c;
+}
+// "Caulking ✓" / "Caulking …" (in progress) for the hover card + marker title attribute.
+function _scopeTipText(u) {
+  const mark = st => st === 'installed' ? ' ✓' : (st === 'in-progress' ? ' …' : (st === 'issue' ? ' ⚠' : null));
+  const bits = [];
+  [['caulking', t('legend_caulk')], ['faceCover', t('legend_facecover')]].forEach(([k, label]) => {
+    const m = mark(scopeStatusOf(u, k));
+    if (m) bits.push(label + m);
+  });
+  return bits.length ? ' · ' + bits.join(' · ') : '';
+}
 function showPlanTooltip(e, u) {
   const tt = document.getElementById('planTooltip');
   tt.innerHTML = `<strong>${u.id}</strong> · ${isDoor(u) ? 'Door' : u.type} · ${u.zone}<br>
-    <span style="color:var(--text-dim)">${formatStatus(u.status)}${u.date ? ' · ' + formatDate(u.date) : ''}${u.louver==='yes' ? ' · Louver ✓' : ''}${u.facecap==='yes' ? ' · Face Cap ✓' : ''}</span>
+    <span style="color:var(--text-dim)">${formatStatus(u.status)}${u.date ? ' · ' + formatDate(u.date) : ''}${u.louver==='yes' ? ' · Louver ✓' : ''}${u.facecap==='yes' ? ' · Face Cap ✓' : ''}${_scopeTipText(u)}</span>
     ${u.note ? '<br><span style="color:var(--text-dim);font-size:10px">' + u.note + '</span>' : ''}`;
   const rect = e.currentTarget.getBoundingClientRect();
   const wrapRect = document.getElementById('planWrap').getBoundingClientRect();
@@ -1771,8 +1817,36 @@ function setLevel(lvl) {
   renderPlan();
 }
 
+/* -------- Caulking / Face Cover progress (Leo, 2026-08-03) --------
+   Both live on the unit as Calendar-tab scopes: u.scopes.caulking / u.scopes.faceCover,
+   status ∈ '' (N/A) | pending | in-progress | installed | issue. Denominator is every unit
+   on the project (same convention as the Overall Progress card) — a unit that genuinely
+   doesn't need the scope can be left at N/A and still counts as not-done, so the number
+   never flatters us. */
+function scopeStatusOf(u, name) {
+  const sc = u && u.scopes && u.scopes[name];
+  return (sc && sc.status) || '';
+}
+function scopeProgress(name) {
+  const u = (state && Array.isArray(state.units)) ? state.units : [];
+  const done = u.filter(x => scopeStatusOf(x, name) === 'installed').length;
+  const wip  = u.filter(x => scopeStatusOf(x, name) === 'in-progress').length;
+  const total = u.length;
+  return { done, wip, total, pct: total ? Math.round((done / total) * 100) : 0 };
+}
+function _paintScopeKpi(valueId, subId, name) {
+  const p = scopeProgress(name);
+  const v = document.getElementById(valueId);
+  if (v) v.textContent = p.pct + '%';
+  const sub = document.getElementById(subId);
+  if (sub) sub.textContent = t('kpi_scope_sub_dyn')
+    .replace('{done}', p.done).replace('{total}', p.total)
+    .replace('{wip}', p.wip ? t('kpi_scope_sub_wip').replace('{n}', p.wip) : '');
+}
 function renderKPIs() {
   const u = state.units;
+  _paintScopeKpi('kpi-caulk', 'kpi-caulk-sub', 'caulking');
+  _paintScopeKpi('kpi-facecover', 'kpi-facecover-sub', 'faceCover');
   const installed = u.filter(x=>x.status==='installed').length;
   const inProg = u.filter(x=>x.status==='in-progress').length;
   const issues = u.filter(x=>x.status==='issue').length;
@@ -2087,6 +2161,20 @@ function _kpiUnitsForKind(kind) {
     case 'issue':
     case 'issues':    return { units: u.filter(x => x.status === 'issue'),     title: t('kpi_detail_title_issues') };
     case 'louvers':   return { units: u.filter(x => x.louver === 'yes'),       title: t('kpi_detail_title_louvers') };
+    // Caulking / Face Cover: list every unit but swap in the SCOPE's own status+date, so the
+    // drill-down answers "who still owes me caulking" instead of repeating frame status.
+    // Rows keep `key`, so clicking one still opens that unit's modal.
+    case 'caulking':
+    case 'facecover': {
+      const name = kind === 'caulking' ? 'caulking' : 'faceCover';
+      const rank = { issue: 0, 'in-progress': 1, pending: 2, '': 3, installed: 4 };
+      const rows = u.map(x => {
+        const st = scopeStatusOf(x, name);
+        const sc = (x.scopes && x.scopes[name]) || {};
+        return Object.assign({}, x, { status: st || 'pending', date: sc.date || '', _rank: rank[st] != null ? rank[st] : 3 });
+      }).sort((a, b) => a._rank - b._rank || String(a.id).localeCompare(String(b.id)));
+      return { units: rows, title: t(kind === 'caulking' ? 'kpi_detail_title_caulking' : 'kpi_detail_title_facecover') };
+    }
     case 'percent':   return { units: u.slice(),                               title: t('kpi_detail_title_percent') };
     case 'glass': {
       // Flatten glass panels
@@ -2856,7 +2944,7 @@ function _lensMarkerTitle(u, lens) {
     const r = _roReqOf(u); const ack = _openingAcks()[String(u.id).trim().toLowerCase()];
     return `${u.id} · required R.O. ${_roReqDims(r)}${r.tol ? ' ' + r.tol : ''}${ack ? ' · GC marked ready ' + _gcTsDate(ack.ts) : ' · awaiting the GC'}`;
   }
-  return `${u.id} · ${formatStatus(u.status)}${u.date ? ' · ' + formatDate(u.date) : ''}`;
+  return `${u.id} · ${formatStatus(u.status)}${u.date ? ' · ' + formatDate(u.date) : ''}${_scopeTipText(u)}`;
 }
 function _lensCounts() {
   const units = (state && Array.isArray(state.units) ? state.units : []);

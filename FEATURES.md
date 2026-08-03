@@ -96,6 +96,7 @@ Status: ✅ live · ⬜ not enabled · ⚠ diverged (see note)
   AC3. Real remaining gap is `index.html` (F-023–030, all ⬜ here) + no `elevations.js`/no F-030
   elev-cloud wiring, so elevation markers have no geometry to show. See AC3 `memory.md`
   2026-07-20 entry for full diagnosis. Not yet acted on — awaiting scope decision.
+| F-041 | **Caulking / Face Cover 进度可视化**（2026-08-03，Leo）：①顶部 banner 新增两张卡「Caulking Done / Face Cover Done」，显示**百分比** + 副标题 `已完成 / 总单元 · N 进行中`，点开是逐单元清单（用**该 scope 自己的状态和日期**，不是框架状态；按 问题 → 进行中 → 待做/NA → 已完成 排序，点行仍打开该 unit）。分母 = 全部 unit（跟 Overall Progress 一个口径），N/A 也算没做完，数字不会自我美化。②平面图 marker 加**双色光环**：左上弧=caulking（琥珀），右下弧=face cover（钢灰），实线=已装、虚线=进行中，两个都没开始就完全不画（未动过的图跟以前一模一样）。用 `::before`（`::after` 是 louver 的 L 徽标）且不碰 box-shadow/border-color——那些已经被 door/open-RFI/highlight/edit-mode 占了。Openings/Issues lens 里隐藏（那两个视图问的是别的问题），GC 视图收紧到 -3px 免得 13px marker 撞在一起。图例加两个环形色块，hover 卡片和 marker title 追加 `Caulking ✓ / Face Cover …`。三语齐全。jsdom 36 断言全过。 | ⬜ | ✅ |
 
 ## Divergence watchlist
 - **F-021 (app.js 数据驱动楼层, 2026-07-07)**: AC3 的 app.js 已加 getFloors/renderFloorControls，CP2 尚未同步。改动向后兼容（无 `PROJECT.floors` 时零行为变化），所以 CP2 现状不受影响；但下次改 core 前应把 app.js 原样复制到 CP2 并 md5 校验，避免漂移。
