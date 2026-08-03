@@ -2667,6 +2667,133 @@ function renderRoRequired(u) {
       </div>
       <div style="margin-top:6px">${_eviCell('Note to the GC (optional)', `<input type="text" id="ro-req-note" placeholder="e.g. measure to face of slab, not to the shoring" value="${esc(r.note)}" autocomplete="off" ${_EVI_IN}>`)}</div>
       <div style="font-size:11px;color:var(--text-dim);margin-top:6px">${r.issued ? `Issued ${esc(r.issued)}${r.rev ? ` · rev ${r.rev}` : ''} — appears on the GC's 📐 Openings sheet.` : 'Not issued yet — fill in width/height and Save to publish it to the GC.'}</div>
+    </div>
+    <div class="form-row">
+      <label>Shop drawing / elevation — the GC sees these when they tap this unit</label>
+      <input type="file" id="ro-dwg-file" accept="image/*" multiple onchange="handleUnitDwgFiles(this.files); this.value=''">
+      <div style="font-size:11px;color:var(--text-dim);margin-top:4px">Screenshot the elevation and drop it here. Uploaded on pick, saved with the unit — resized to 2000px max, so keep dimension strings legible.</div>
+      <span id="ro-dwg-status" style="font-size:11px;color:var(--text-dim)"></span>
+      <div id="ro-dwg-thumbs" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"></div>
+    </div>`;
+  // Draft copy: uploads land here and only reach the unit on Save, so Cancel discards them.
+  _unitDwgDraft = _dwgOf(u).map(d => Object.assign({}, d));
+  renderUnitDwgThumbs();
+}
+
+/* -------- Per-unit shop drawing / elevation (F-042, Leo 2026-08-03) --------------
+   Leo's boss: a GC tapping a required opening should see the shop drawing for that unit.
+   Images go to Firebase Storage via the SAME path the daily-log photos already use
+   (data-URL fallback if Storage is unavailable), so only a short URL is stored in
+   `u.drawings[]` — /state stays small and no new Firebase rules are needed: the GC can
+   already read /state, and Storage download URLs carry their own access token. */
+let _unitDwgDraft = [];
+function _dwgOf(u) { return (u && Array.isArray(u.drawings) ? u.drawings : []).filter(d => d && d.url); }
+async function handleUnitDwgFiles(fileList) {
+  if (!fileList || !fileList.length) return;
+  const status = document.getElementById('ro-dwg-status');
+  const setStatus = s => { if (status) status.textContent = s; };
+  for (const f of Array.from(fileList)) {
+    if (!f.type || !f.type.startsWith('image/')) continue;
+    setStatus('Uploading ' + f.name + ' …');
+    try {
+      // 2000px / q0.85: a drawing has to stay readable, unlike a site photo.
+      const blob = await _photoFileToBlob(f, 2000, 0.85);
+      let url, fellBack = false;
+      try { url = await _uploadPhotoToStorage(blob, f.name); }
+      catch (e) {
+        // Storage unavailable: keep the file rather than lose it, but shrink it hard — a
+        // data-URL lives inside /state, and a few full-size drawings there would bloat
+        // every save for everyone. Say so out loud so it gets fixed instead of festering.
+        console.warn('[unit drawing] Storage upload failed, falling back to data-URL', e);
+        fellBack = true;
+        const small = await _photoFileToBlob(f, 1200, 0.7).catch(() => blob);
+        url = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(small); });
+      }
+      const me = (window.CloudSync && CloudSync.currentUser && CloudSync.currentUser() && CloudSync.currentUser().email) || '';
+      _unitDwgDraft.push({ url, name: f.name || 'elevation', ts: Date.now(), by: me });
+      renderUnitDwgThumbs();
+      setStatus(fellBack ? 'Saved, but Firebase Storage rejected the upload — stored inline at reduced quality. Tell whoever owns the Firebase project.' : '');
+    } catch (e) {
+      console.warn('[unit drawing] failed', e);
+      setStatus('Could not process ' + (f.name || 'that file') + ' — try a PNG/JPG screenshot.');
+    }
+  }
+}
+function renderUnitDwgThumbs() {
+  const wrap = document.getElementById('ro-dwg-thumbs');
+  if (!wrap) return;
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  wrap.innerHTML = _unitDwgDraft.map((d, i) => `<span style="position:relative;display:inline-block">
+      <img src="${esc(d.url)}" alt="${esc(d.name || 'elevation')}" title="${esc(d.name || '')}"
+        style="width:96px;height:72px;object-fit:cover;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:zoom-in"
+        onclick="openUnitDwgViewer(${i})">
+      <button type="button" class="btn btn-danger" title="Remove" onclick="removeUnitDwg(${i})"
+        style="position:absolute;top:-6px;right:-6px;padding:0 6px;min-height:0;line-height:1.4;font-size:11px;border-radius:50%">×</button>
+    </span>`).join('') || `<span style="font-size:11.5px;color:var(--text-dim)">No drawing uploaded for this unit yet.</span>`;
+}
+function removeUnitDwg(i) {
+  const d = _unitDwgDraft[i];
+  if (!d) return;
+  if (!confirm('Remove ' + (d.name || 'this drawing') + ' from this unit?')) return;
+  _deleteStoragePhoto(d.url);
+  _unitDwgDraft.splice(i, 1);
+  renderUnitDwgThumbs();
+}
+/* Lightbox. Takes the array so it works for both the editor draft and a GC's saved list.
+   Tap the image to toggle 2.5× zoom (phone-friendly); ↔ buttons when there are several. */
+let _dwgView = { list: [], i: 0, zoom: false };
+function openUnitDwgViewer(i) { openDwgViewer(_unitDwgDraft, i); }
+function openDwgViewerFor(unitKey, i) {
+  const u = (state && Array.isArray(state.units)) ? state.units.find(x => x.key === unitKey) : null;
+  openDwgViewer(_dwgOf(u || {}), i);
+}
+function openDwgViewer(list, i) {
+  _dwgView = { list: (list || []).filter(d => d && d.url), i: i || 0, zoom: false };
+  // Nothing to show (unit gone, last sheet deleted): close any open viewer rather than
+  // leaving stale content on screen, and never flash an empty overlay.
+  if (!_dwgView.list.length) {
+    const old = document.getElementById('dwgViewer');
+    if (old) old.classList.remove('show');
+    return;
+  }
+  if (_dwgView.i >= _dwgView.list.length) _dwgView.i = 0;
+  let ov = document.getElementById('dwgViewer');
+  if (!ov) {
+    ov = document.createElement('div'); ov.id = 'dwgViewer'; ov.className = 'modal-overlay';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('show'); });
+  }
+  renderDwgViewer();
+  ov.classList.add('show');
+}
+function stepDwgViewer(d) {
+  const n = _dwgView.list.length;
+  if (!n) return;
+  _dwgView.i = (_dwgView.i + d + n) % n;
+  _dwgView.zoom = false;
+  renderDwgViewer();
+}
+function toggleDwgZoom() { _dwgView.zoom = !_dwgView.zoom; renderDwgViewer(); }
+function renderDwgViewer() {
+  const ov = document.getElementById('dwgViewer');
+  if (!ov) return;
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const d = _dwgView.list[_dwgView.i];
+  if (!d) { ov.classList.remove('show'); return; }
+  const n = _dwgView.list.length;
+  ov.innerHTML = `<div class="modal" style="max-width:min(1100px,96vw);padding:14px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <strong style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;font-weight:500">${esc(d.name || 'Elevation')}</strong>
+        ${n > 1 ? `<span style="font-size:12px;color:var(--text-dim)">${_dwgView.i + 1} / ${n}</span>
+        <button type="button" class="btn" style="font-size:12px;padding:3px 9px;min-height:0" onclick="stepDwgViewer(-1)">‹</button>
+        <button type="button" class="btn" style="font-size:12px;padding:3px 9px;min-height:0" onclick="stepDwgViewer(1)">›</button>` : ''}
+        <a class="btn" style="font-size:12px;padding:3px 9px;min-height:0;text-decoration:none" href="${esc(d.url)}" target="_blank" rel="noopener">↗ Full size</a>
+        <button type="button" class="btn" style="font-size:12px;padding:3px 9px;min-height:0" onclick="document.getElementById('dwgViewer').classList.remove('show')">✕</button>
+      </div>
+      <div style="overflow:auto;max-height:78vh;background:#fff;border-radius:6px">
+        <img src="${esc(d.url)}" alt="${esc(d.name || 'elevation')}" onclick="toggleDwgZoom()"
+          style="display:block;${_dwgView.zoom ? 'width:250%;max-width:none' : 'width:100%'};cursor:${_dwgView.zoom ? 'zoom-out' : 'zoom-in'}">
+      </div>
     </div>`;
 }
 function _roReqBlur(el) { if (el && el.value) el.value = _impNorm(el.value); }
@@ -2741,7 +2868,8 @@ function openingsRows() {
       const r = _roReqOf(u);
       const ack = acks[String(u.id).trim().toLowerCase()] || null;
       return { key: u.key, id: u.id, level: u.level || firstFloorKey(), w: r.w, h: r.h, tol: r.tol,
-        note: r.note, issued: r.issued, rev: r.rev, ack: ack, pos: (state.positions && state.positions[u.key]) || null };
+        note: r.note, issued: r.issued, rev: r.rev, ack: ack, dwg: _dwgOf(u).length,
+        pos: (state.positions && state.positions[u.key]) || null };
     })
     .sort((a, b) => a.level === b.level ? String(a.id).localeCompare(String(b.id), undefined, { numeric: true }) : String(a.level).localeCompare(String(b.level)));
 }
@@ -2788,9 +2916,10 @@ function openOpeningsSheet() {
       <td style="color:var(--text-dim)">${esc(r.tol || '')}</td>
       <td style="color:var(--text-dim)">${esc(r.note || '')}</td>
       <td style="color:var(--text-dim);white-space:nowrap">${esc(r.issued || '')}${r.rev ? ` <span style="opacity:.7">rev ${esc(r.rev)}</span>` : ''}</td>
+      <td>${r.dwg ? `<button type="button" class="btn op-noprint" style="font-size:11px;padding:3px 9px;white-space:nowrap" onclick="openDwgViewerFor('${esc(r.key)}', 0)">\u{1F4D0} Drawing${r.dwg > 1 ? ' \u00d7' + r.dwg : ''}</button>` : `<span style="color:var(--text-dim)">\u2014</span>`}</td>
       <td>${ackCell(r)}</td>
     </tr>`).join('')
-    : `<tr><td colspan="8" style="color:var(--text-dim);padding:14px 6px">No required openings issued yet.</td></tr>`;
+    : `<tr><td colspan="9" style="color:var(--text-dim);padding:14px 6px">No required openings issued yet.</td></tr>`;
   const title = ((window.PROJECT || {}).name) || 'Installation Tracker';
   ov.innerHTML = `<div class="modal" style="max-width:1000px">
       <div id="openingsSheet">
@@ -2803,7 +2932,7 @@ function openOpeningsSheet() {
         <div class="op-scroll">
           ${floors.map(planFor).join('')}
           <table class="op-table">
-            <thead><tr><th>Unit</th><th>Floor</th><th>Required W</th><th>Required H</th><th>Tol.</th><th>Note</th><th>Issued</th><th>GC status</th></tr></thead>
+            <thead><tr><th>Unit</th><th>Floor</th><th>Required W</th><th>Required H</th><th>Tol.</th><th>Note</th><th>Issued</th><th>Drawing</th><th>GC status</th></tr></thead>
             <tbody>${body}</tbody>
           </table>
           <div style="font-size:11px;color:var(--text-dim);margin-top:10px">Dimensions are rough-opening sizes in feet-inches. Tags on the key plan show the unit number without the "SF" prefix (tag <b>42</b> = unit SF42); green = the GC has marked it ready.</div>
@@ -3244,6 +3373,15 @@ function openUnitReadOnly(u) {
         : `<button type="button" class="btn" style="font-size:12px" onclick="markOpeningReady('${esc(u.id)}')">✓ Opening ready</button>`}
         <button type="button" class="btn" style="font-size:12px" onclick="openOpeningsSheet()">📋 All sizes</button></div>
     </div>`;
+  // F-042: the shop drawing for THIS unit, right under the dimensions the GC came for.
+  const dwgs = _dwgOf(u);
+  const dwgBlock = !dwgs.length ? '' : `<div style="margin-top:12px">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--text-dim);margin-bottom:5px">Shop drawing · ${dwgs.length} ${dwgs.length === 1 ? 'sheet' : 'sheets'}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${dwgs.map((d, i) => `
+        <img src="${esc(d.url)}" alt="${esc(d.name || 'elevation')}" onclick="openDwgViewerFor('${esc(u.key)}', ${i})"
+          style="width:118px;height:86px;object-fit:cover;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:zoom-in">`).join('')}</div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:4px">Tap to enlarge · ↗ Full size opens the image on its own.</div>
+    </div>`;
   const facts = [];
   if (u.date) facts.push(['Install date', u.date]);
   if (u.louver && u.louver !== 'na') facts.push(['Louver', u.louver]);
@@ -3293,11 +3431,12 @@ function openUnitReadOnly(u) {
   let bodyHtml;
   if (lens === 'openings') {
     bodyHtml = (roBlock || `<div style="margin-top:12px;color:var(--text-dim);font-size:12.5px">No rough opening has been issued for this unit yet.</div>`)
+      + dwgBlock
       + (openIssueCount ? bridge(`🔧 ${openIssueCount} open issue${openIssueCount === 1 ? '' : 's'} on this unit →`, 'issues') : '');
   } else if (lens === 'issues') {
     bodyHtml = issuesSection + (!_roReqEmpty(rq) ? bridge('📐 Required opening for this unit →', 'openings') : '');
   } else {
-    bodyHtml = factHtml || `<div style="margin-top:12px;color:var(--text-dim);font-size:12.5px">Nothing logged on this unit yet.</div>`;
+    bodyHtml = (factHtml || `<div style="margin-top:12px;color:var(--text-dim);font-size:12.5px">Nothing logged on this unit yet.</div>`) + dwgBlock;
   }
   ov.innerHTML = `<div class="modal" style="max-width:560px">
       <div style="display:flex;align-items:center;gap:10px">
@@ -3626,6 +3765,12 @@ function saveUnit() {
   { const _ro = document.getElementById('ro-list'); if (_ro) u.ro = readRoRows(); }
   // F-038: required (issued) R.O. — bumps rev + appends its own log line when changed.
   { const _rr = readRoRequired(); if (_rr) applyRoRequired(u, _rr); }
+  // F-042: shop drawings. Guarded on the R.O. tab being present so trackers without it
+  // (AC3 today) never have their `drawings` wiped by a save.
+  if (document.getElementById('ro-dwg-thumbs')) {
+    const _dw = _unitDwgDraft.filter(d => d && d.url);
+    if (_dw.length) u.drawings = _dw; else delete u.drawings;
+  }
 
   // --- RFI rows (F-032): full upsert + orphan sweep on every save — not just newly
   // added rows — so editing status/party/response on an existing RFI updates its log

@@ -80,5 +80,14 @@ CP2 特有：`defaultPositions` 有平面图预置坐标（requirePlacedMarkers=
   否则整张图不会有环（这是设计如此，不是坏了）。不需要改 Firebase 规则。待同步到 AC3（app.js + index.html
   的 KPI 卡/CSS/图例；AC3 用 facecap 而不是 faceCover，同步时要确认字段名）。
   验证脚本：`npm i jsdom && node test-scope-kpi.cjs`（36 断言）。
+- [ ] **F-042（unit shop drawing）本地验一遍**：unit 弹窗 → `Field Verify · R.O.` tab → 底部
+  「Shop drawing / elevation」选一张 elevation 截图 → 应出现缩略图（点开能看大图）→ **Save** →
+  用 GC 只读账号点该 unit 的 marker（Openings lens）→ 尺寸下面应有「Shop drawing · 1 sheet」缩略图，
+  点开能放大。📐 清单表也应多一列 Drawing。**要注意的一点**：如果状态栏出现「Storage rejected the
+  upload」，说明 Firebase Storage 规则没放开，图会以 data-URL 存进 /state（压到 1200px）——能用但会
+  让 /state 变大，要去 Firebase Console 的 Storage 规则里放开（跟日报照片同一个 `cp2-photos/` 前缀，
+  日报照片能上传的话这里也能）。不需要改 Realtime Database 规则。
+  验证脚本：`npm i jsdom && node test-unit-drawings.cjs`（43 断言）。待同步到 AC3（app.js；AC3 没有
+  R.O. tab，同步后 `ro-dwg-thumbs` 不存在 → 保存时不会动 `u.drawings`，行为不变）。
 - [ ] Leo：把安装窗口**结束日期**告诉当前会话，好设"最后一天"收尾对话提醒（super/PM 访谈，
   问题清单在 PILOT-2WK.md 第四节）。GC 依赖清单给我可批量录入 project-config SEED。
