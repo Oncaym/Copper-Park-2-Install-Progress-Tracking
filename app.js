@@ -3021,14 +3021,19 @@ const _LENSES = ['progress', 'openings', 'issues'];
 let _planLens = null;          // null = not chosen yet → resolve by role on first read
 let _lensUserPicked = false;   // once they click a lens, we stop overriding it
 let _lensRfi = '';             // selected RFI key inside the Issues lens ('' = all)
+/* F-043 (Leo, 2026-08-03): the Progress lens is ours, not the GC's — install status per
+   unit is internal production data. Read-only accounts get Openings + Issues only, so the
+   tab is not rendered and the lens is unreachable even if it was already selected when the
+   allowlist check came back (read-only resolves after the first paint). */
+function _lensAllowed(l) { return _LENSES.indexOf(l) !== -1 && !(l === 'progress' && _isRO()); }
 function _lens() {
-  if (_planLens && _LENSES.indexOf(_planLens) !== -1) return _planLens;
+  if (_planLens && _lensAllowed(_planLens)) return _planLens;
   // First paint: the GC's job is preparing openings, so that's where they land.
   _planLens = _isRO() ? 'openings' : 'progress';
   return _planLens;
 }
 function setPlanLens(l) {
-  if (_LENSES.indexOf(l) === -1) return;
+  if (!_lensAllowed(l)) return;
   _planLens = l; _lensUserPicked = true;
   if (l !== 'issues') _lensRfi = '';
   renderPlanLensBar(); renderPlan();
@@ -3114,7 +3119,7 @@ function renderPlanLensBar() {
   bar.innerHTML = `<div class="lens-tabs">
       ${tab('openings', '📐 Openings', c.openings)}
       ${tab('issues', '🔧 Issues', c.issues)}
-      ${tab('progress', '✓ Progress', null)}
+      ${_lensAllowed('progress') ? tab('progress', '✓ Progress', null) : ''}
     </div>${extras}
     <div class="lens-hint">${lens === 'openings'
       ? 'Tags mark the openings we need. Tap 📋 Opening sizes for the dimensions, or tap a tag to confirm it or flag a problem. Green = you marked it ready.'
@@ -5268,7 +5273,9 @@ function applyReadOnlyUI(){
   // F-039: read-only resolves asynchronously (allowlist check), so the first paint may
   // already have landed on the editor default. Snap a GC to the Openings lens once we
   // know — unless they've clicked a lens themselves, in which case leave them alone.
-  if (ro && !_lensUserPicked && _planLens !== 'openings') {
+  // F-043: also repaint if they'd already landed on a lens a GC isn't allowed (Progress) —
+  // _lens() will coerce it, but the bar and the plan have to be redrawn to match.
+  if (ro && ((!_lensUserPicked && _planLens !== 'openings') || !_lensAllowed(_planLens))) {
     _planLens = 'openings';
     try { renderPlanLensBar(); renderPlan(); } catch (e) {}
   }

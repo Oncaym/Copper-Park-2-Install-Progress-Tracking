@@ -1624,8 +1624,9 @@ document.addEventListener('DOMContentLoaded', applyThemeUI);
 </header>
 
 <main data-om-id="17a02737:25">
-  <!-- KPI Cards -->
-  <section class="kpi-grid" data-om-id="17a02737:26">
+  <!-- KPI Cards — hidden for the GC (F-043): our production numbers are internal, and the
+       GC's view opens straight on the map they came for. -->
+  <section class="kpi-grid" data-gc-hide data-om-id="17a02737:26">
     <div class="kpi-card green clickable" onclick="openKpiDetail('installed')" data-om-id="17a02737:27">
       <div class="kpi-label" data-i18n="kpi_installed" data-om-id="17a02737:28">Installed</div>
       <div class="kpi-value" id="kpi-installed" data-om-id="17a02737:29">29</div>
@@ -3043,7 +3044,7 @@ document.addEventListener('DOMContentLoaded', applyThemeUI);
 
 <script type="application/json" id="__embedded_state"></script>
 <script src="app-log.js"></script>
-<script src="app.js?v=20260803a"></script>
+<script src="app.js?v=20260803b"></script>
 <!-- boot handled inside app.js (core) -->
 </body>
 </html>

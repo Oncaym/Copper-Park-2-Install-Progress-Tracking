@@ -89,5 +89,9 @@ CP2 特有：`defaultPositions` 有平面图预置坐标（requirePlacedMarkers=
   日报照片能上传的话这里也能）。不需要改 Realtime Database 规则。
   验证脚本：`npm i jsdom && node test-unit-drawings.cjs`（43 断言）。待同步到 AC3（app.js；AC3 没有
   R.O. tab，同步后 `ro-dwg-thumbs` 不存在 → 保存时不会动 `u.drawings`，行为不变）。
+- [ ] **F-043（GC 视图收窄）本地验一遍**：用 GC 只读账号登录 → 顶部 KPI 卡片整排应该**看不见**，
+  平面图上方只有 `📐 Openings` `🔧 Issues` 两个 tab（没有 `✓ Progress`）；换回 Leo 账号 → 两者都回来。
+  待同步到 AC3（app.js 的 `_lensAllowed` + index.html 的 `data-gc-hide`）。
+  验证脚本：`npm i jsdom && node test-gc-view.cjs`（23 断言）。
 - [ ] Leo：把安装窗口**结束日期**告诉当前会话，好设"最后一天"收尾对话提醒（super/PM 访谈，
   问题清单在 PILOT-2WK.md 第四节）。GC 依赖清单给我可批量录入 project-config SEED。
