@@ -3323,7 +3323,10 @@ function _lensShows(u, lens) {
 function _lensMarkerClass(u, lens) {
   if (lens !== 'openings') return '';
   const acked = !!_openingAcks()[String(u.id).trim().toLowerCase()];
-  return ' lens-dim' + (acked ? ' lens-ready' : '');
+  /* F-046b (Leo): the two directions have to be told apart on the plan, not just in the
+     card — blue "build to our number" vs violet "send us yours". Green still means the GC
+     has confirmed that opening either way, so a finished unit reads the same in both. */
+  return ' lens-dim' + (_roFollows(u) ? ' lens-follow' : '') + (acked ? ' lens-ready' : '');
 }
 // v2 (Leo, 2026-07-31): tag number only in every lens. Putting the dimension on the
 // marker looked clever but crowded the plan into unreadable overlapping pills — the
@@ -3336,6 +3339,18 @@ function _lensMarkerTitle(u, lens) {
     return `${u.id} · required R.O. ${_roReqDims(r)}${r.tol ? ' ' + r.tol : ''}${ack ? ' · GC marked ready ' + _gcTsDate(ack.ts) : ' · awaiting the GC'}`;
   }
   return `${u.id}${_unitKindText(u)} · ${formatStatus(u.status)}${u.date ? ' · ' + formatDate(u.date) : ''}${_scopeTipText(u)}`;
+}
+/* F-046b: colour key for the Openings lens — two directions of obligation plus "settled".
+   Rendered inline under the hint so the GC never has to guess what violet means. */
+function _lensOpeningsKey() {
+  const chip = (v, label) => `<span style="display:inline-flex;align-items:center;gap:5px;margin-right:12px;white-space:nowrap">`
+    + `<span style="width:10px;height:10px;border-radius:50%;background:${v.bg};box-shadow:0 0 0 1.5px ${v.bg}${v.dash ? ';border:1px dashed #fff' : ''}"></span>${label}</span>`;
+  const anyFollow = (state && Array.isArray(state.units) ? state.units : []).some(u => _roFollows(u));
+  return `<div style="margin-top:5px;font-size:11px;display:flex;flex-wrap:wrap;align-items:center">`
+    + chip({ bg: 'var(--accent,#58a6ff)' }, 'Build to our dimension')
+    + (anyFollow ? chip({ bg: 'var(--follow-op,#a371f7)', dash: 1 }, 'Send us your dimension (glass not ordered)') : '')
+    + chip({ bg: 'var(--green,#2ea043)' }, 'You marked it ready')
+    + `</div>`;
 }
 function _lensCounts() {
   const units = (state && Array.isArray(state.units) ? state.units : []);
@@ -3379,7 +3394,8 @@ function renderPlanLensBar() {
       ${_lensAllowed('progress') ? tab('progress', '✓ Progress', null) : ''}
     </div>${extras}
     <div class="lens-hint">${lens === 'openings'
-      ? 'Tags mark the openings we need. Tap 📋 Opening sizes for the dimensions, or tap a tag to confirm it or flag a problem. Green = you marked it ready.'
+      ? 'Tags mark the openings we need. Tap 📋 Opening sizes for the dimensions, or tap a tag to confirm it or flag a problem.'
+        + _lensOpeningsKey()
       : (lens === 'issues' ? 'Only units with an open issue are shown. Tap one to see the thread or add your response.'
         : 'Installation status by unit.')}</div>`;
 }

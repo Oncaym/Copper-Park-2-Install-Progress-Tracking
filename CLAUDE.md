@@ -120,7 +120,8 @@ CP2 特有：`defaultPositions` 有平面图预置坐标（requirePlacedMarkers=
   多了「Dimension basis」下拉 —— **玻璃没订的 unit 记得切成 "We follow the GC's opening"**，切完 GC 那边
   看到的就变成「请把实测尺寸发给我们」，📐 清单该行显示 `follows your opening`；②GC 卡片和 📐 清单
   （含打印稿）底部都应有一行 Reference only 免责说明；③2F/13F 底图在深色模式下应该跟 1 层一样是
-  **透明底 + 白线**（不是黑板），日间模式是黑线。验证脚本：`node _tests/test-unit-drawings.cjs`（66 断言）
+  **透明底 + 白线**（不是黑板），日间模式是黑线。④Openings lens 上 hold 是蓝色、follow 是**紫色虚线边**、GC 确认后都变绿，lens 栏下方有色标图例。
+  验证脚本：`node _tests/test-unit-drawings.cjs`（66 断言）+ `node _tests/test-gc-view.cjs`（33 断言）
   + `node _tests/test-floors-types.cjs`（84 断言）。待同步到 AC3。
   **2F 底图已换成 `2nd fl.dxf` 渲染的整层平面**（不再是老图纸裁的左半）—— SF60~63 六个 marker 的坐标
   是按老底图算的，在新图上会偏，拖一下就行（我没清空，免得把你已经调过的位置也一起清了）。

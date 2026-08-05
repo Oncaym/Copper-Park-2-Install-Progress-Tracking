@@ -130,6 +130,7 @@
     /* F-044: interior storefront / interior door outline, fire-rated door ring */
     --int-sf: #7ee787;
     --fire-door: #ffb224;
+    --follow-op: #a371f7;
   }
   /* ===== Day mode (light theme) ===== */
   body.day-mode {
@@ -150,6 +151,7 @@
     --fc-ring: #57687d;
     --int-sf: #1a7f37;
     --fire-door: #bf8700;
+    --follow-op: #8250df;
   }
   body.day-mode header { background: linear-gradient(135deg, #ffffff 0%, #e9edf2 100%); }
   body.day-mode .btn:hover { background: #dde3ea; border-color: #b6c0cb; }
@@ -364,6 +366,19 @@
   }
   .plan-wrap.lens-openings .plan-marker.lens-ready {
     background:var(--green,#2ea043);
+    box-shadow:0 0 0 2px var(--green,#2ea043), 0 0 10px 3px rgba(46,160,67,.7) !important;
+  }
+  /* F-046b — units whose glass isn't bought: WE follow THEIR opening. Violet + a dashed
+     ring so the direction of the obligation is visible on the plan, not just in the card. */
+  .plan-wrap.lens-openings .plan-marker.lens-follow {
+    background:var(--follow-op,#a371f7);
+    border-style:dashed;
+    box-shadow:0 0 0 2px var(--follow-op,#a371f7), 0 0 10px 3px rgba(163,113,247,.7) !important;
+  }
+  /* Confirmed by the GC → green in both directions (the opening is settled). */
+  .plan-wrap.lens-openings .plan-marker.lens-follow.lens-ready {
+    background:var(--green,#2ea043);
+    border-style:dashed;
     box-shadow:0 0 0 2px var(--green,#2ea043), 0 0 10px 3px rgba(46,160,67,.7) !important;
   }
   .plan-wrap.lens-openings .plan-marker.has-louver::after { display:none; }
@@ -3086,7 +3101,7 @@ document.addEventListener('DOMContentLoaded', applyThemeUI);
 
 <script type="application/json" id="__embedded_state"></script>
 <script src="app-log.js"></script>
-<script src="app.js?v=20260805e"></script>
+<script src="app.js?v=20260805f"></script>
 <!-- boot handled inside app.js (core) -->
 </body>
 </html>
