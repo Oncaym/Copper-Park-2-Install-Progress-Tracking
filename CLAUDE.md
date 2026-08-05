@@ -39,12 +39,14 @@ CP2 特有：`defaultPositions` 有平面图预置坐标（requirePlacedMarkers=
 2. unit 的 `key` 不能改；Scope 变更改 `project-config.js` + `state.json` 两处
 3. 冲突策略 last-save-wins，Edit History（右上角用户菜单）可查
 4. ↻ Reset 在云模式下只从云端重拉，不会覆盖共享数据（F-013）
-5. **平面图必须成对出交付物（Leo 反复提过，别再犯）**：看板的默认皮肤是**深色**，所以任何
-   新增/替换的平面底图都要同时给两张 —— `xxx.png`（黑线白底，给打印/日间模式）和
-   `xxx-white.png`（**预先反色**：白线黑底，给深色 UI），并在 `PROJECT.floors` 里同时填
+5. **平面图必须成对出交付物，而且是透明底（Leo 反复提过，别再犯）**：GF 的图是
+   **透明背景 PNG（RGBA）**——只画线，页面底色透出来，所以同一张图在深色/日间模式下都对。
+   任何新增/替换的平面底图都要按这个规格出两张：`xxx.png`（**黑线 + 透明底**，给打印/日间）
+   和 `xxx-white.png`（**白线 + 透明底**，给深色 UI），并在 `PROJECT.floors` 里同时填
    `img` + `imgDark`（GF 走 `<img>` 上的 `data-plan-light`/`data-plan-dark`）。
-   **不要指望运行时 canvas 反色兜底**——那是给没有孪生图的旧楼层的退路，交付新图时先做好反色版，
-   自己肉眼确认深色模式下是白线黑底再收工（快速自检：反色图的平均亮度应该很低，角像素≈0）。
+   **不透明白底 = 深色模式下一块黑板**（2026-08-05 就是这么翻车的）；也不要指望运行时 canvas
+   反色兜底——那只是没有孪生图的旧楼层的退路。自检：`Image.open(f).mode` 必须是 RGBA、
+   角像素 alpha=0、透明像素占比 >0.9；`_tests/test-floors-types.cjs` 里有对应断言。
 
 ## 待办
 
@@ -85,7 +87,7 @@ CP2 特有：`defaultPositions` 有平面图预置坐标（requirePlacedMarkers=
   Calendar tab 的 Caulking / Face Cover 两行——**先在几个 unit 上把这两行设成 Installed/Ready 再看图**，
   否则整张图不会有环（这是设计如此，不是坏了）。不需要改 Firebase 规则。待同步到 AC3（app.js + index.html
   的 KPI 卡/CSS/图例；AC3 用 facecap 而不是 faceCover，同步时要确认字段名）。
-  验证脚本：`npm i jsdom && node test-scope-kpi.cjs`（36 断言）。
+  验证脚本：`npm i jsdom && node _tests/test-scope-kpi.cjs`（36 断言）。
 - [ ] **F-042（unit shop drawing）本地验一遍**：unit 弹窗 → `Field Verify · R.O.` tab → 底部
   「Shop drawing / elevation」选一张 elevation 截图 → 应出现缩略图（点开能看大图）→ **Save** →
   用 GC 只读账号点该 unit 的 marker（Openings lens）→ 尺寸下面应有「Shop drawing · 1 sheet」缩略图，
@@ -93,12 +95,12 @@ CP2 特有：`defaultPositions` 有平面图预置坐标（requirePlacedMarkers=
   upload」，说明 Firebase Storage 规则没放开，图会以 data-URL 存进 /state（压到 1200px）——能用但会
   让 /state 变大，要去 Firebase Console 的 Storage 规则里放开（跟日报照片同一个 `cp2-photos/` 前缀，
   日报照片能上传的话这里也能）。不需要改 Realtime Database 规则。
-  验证脚本：`npm i jsdom && node test-unit-drawings.cjs`（43 断言）。待同步到 AC3（app.js；AC3 没有
+  验证脚本：`npm i jsdom && node _tests/test-unit-drawings.cjs`（43 断言）。待同步到 AC3（app.js；AC3 没有
   R.O. tab，同步后 `ro-dwg-thumbs` 不存在 → 保存时不会动 `u.drawings`，行为不变）。
 - [ ] **F-043（GC 视图收窄）本地验一遍**：用 GC 只读账号登录 → 顶部 KPI 卡片整排应该**看不见**，
   平面图上方只有 `📐 Openings` `🔧 Issues` 两个 tab（没有 `✓ Progress`）；换回 Leo 账号 → 两者都回来。
   待同步到 AC3（app.js 的 `_lensAllowed` + index.html 的 `data-gc-hide`）。
-  验证脚本：`npm i jsdom && node test-gc-view.cjs`（23 断言）。
+  验证脚本：`npm i jsdom && node _tests/test-gc-view.cjs`（23 断言）。
 - [ ] **F-044（2F/13F 拆分 + IS + 门类型）本地验一遍**：①平面图上方应有 **Ground Floor / 2nd Floor / 13th Floor**
   三个按钮，下面 Unit 表格的 tab 也是 All + 三层；②切到 2nd Floor → 底图是原来那张图的左半，SF60~63 六个
   marker 位置应该大致对（我按裁切框重算过坐标，可能还要微调）；③切到 13th Floor → 新的 DXF 底图，SF70/SF71
@@ -107,12 +109,21 @@ CP2 特有：`defaultPositions` 有平面图预置坐标（requirePlacedMarkers=
   **确认推成功了再关页面**，否则下次还会再跑（幂等性我测过，重复跑不会二次映射坐标，但还是看一眼稳妥）；
   ⑤IS 开头的 unit 应显示成**菱形**；⑥点门单元 → Calendar tab 有 Door type 下拉，选防火门 → marker 出现琥珀双环。
   ⑦深色模式下 2F/13F 应该是**白线黑底**（跟 1 层一致）——用的是预反色孪生图 `*-white.png`，不是运行时反色。
-  验证脚本：`npm i jsdom && node test-floors-types.cjs`（63 断言）。
+  验证脚本：`npm i jsdom && node _tests/test-floors-types.cjs`（63 断言）。
   **注意**：`13th fl.dxf`（26MB）已加进 `.gitignore`（`*.dxf`）——仓库里只放渲染好的 PNG。要重新渲染就把 DXF
   放回文件夹让我跑一次。待同步到 AC3（app.js 的 runStateMigrations / isInterior / doorTypeOf / renderDoorTypeRow）。
 - [ ] **F-045（换楼层）本地验一遍**：①在 13th Floor 上点 ➕ Add new marker → 输入 SD19 → 应弹确认
   「把 SD19 从 2nd Floor 移到 13th Floor…」→ 确认后 marker 出现在你点的位置，2nd Floor 上不再有它，
   Daily Log 多一条 moved 记录；②或者点开 unit 弹窗 → Calendar tab 顶部 **Floor** 下拉直接改楼层
-  （改完坐标会清空，拖到位即可）。验证脚本：`node test-floors-types.cjs`（77 断言）。待同步到 AC3。
+  （改完坐标会清空，拖到位即可）。验证脚本：`node _tests/test-floors-types.cjs`（77 断言）。待同步到 AC3。
+- [ ] **F-046（尺寸基准 / 免责说明 / 透明底图）本地验一遍**：①unit 弹窗 `Field Verify · R.O.` tab 顶部
+  多了「Dimension basis」下拉 —— **玻璃没订的 unit 记得切成 "We follow the GC's opening"**，切完 GC 那边
+  看到的就变成「请把实测尺寸发给我们」，📐 清单该行显示 `follows your opening`；②GC 卡片和 📐 清单
+  （含打印稿）底部都应有一行 Reference only 免责说明；③2F/13F 底图在深色模式下应该跟 1 层一样是
+  **透明底 + 白线**（不是黑板），日间模式是黑线。验证脚本：`node _tests/test-unit-drawings.cjs`（66 断言）
+  + `node _tests/test-floors-types.cjs`（84 断言）。待同步到 AC3。
+  **2F 底图已换成 `2nd fl.dxf` 渲染的整层平面**（不再是老图纸裁的左半）—— SF60~63 六个 marker 的坐标
+  是按老底图算的，在新图上会偏，拖一下就行（我没清空，免得把你已经调过的位置也一起清了）。
+  **Leo 待办**：把哪些 unit 是"玻璃还没订"标出来（或给我清单，我批量写进 project-config）。
 - [ ] Leo：把安装窗口**结束日期**告诉当前会话，好设"最后一天"收尾对话提醒（super/PM 访谈，
   问题清单在 PILOT-2WK.md 第四节）。GC 依赖清单给我可批量录入 project-config SEED。

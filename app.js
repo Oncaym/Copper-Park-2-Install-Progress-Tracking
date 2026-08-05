@@ -45,6 +45,17 @@ const I18N = {
     form_door_type: "Door type",
     opt_door_unset: "— not set —",
     form_floor: "Floor",
+    ro_basis_label: "Dimension basis — who the opening follows",
+    ro_basis_hold: "We hold this dimension (glass purchased)",
+    ro_basis_follow: "We follow the GC's opening (glass not purchased)",
+    ro_basis_hold_hint: "Glass is bought, so the size is fixed — the GC builds the opening to our number. This is the normal case for everything already issued.",
+    ro_basis_follow_hint: "Glass isn't bought yet, so we can still fabricate to their opening — what we need back is their as-built dimension.",
+    gc_follow_body: "Glass for this unit has not been purchased yet, so we will follow your opening. Send us the as-built dimension once it is framed.",
+    gc_follow_target: "Target size, if you have a choice",
+    gc_follow_send: "Send us the dimension",
+    sheet_follows_short: "follows your opening",
+    sheet_follows_legend: "Rows marked \"follows your opening\" are units whose glass is not purchased yet — send us your as-built dimension and we will fabricate to it.",
+    openings_disclaimer: "Reference only — for coordination and holding dimensions. The binding record is the approved submittal / written RFI response, not this dashboard.",
     confirm_move_floor: "Move {id} from {from} to {to} and pin it here?",
     msg_moved_floor: "{id} moved to {to} — drag the marker to fine-tune",
     level_gf: "Ground Floor",
@@ -214,6 +225,17 @@ const I18N = {
     form_door_type: "门类型",
     opt_door_unset: "— 未设置 —",
     form_floor: "楼层",
+    ro_basis_label: "尺寸基准 —— 谁跟谁的尺寸",
+    ro_basis_hold: "我方尺寸为准（玻璃已订）",
+    ro_basis_follow: "我方跟随 GC 开口（玻璃未订）",
+    ro_basis_hold_hint: "玻璃已订、尺寸已锁死，GC 必须按我们给的尺寸做开口。目前已发出的开口都属于这一类。",
+    ro_basis_follow_hint: "玻璃还没订，我们可以按他们的开口下料 —— 需要他们把实测尺寸给我们。",
+    gc_follow_body: "该单元的玻璃尚未采购，我方将按贵方开口尺寸制作。开口做好后请把实测尺寸发给我们。",
+    gc_follow_target: "参考目标尺寸（如可选择）",
+    gc_follow_send: "把尺寸发给我们",
+    sheet_follows_short: "跟随贵方开口",
+    sheet_follows_legend: "标注\"跟随贵方开口\"的行，是玻璃尚未采购的单元 —— 请把实测尺寸给我们，我们按此下料。",
+    openings_disclaimer: "仅供参考 —— 用于协调和锁定尺寸。具有约束力的记录是已批准的 submittal / 书面 RFI 回复，不是这个看板。",
     confirm_move_floor: "把 {id} 从 {from} 移到 {to}，并钉在这个位置？",
     msg_moved_floor: "{id} 已移到 {to} —— 拖动 marker 可微调位置",
     level_gf: "一层",
@@ -383,6 +405,17 @@ const I18N = {
     form_door_type: "도어 종류",
     opt_door_unset: "— 미설정 —",
     form_floor: "층",
+    ro_basis_label: "치수 기준 — 누구의 개구부를 따르는가",
+    ro_basis_hold: "당사 치수 기준 (유리 발주 완료)",
+    ro_basis_follow: "GC 개구부를 따름 (유리 미발주)",
+    ro_basis_hold_hint: "유리가 발주되어 치수가 고정되었습니다 — GC가 당사 치수대로 개구부를 시공합니다.",
+    ro_basis_follow_hint: "유리가 아직 발주되지 않아 GC 개구부에 맞춰 제작할 수 있습니다 — 실측 치수를 받아야 합니다.",
+    gc_follow_body: "이 유닛의 유리는 아직 발주되지 않았습니다. 귀사의 개구부에 맞춰 제작하오니 시공 후 실측 치수를 보내주십시오.",
+    gc_follow_target: "참고 목표 치수",
+    gc_follow_send: "치수 보내기",
+    sheet_follows_short: "귀사 개구부 기준",
+    sheet_follows_legend: "\"귀사 개구부 기준\"으로 표시된 행은 유리 미발주 유닛입니다 — 실측 치수를 보내주시면 그에 맞춰 제작합니다.",
+    openings_disclaimer: "참고용입니다 — 조정 및 치수 확정용. 구속력 있는 기록은 승인된 제출물 / 서면 RFI 회신이며 이 대시보드가 아닙니다.",
     confirm_move_floor: "{id}을(를) {from}에서 {to}로 옮기고 여기에 배치할까요?",
     msg_moved_floor: "{id}을(를) {to}로 옮겼습니다 — 마커를 드래그해 미세 조정",
     level_gf: "1층",
@@ -2830,14 +2863,42 @@ function _roReqOf(u) {
   return { w: r.w || '', h: r.h || '', tol: r.tol || '', note: r.note || '', issued: r.issued || '', rev: r.rev || 0 };
 }
 function _roReqEmpty(r) { return !(r && (r.w || r.h || r.tol || r.note)); }
+/* F-046 (Leo's boss, 2026-08-05): who holds the dimension.
+     'hold'   — glass is purchased, so the size is fixed: the GC builds the opening to OUR
+                number. Every opening issued so far is this case, hence the default.
+     'follow' — glass not purchased yet: we will fabricate to THEIR opening, so what we need
+                back from them is the as-built dimension.
+   This is a coordination aid either way — the binding record is the written one (approved
+   submittal / RFI response), which is what `t('openings_disclaimer')` says out loud. */
+function roBasisOf(u) { return (u && u.roBasis === 'follow') ? 'follow' : 'hold'; }
+function _roFollows(u) { return roBasisOf(u) === 'follow'; }
 // "7'-0 1/4" × 3'-0"" — the one string the GC actually needs.
 function _roReqDims(r) { return (r && (r.w || r.h)) ? `${r.w || '—'} × ${r.h || '—'}` : ''; }
-function renderRoRequired(u) {
+let _roBasisDraft = null;
+function setRoBasis(v) {
+  _roBasisDraft = (v === 'follow') ? 'follow' : 'hold';
+  const u = state.units.find(x => x.key === editingUnitId);
+  if (u) renderRoRequired(u, true);      // keepDrafts: don't wipe queued uploads / the pick
+}
+function renderRoRequired(u, keepDrafts) {
   const box = document.getElementById('ro-required'); if (!box) return;
   const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const r = _roReqOf(u);
+  /* The basis picker re-renders this box (the labels below change with it). It has to read
+     from a DRAFT, not from the unit — the unit only changes on Save, so re-rendering from
+     `u` snapped the dropdown straight back and the click looked dead (Leo, 2026-08-05). */
+  if (!keepDrafts) _roBasisDraft = roBasisOf(u);
+  const basis = _roBasisDraft || roBasisOf(u);
   box.innerHTML = `<div class="form-row">
-      <label>Required R.O. — issued to the GC (what they build to). Imperial; 84.25 or 7-0 1/4 both work.</label>
+      <label>${esc(t('ro_basis_label'))}</label>
+      <select id="ro-basis" onchange="setRoBasis(this.value)">
+        <option value="hold"${basis === 'hold' ? ' selected' : ''}>${esc(t('ro_basis_hold'))}</option>
+        <option value="follow"${basis === 'follow' ? ' selected' : ''}>${esc(t('ro_basis_follow'))}</option>
+      </select>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:4px">${esc(basis === 'follow' ? t('ro_basis_follow_hint') : t('ro_basis_hold_hint'))}</div>
+    </div>
+    <div class="form-row">
+      <label>${basis === 'follow' ? 'Target R.O. (optional — what we would prefer; the GC still sends us theirs)' : 'Required R.O. — issued to the GC (what they build to). Imperial; 84.25 or 7-0 1/4 both work.'}</label>
       <div id="ro-req-row" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;align-items:end">
         ${_eviCell('Width', `<input type="text" id="ro-req-w" placeholder="e.g. 7-0 1/4" value="${esc(r.w)}" autocomplete="off" onblur="_roReqBlur(this)" ${_EVI_IN}>`)}
         ${_eviCell('Height', `<input type="text" id="ro-req-h" placeholder="e.g. 3-0" value="${esc(r.h)}" autocomplete="off" onblur="_roReqBlur(this)" ${_EVI_IN}>`)}
@@ -2854,7 +2915,7 @@ function renderRoRequired(u) {
       <div id="ro-dwg-thumbs" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"></div>
     </div>`;
   // Draft copy: uploads land here and only reach the unit on Save, so Cancel discards them.
-  _unitDwgDraft = _dwgOf(u).map(d => Object.assign({}, d));
+  if (!keepDrafts) _unitDwgDraft = _dwgOf(u).map(d => Object.assign({}, d));
   renderUnitDwgThumbs();
 }
 
@@ -2978,7 +3039,10 @@ function _roReqBlur(el) { if (el && el.value) el.value = _impNorm(el.value); }
 function readRoRequired() {
   const g = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
   if (!document.getElementById('ro-req-w')) return null;   // tab not present (AC3) — leave untouched
-  return { w: _impNorm(g('ro-req-w')), h: _impNorm(g('ro-req-h')), tol: g('ro-req-tol'), note: g('ro-req-note') };
+  const _b = document.getElementById('ro-basis');
+  const _basis = (_b ? _b.value : _roBasisDraft) === 'follow' ? 'follow' : 'hold';
+  return { w: _impNorm(g('ro-req-w')), h: _impNorm(g('ro-req-h')), tol: g('ro-req-tol'), note: g('ro-req-note'),
+           basis: _basis };
 }
 /* Apply an edited Required R.O. to a unit. Bumps rev + re-stamps `issued` only when a
    dimension/tolerance/note actually changed, and appends (never rewrites) a log entry so
@@ -2986,8 +3050,20 @@ function readRoRequired() {
 function applyRoRequired(u, next) {
   if (!u || !next) return false;
   const prev = _roReqOf(u);
+  // F-046: the basis lives on the unit (it outlives any one revision of the dimension).
+  const basisWas = roBasisOf(u);
+  if (next.basis && next.basis !== basisWas) {
+    if (next.basis === 'follow') u.roBasis = 'follow'; else delete u.roBasis;
+    if (Array.isArray(state.log)) {
+      state.log.push({ kind: 'ro-basis', auto: true, unitKey: u.key,
+        date: new Date().toISOString().slice(0, 10), category: 'field-verify', categories: ['field-verify'],
+        content: next.basis === 'follow'
+          ? `${u.id} · glass not purchased — we will follow the GC's opening dimension`
+          : `${u.id} · we hold the R.O. dimension — the GC builds to it` });
+    }
+  }
   const same = ['w', 'h', 'tol', 'note'].every(k => (prev[k] || '') === (next[k] || ''));
-  if (same) return false;
+  if (same) return next.basis !== basisWas;
   if (_roReqEmpty(next)) { delete u.roRequired; }
   else {
     const today = new Date().toISOString().slice(0, 10);
@@ -3041,12 +3117,12 @@ function _openingAckedBy(unitId) {
 function openingsRows() {
   const acks = _openingAcks();
   return (state && Array.isArray(state.units) ? state.units : [])
-    .filter(u => !_roReqEmpty(_roReqOf(u)))
+    .filter(u => !_roReqEmpty(_roReqOf(u)) || _roFollows(u))
     .map(u => {
       const r = _roReqOf(u);
       const ack = acks[String(u.id).trim().toLowerCase()] || null;
       return { key: u.key, id: u.id, level: u.level || firstFloorKey(), w: r.w, h: r.h, tol: r.tol,
-        note: r.note, issued: r.issued, rev: r.rev, ack: ack, dwg: _dwgOf(u).length,
+        note: r.note, issued: r.issued, rev: r.rev, ack: ack, dwg: _dwgOf(u).length, follows: _roFollows(u),
         pos: (state.positions && state.positions[u.key]) || null };
     })
     .sort((a, b) => a.level === b.level ? String(a.id).localeCompare(String(b.id), undefined, { numeric: true }) : String(a.level).localeCompare(String(b.level)));
@@ -3089,8 +3165,8 @@ function openOpeningsSheet() {
   const body = rows.length ? rows.map(r => `<tr>
       <td style="font-weight:600">${esc(r.id)}</td>
       <td style="color:var(--text-dim)">${esc(r.level)}</td>
-      <td style="white-space:nowrap;font-variant-numeric:tabular-nums">${esc(r.w || '—')}</td>
-      <td style="white-space:nowrap;font-variant-numeric:tabular-nums">${esc(r.h || '—')}</td>
+      <td style="white-space:nowrap;font-variant-numeric:tabular-nums">${r.follows ? `<span style="color:var(--text-dim)">${esc(t('sheet_follows_short'))}</span>` : esc(r.w || '—')}</td>
+      <td style="white-space:nowrap;font-variant-numeric:tabular-nums">${r.follows ? '' : esc(r.h || '—')}</td>
       <td style="color:var(--text-dim)">${esc(r.tol || '')}</td>
       <td style="color:var(--text-dim)">${esc(r.note || '')}</td>
       <td style="color:var(--text-dim);white-space:nowrap">${esc(r.issued || '')}${r.rev ? ` <span style="opacity:.7">rev ${esc(r.rev)}</span>` : ''}</td>
@@ -3113,7 +3189,9 @@ function openOpeningsSheet() {
             <thead><tr><th>Unit</th><th>Floor</th><th>Required W</th><th>Required H</th><th>Tol.</th><th>Note</th><th>Issued</th><th>Drawing</th><th>GC status</th></tr></thead>
             <tbody>${body}</tbody>
           </table>
-          <div style="font-size:11px;color:var(--text-dim);margin-top:10px">Dimensions are rough-opening sizes in feet-inches. Tags on the key plan show the unit number without the "SF" prefix (tag <b>42</b> = unit SF42); green = the GC has marked it ready.</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:10px"><b>${esc(t('openings_disclaimer'))}</b></div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:6px">${esc(t('sheet_follows_legend'))}</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:6px">Dimensions are rough-opening sizes in feet-inches. Tags on the key plan show the unit number without the "SF" prefix (tag <b>42</b> = unit SF42); green = the GC has marked it ready.</div>
         </div>
       </div>
       <div class="modal-actions op-noprint" style="gap:8px;flex-wrap:wrap">
@@ -3238,7 +3316,7 @@ function _unitMatchesLensRfi(u) {
   return own || linked;
 }
 function _lensShows(u, lens) {
-  if (lens === 'openings') return !_roReqEmpty(_roReqOf(u));
+  if (lens === 'openings') return !_roReqEmpty(_roReqOf(u)) || _roFollows(u);
   if (lens === 'issues') return _unitMatchesLensRfi(u);
   return true;
 }
@@ -3254,6 +3332,7 @@ function _lensMarkerLabel(u, lens) { return u.id.replace(/^SF/, ''); }
 function _lensMarkerTitle(u, lens) {
   if (lens === 'openings') {
     const r = _roReqOf(u); const ack = _openingAcks()[String(u.id).trim().toLowerCase()];
+    if (_roFollows(u)) return `${u.id} · ${t('sheet_follows_short')} — ${t('gc_follow_body')}`;
     return `${u.id} · required R.O. ${_roReqDims(r)}${r.tol ? ' ' + r.tol : ''}${ack ? ' · GC marked ready ' + _gcTsDate(ack.ts) : ' · awaiting the GC'}`;
   }
   return `${u.id}${_unitKindText(u)} · ${formatStatus(u.status)}${u.date ? ' · ' + formatDate(u.date) : ''}${_scopeTipText(u)}`;
@@ -3261,7 +3340,7 @@ function _lensMarkerTitle(u, lens) {
 function _lensCounts() {
   const units = (state && Array.isArray(state.units) ? state.units : []);
   return {
-    openings: units.filter(u => !_roReqEmpty(_roReqOf(u))).length,
+    openings: units.filter(u => !_roReqEmpty(_roReqOf(u)) || _roFollows(u)).length,
     // F-040: same number as the 🔧 badge, the red banner and the Issues KPI. It used to
     // count affected UNITS (one project RFI linked to 22 units read as "22 issues"),
     // which made every counter on the page disagree with every other one.
@@ -3546,7 +3625,15 @@ function openUnitReadOnly(u) {
   // preparing the opening — so it sits above the facts grid, not buried in it.
   const rq = _roReqOf(u);
   const ack = _openingAcks()[String(u.id).trim().toLowerCase()] || null;
-  const roBlock = _roReqEmpty(rq) ? '' : `<div style="margin-top:12px;border:1px solid var(--accent,#58a6ff);border-radius:10px;padding:10px 12px">
+  // F-046: units whose glass isn't bought yet are the other way round — we follow THEIR
+  // opening, so the card asks for their dimension instead of handing them ours.
+  const followBlock = !_roFollows(u) ? '' : `<div style="margin-top:12px;border:1px dashed var(--text-dim);border-radius:10px;padding:10px 12px">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--text-dim)">${esc(t('ro_basis_follow'))}</div>
+      <div style="font-size:13px;margin-top:4px">${esc(t('gc_follow_body'))}</div>
+      ${!_roReqEmpty(rq) ? `<div style="font-size:12px;color:var(--text-dim);margin-top:6px">${esc(t('gc_follow_target'))}: <span style="font-variant-numeric:tabular-nums">${esc(_roReqDims(rq))}</span></div>` : ''}
+      <div style="margin-top:8px"><button type="button" class="btn" style="font-size:12px" onclick="openGcIssueForm('${esc(u.id)}')">📏 ${esc(t('gc_follow_send'))}</button></div>
+    </div>`;
+  const roBlock = (_roReqEmpty(rq) || _roFollows(u)) ? '' : `<div style="margin-top:12px;border:1px solid var(--accent,#58a6ff);border-radius:10px;padding:10px 12px">
       <div style="font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--text-dim)">Required rough opening</div>
       <div style="font-size:19px;font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums">${esc(_roReqDims(rq))}${rq.tol ? ` <span style="font-size:12px;font-weight:400;color:var(--text-dim)">${esc(rq.tol)}</span>` : ''}</div>
       ${rq.note ? `<div style="font-size:12px;color:var(--text-dim);margin-top:3px">${esc(rq.note)}</div>` : ''}
@@ -3612,9 +3699,10 @@ function openUnitReadOnly(u) {
         <div style="font-size:12px;color:var(--text-dim);margin-bottom:4px">Sent to Advanced Facade</div>${mine.map(_gcItemReadCard).join('')}</div>` : ''}`;
   const bridge = (label, toLens) => `<div style="margin-top:12px"><button type="button" class="btn" style="font-size:12px" onclick="setPlanLens('${toLens}');openUnit('${esc(u.key)}')">${label}</button></div>`;
   let bodyHtml;
+  const disclaimer = `<div style="margin-top:12px;font-size:11px;color:var(--text-dim);line-height:1.5">${esc(t('openings_disclaimer'))}</div>`;
   if (lens === 'openings') {
-    bodyHtml = (roBlock || `<div style="margin-top:12px;color:var(--text-dim);font-size:12.5px">No rough opening has been issued for this unit yet.</div>`)
-      + dwgBlock
+    bodyHtml = (followBlock || roBlock || `<div style="margin-top:12px;color:var(--text-dim);font-size:12.5px">No rough opening has been issued for this unit yet.</div>`)
+      + dwgBlock + disclaimer
       + (openIssueCount ? bridge(`🔧 ${openIssueCount} open issue${openIssueCount === 1 ? '' : 's'} on this unit →`, 'issues') : '');
   } else if (lens === 'issues') {
     bodyHtml = issuesSection + (!_roReqEmpty(rq) ? bridge('📐 Required opening for this unit →', 'openings') : '');
