@@ -23,8 +23,58 @@ return {
   // Door-unit id patterns (regex, case-insensitive) beyond type==='Door'
   doorPatterns: ["^SD"],
 
+  // Interior storefront id patterns (F-044) — these render as diamonds, not circles
+  interiorPatterns: ["^IS"],
+
   // true → only markers explicitly placed via Place mode render on the plan
   requirePlacedMarkers: false,
+
+  /* Floors (F-044, Leo 2026-08-05). "Other Levels" used to be one tab whose plan was a
+     composite sheet with the 2nd-floor partial plan on the left and the 13th-floor terrace
+     doors on the right. Now they are two tabs: 2F keeps the left half of that sheet
+     (cropped to 2f-plan.png), 13F gets its own plan from the 13th-floor DXF.
+     GF's image lives in index.html markup; other floors read `img` from here. */
+  floors: [
+    { key: 'GF',  name: { en: 'Ground Floor', zh: '一层 / Ground Floor', ko: '지상층' } },
+    // img = light asset (black linework on white — also what prints); imgDark = the
+    // pre-inverted twin the dark UI uses. BOTH are required for every plan (see CLAUDE.md).
+    { key: 'L2',  name: { en: '2nd Floor',    zh: '二层 / 2nd Floor',    ko: '2층' },
+      img: '2f-plan.png',  imgDark: '2f-plan-white.png' },
+    { key: 'L13', name: { en: '13th Floor',   zh: '十三层 / 13th Floor', ko: '13층' },
+      img: '13f-plan.png', imgDark: '13f-plan-white.png' }
+  ],
+
+  /* One-time state migrations (F-044). Each runs once per project — the id is recorded in
+     state.migrations[] — so it can safely fix up live cloud data that no seed edit reaches. */
+  migrations: [
+    {
+      id: 'cp2-2026-08-floor-split',
+      note: 'Split L2 into 2F + 13F: SF70/SF71 are the 13th-floor terrace doors, everything ' +
+            'else on the old tab is 2nd floor. 2F marker positions are remapped from the old ' +
+            '3200x956 composite sheet to the cropped 2f-plan.png (crop box 115,13 → 1118,932). ' +
+            '13F positions are cleared — the new plan has different geometry, Leo re-places them.',
+      apply(state) {
+        const SRC_W = 3200, SRC_H = 956, X0 = 115, Y0 = 13, CW = 1003, CH = 919;
+        const remap = p => ({
+          x: Math.max(0, Math.min(100, (p.x / 100 * SRC_W - X0) / CW * 100)),
+          y: Math.max(0, Math.min(100, (p.y / 100 * SRC_H - Y0) / CH * 100))
+        });
+        let moved = 0, remapped = 0;
+        (state.units || []).forEach(u => {
+          if ((u.level || 'GF') !== 'L2') return;
+          if (/^SF7[01]/i.test(u.id || '')) {
+            u.level = 'L13';
+            if (state.positions && state.positions[u.key]) { delete state.positions[u.key]; moved++; }
+            else moved++;
+          } else if (state.positions && state.positions[u.key]) {
+            state.positions[u.key] = remap(state.positions[u.key]);
+            remapped++;
+          }
+        });
+        return `${moved} unit(s) → 13th Floor (positions cleared), ${remapped} 2nd-floor marker(s) remapped`;
+      }
+    }
+  ],
 
   // Project strings that override the core i18n table
   i18n: {
@@ -115,11 +165,11 @@ return {
   { key:'SF62__2', id:'SF62.1',  type:'Storefront', zone:'North', level:'L2', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
   { key:'SF63__1', id:'SF63',    type:'Storefront', zone:'North', level:'L2', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
   { key:'SF63__2', id:'SF63.1',  type:'Storefront', zone:'North', level:'L2', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
-  { key:'SF70__1', id:'SF70',    type:'Storefront', zone:'North', level:'L2', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
-  { key:'SF70__2', id:'SF70.1',  type:'Storefront', zone:'North', level:'L2', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
-  { key:'SF70__3', id:'SF70.2',  type:'Storefront', zone:'North', level:'L2', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
-  { key:'SF71__1', id:'SF71',    type:'Storefront', zone:'North', level:'L2', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
-  { key:'SF71__2', id:'SF71.1',  type:'Storefront', zone:'North', level:'L2', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
+  { key:'SF70__1', id:'SF70',    type:'Storefront', zone:'North', level:'L13', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
+  { key:'SF70__2', id:'SF70.1',  type:'Storefront', zone:'North', level:'L13', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
+  { key:'SF70__3', id:'SF70.2',  type:'Storefront', zone:'North', level:'L13', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
+  { key:'SF71__1', id:'SF71',    type:'Storefront', zone:'North', level:'L13', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
+  { key:'SF71__2', id:'SF71.1',  type:'Storefront', zone:'North', level:'L13', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
 ],
 
   seedLog: [
@@ -211,17 +261,12 @@ return {
   'SF15N': { x: 94.24, y: 66.55 },
 
   // ---- Level 2 (auto-imported from DXF: 2nd & 13th FL partial plan) ----
-  'SF60': { x: 10.05, y: 75.74 },
-  'SF61': { x: 19.04, y: 75.74 },
-  'SF62__1': { x: 10.97, y: 19.91 },
-  'SF62__2': { x: 22.59, y: 19.98 },
-  'SF63__1': { x: 16.3, y: 19.98 },
-  'SF63__2': { x: 27.03, y: 19.98 },
-  'SF70__1': { x: 63.76, y: 61.65 },
-  'SF70__2': { x: 71.99, y: 61.65 },
-  'SF70__3': { x: 85.08, y: 61.65 },
-  'SF71__1': { x: 66.85, y: 61.65 },
-  'SF71__2': { x: 77.87, y: 61.65 },
+  'SF60': { x: 20.6, y: 77.37 },  // F-044 remapped to 2f-plan.png
+  'SF61': { x: 49.28, y: 77.37 },  // F-044 remapped to 2f-plan.png
+  'SF62__1': { x: 23.53, y: 19.3 },  // F-044 remapped to 2f-plan.png
+  'SF62__2': { x: 60.61, y: 19.37 },  // F-044 remapped to 2f-plan.png
+  'SF63__1': { x: 40.54, y: 19.37 },  // F-044 remapped to 2f-plan.png
+  'SF63__2': { x: 74.77, y: 19.37 },  // F-044 remapped to 2f-plan.png
 }
 };
 })();

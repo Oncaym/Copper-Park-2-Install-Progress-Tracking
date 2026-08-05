@@ -39,6 +39,12 @@ CP2 特有：`defaultPositions` 有平面图预置坐标（requirePlacedMarkers=
 2. unit 的 `key` 不能改；Scope 变更改 `project-config.js` + `state.json` 两处
 3. 冲突策略 last-save-wins，Edit History（右上角用户菜单）可查
 4. ↻ Reset 在云模式下只从云端重拉，不会覆盖共享数据（F-013）
+5. **平面图必须成对出交付物（Leo 反复提过，别再犯）**：看板的默认皮肤是**深色**，所以任何
+   新增/替换的平面底图都要同时给两张 —— `xxx.png`（黑线白底，给打印/日间模式）和
+   `xxx-white.png`（**预先反色**：白线黑底，给深色 UI），并在 `PROJECT.floors` 里同时填
+   `img` + `imgDark`（GF 走 `<img>` 上的 `data-plan-light`/`data-plan-dark`）。
+   **不要指望运行时 canvas 反色兜底**——那是给没有孪生图的旧楼层的退路，交付新图时先做好反色版，
+   自己肉眼确认深色模式下是白线黑底再收工（快速自检：反色图的平均亮度应该很低，角像素≈0）。
 
 ## 待办
 
@@ -93,5 +99,20 @@ CP2 特有：`defaultPositions` 有平面图预置坐标（requirePlacedMarkers=
   平面图上方只有 `📐 Openings` `🔧 Issues` 两个 tab（没有 `✓ Progress`）；换回 Leo 账号 → 两者都回来。
   待同步到 AC3（app.js 的 `_lensAllowed` + index.html 的 `data-gc-hide`）。
   验证脚本：`npm i jsdom && node test-gc-view.cjs`（23 断言）。
+- [ ] **F-044（2F/13F 拆分 + IS + 门类型）本地验一遍**：①平面图上方应有 **Ground Floor / 2nd Floor / 13th Floor**
+  三个按钮，下面 Unit 表格的 tab 也是 All + 三层；②切到 2nd Floor → 底图是原来那张图的左半，SF60~63 六个
+  marker 位置应该大致对（我按裁切框重算过坐标，可能还要微调）；③切到 13th Floor → 新的 DXF 底图，SF70/SF71
+  五个 marker **坐标已清空**（会叠在中心），拖出来放到正确位置即可；④**第一次用 editor 账号打开会自动跑一次
+  数据迁移**（控制台有 `[migration] cp2-2026-08-floor-split`，Daily Log 里也会多一条记录），跑完会推回云端 —— 
+  **确认推成功了再关页面**，否则下次还会再跑（幂等性我测过，重复跑不会二次映射坐标，但还是看一眼稳妥）；
+  ⑤IS 开头的 unit 应显示成**菱形**；⑥点门单元 → Calendar tab 有 Door type 下拉，选防火门 → marker 出现琥珀双环。
+  ⑦深色模式下 2F/13F 应该是**白线黑底**（跟 1 层一致）——用的是预反色孪生图 `*-white.png`，不是运行时反色。
+  验证脚本：`npm i jsdom && node test-floors-types.cjs`（63 断言）。
+  **注意**：`13th fl.dxf`（26MB）已加进 `.gitignore`（`*.dxf`）——仓库里只放渲染好的 PNG。要重新渲染就把 DXF
+  放回文件夹让我跑一次。待同步到 AC3（app.js 的 runStateMigrations / isInterior / doorTypeOf / renderDoorTypeRow）。
+- [ ] **F-045（换楼层）本地验一遍**：①在 13th Floor 上点 ➕ Add new marker → 输入 SD19 → 应弹确认
+  「把 SD19 从 2nd Floor 移到 13th Floor…」→ 确认后 marker 出现在你点的位置，2nd Floor 上不再有它，
+  Daily Log 多一条 moved 记录；②或者点开 unit 弹窗 → Calendar tab 顶部 **Floor** 下拉直接改楼层
+  （改完坐标会清空，拖到位即可）。验证脚本：`node test-floors-types.cjs`（77 断言）。待同步到 AC3。
 - [ ] Leo：把安装窗口**结束日期**告诉当前会话，好设"最后一天"收尾对话提醒（super/PM 访谈，
   问题清单在 PILOT-2WK.md 第四节）。GC 依赖清单给我可批量录入 project-config SEED。

@@ -14,3 +14,6 @@ node_modules/
 # Local backups
 *.backup
 *.bak
+
+# Source drawings (inputs only — the tracker ships the rendered PNG, not the DXF)
+*.dxf

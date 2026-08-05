@@ -35,6 +35,18 @@ const I18N = {
     legend_facecap: "Face Cap",
     legend_caulk: "Caulking",
     legend_facecover: "Face Cover",
+    legend_interior_sf: "Interior storefront",
+    legend_int_door: "Interior door",
+    legend_fire_door: "Fire-rated door",
+    kind_interior_sf: "Interior",
+    door_type_exterior: "Exterior door",
+    door_type_interior: "Interior door",
+    door_type_firerated: "Fire-rated door",
+    form_door_type: "Door type",
+    opt_door_unset: "— not set —",
+    form_floor: "Floor",
+    confirm_move_floor: "Move {id} from {from} to {to} and pin it here?",
+    msg_moved_floor: "{id} moved to {to} — drag the marker to fine-tune",
     level_gf: "Ground Floor",
     level_l2: "Other Levels",
     tool_edit_pos: "📍 Edit marker position (drag)",
@@ -192,6 +204,18 @@ const I18N = {
     legend_facecap: "压条",
     legend_caulk: "打胶",
     legend_facecover: "盖板",
+    legend_interior_sf: "室内店面",
+    legend_int_door: "室内门",
+    legend_fire_door: "防火门",
+    kind_interior_sf: "室内",
+    door_type_exterior: "室外门",
+    door_type_interior: "室内门",
+    door_type_firerated: "防火门",
+    form_door_type: "门类型",
+    opt_door_unset: "— 未设置 —",
+    form_floor: "楼层",
+    confirm_move_floor: "把 {id} 从 {from} 移到 {to}，并钉在这个位置？",
+    msg_moved_floor: "{id} 已移到 {to} —— 拖动 marker 可微调位置",
     level_gf: "一层",
     level_l2: "其他楼层",
     tool_edit_pos: "📍 编辑标记位置（拖拽）",
@@ -349,6 +373,18 @@ const I18N = {
     legend_facecap: "페이스 캡",
     legend_caulk: "코킹",
     legend_facecover: "페이스 커버",
+    legend_interior_sf: "실내 스토어프론트",
+    legend_int_door: "실내 도어",
+    legend_fire_door: "방화문",
+    kind_interior_sf: "실내",
+    door_type_exterior: "외부 도어",
+    door_type_interior: "실내 도어",
+    door_type_firerated: "방화문",
+    form_door_type: "도어 종류",
+    opt_door_unset: "— 미설정 —",
+    form_floor: "층",
+    confirm_move_floor: "{id}을(를) {from}에서 {to}로 옮기고 여기에 배치할까요?",
+    msg_moved_floor: "{id}을(를) {to}로 옮겼습니다 — 마커를 드래그해 미세 조정",
     level_gf: "1층",
     level_l2: "기타 층",
     tool_edit_pos: "📍 마커 위치 편집 (드래그)",
@@ -550,6 +586,26 @@ function isPlanned(item) { return !!(item && item.date && item.date > TODAY_ISO)
 // or an explicit type === 'Door'. Storefront = everything else.
 const _DOOR_PATTERNS = (PROJECT.doorPatterns || ['^SD']).map(p => new RegExp(p, 'i'));
 function isDoor(u) { return !!u && (u.type === 'Door' || /door/i.test(u.type || '') || _DOOR_PATTERNS.some(rx => rx.test(u.id || ''))); }
+/* F-044: interior storefront (CP2: IS-prefixed). Detected from the id like doors are, so
+   markers Leo adds by hand on the plan are classified without any extra field to fill in.
+   `u.interior === 'yes' | 'no'` overrides the pattern when set (constitution §4.8). */
+const _INT_PATTERNS = (PROJECT.interiorPatterns || []).map(p => new RegExp(p, 'i'));
+function isInterior(u) {
+  if (!u) return false;
+  if (u.interior === 'yes') return true;
+  if (u.interior === 'no') return false;
+  return /interior/i.test(u.type || '') || _INT_PATTERNS.some(rx => rx.test(u.id || ''));
+}
+/* Door type (F-044). '' = unspecified; interior/exterior default from the unit itself so a
+   pre-existing door reads sensibly before anyone touches the field. */
+const DOOR_TYPES = ['', 'exterior', 'interior', 'fire-rated'];
+const DOOR_TYPE_LABEL = { '': '— not set —', exterior: 'Exterior door', interior: 'Interior door', 'fire-rated': 'Fire-rated door' };
+function doorTypeOf(u) {
+  if (!u || !isDoor(u)) return '';
+  const v = String(u.doorType || '').trim();
+  if (DOOR_TYPES.indexOf(v) !== -1 && v) return v;
+  return isInterior(u) ? 'interior' : 'exterior';   // inferred default, never written to state
+}
 let doorMode = false;  // when true, floor plan shows only doors (hides storefront)
 
 // Seed data extracted from PDF — Ground Floor + Level 2 units
@@ -768,7 +824,41 @@ function loadState() {
 /* Merge any new SEED_UNITS into an existing state object (in-place).
    Called from loadState() and _cloudApplyRemoteState() so Firebase sync
    never silently drops newly-added seed units (e.g. Level 2 markers). */
+/* One-time state migrations (F-044). Seed edits can only ADD things — they can never fix
+   data that already exists in the cloud (a unit's floor, a marker's coordinates). Projects
+   declare those fixups as PROJECT.migrations = [{ id, note, apply(state) }]; each id is
+   recorded in state.migrations[] the first time it runs, so it never runs twice, and core
+   code stays free of project specifics. Returns true when something changed. */
+function runStateMigrations(s) {
+  const list = (window.PROJECT && Array.isArray(PROJECT.migrations)) ? PROJECT.migrations : [];
+  if (!list.length || !s) return false;
+  // Read-only sessions (GC) can never push the "already migrated" marker back, so a
+  // migration would re-run on every reload and drift THEIR copy. Editors do the fixup.
+  if (typeof _isRO === 'function' && _isRO()) return false;
+  if (!Array.isArray(s.migrations)) s.migrations = [];
+  let ran = false;
+  list.forEach(m => {
+    if (!m || !m.id || typeof m.apply !== 'function') return;
+    if (s.migrations.indexOf(m.id) !== -1) return;
+    let result = '';
+    try { result = m.apply(s) || ''; }
+    catch (e) { console.warn('[migration] ' + m.id + ' failed — skipped, will retry next load', e); return; }
+    s.migrations.push(m.id);
+    ran = true;
+    console.log('[migration] ' + m.id + (result ? ': ' + result : ' applied'));
+    // Reuse the seed-sync flag so the result (and the "done" marker) gets pushed to the
+    // cloud — otherwise the migration would run again, and again, on every load.
+    s._mergeNote = (s._mergeNote ? s._mergeNote + ' · ' : '') + ('migration ' + m.id);
+    if (Array.isArray(s.log)) {
+      s.log.push({ kind: 'migration', auto: true, date: new Date().toISOString().slice(0, 10),
+        category: 'field-verify', categories: ['field-verify'],
+        content: 'Data migration ' + m.id + (result ? ' — ' + result : '') });
+    }
+  });
+  return ran;
+}
 function mergeSeedUnits(s) {
+      runStateMigrations(s);
       // ensure positions exist (migration for older state)
       if (!s.positions) s.positions = structuredClone(DEFAULT_POSITIONS);
       if (!s.glassPanelOffsets) s.glassPanelOffsets = {};
@@ -1118,14 +1208,24 @@ function renderPlan() {
       extra = hl.has((u.id || '').toUpperCase()) ? ' highlighted' : ' dimmed';
     }
     extra += _lensMarkerClass(u, lens);
-    m.className = `plan-marker ${u.status}${unitHasOpenRfi(u) ? ' has-open-rfi' : ''}${isDoor(u) ? ' door' : ''}${u.louver === 'yes' ? ' has-louver' : ''}${isPlanned(u) ? ' planned' : ''}${_scopeRingClass(u)}${extra}`;
+    m.className = `plan-marker ${u.status}${unitHasOpenRfi(u) ? ' has-open-rfi' : ''}${isDoor(u) ? ' door' : ''}${_unitShapeClass(u)}${u.louver === 'yes' ? ' has-louver' : ''}${isPlanned(u) ? ' planned' : ''}${_scopeRingClass(u)}${extra}`;
     m.style.left = pos.x + '%';
     m.style.top  = pos.y + '%';
     {
       // Strip SF prefix only — sub-IDs are entered manually by the user, no auto suffix.
       // In the Openings lens the label is the dimension itself (F-039) — the answer the
       // GC is looking for, with no click required.
-      m.textContent = _lensMarkerLabel(u, lens);
+      const _lbl = _lensMarkerLabel(u, lens);
+      if (isInterior(u) && !isDoor(u)) {
+        // F-044: the diamond is a 45°-rotated box, so the text needs its own span to
+        // rotate back and stay readable.
+        const sp = document.createElement('span');
+        sp.className = 'mk-label';
+        sp.textContent = _lbl;
+        m.appendChild(sp);
+      } else {
+        m.textContent = _lbl;
+      }
     }
     m.dataset.unit = u.key;
     m.title = _lensMarkerTitle(u, lens);
@@ -1138,6 +1238,59 @@ function renderPlan() {
   if (typeof mapGlassMode !== 'undefined' && mapGlassMode) renderGlassMarkers();
 }
 
+/* Door-type row in the unit modal. Hidden entirely for non-doors — a storefront has no
+   door type, and an always-visible dead field is worse than no field. */
+/* F-045: floor picker. Only shown when the project has more than one floor. Changing it
+   clears the marker position — the new floor is a different drawing, so the old x/y is
+   meaningless there; Leo drags it into place (or uses ➕ Add new marker, which now also
+   moves a unit to the floor you place it on). */
+function renderFloorSelect(u) {
+  const row = document.getElementById('cal-floor-row');
+  if (!row) return;
+  const floors = getFloors();
+  if (!floors || floors.length < 2) { row.style.display = 'none'; return; }
+  row.style.display = '';
+  const sel = document.getElementById('cal-floor');
+  if (!sel) return;
+  const cur = (u && u.level) || firstFloorKey();
+  sel.innerHTML = floors.map(f =>
+    `<option value="${_escFloor(f.key)}"${f.key === cur ? ' selected' : ''}>${_escFloor(floorLabel(f))}</option>`).join('');
+}
+function renderDoorTypeRow(u) {
+  const row = document.getElementById('cal-doortype-row');
+  if (!row) return;                      // project without the row (AC3) — no-op
+  if (!isDoor(u)) { row.style.display = 'none'; return; }
+  row.style.display = '';
+  const sel = document.getElementById('cal-doortype');
+  if (!sel) return;
+  const cur = String((u && u.doorType) || '');
+  const inferred = doorTypeOf(u);
+  sel.innerHTML = DOOR_TYPES.map(v => {
+    const label = v ? t('door_type_' + v.replace(/[^a-z]/g, '')) : t('opt_door_unset');
+    const hint = (!v && inferred) ? ' (' + t('door_type_' + inferred.replace(/[^a-z]/g, '')) + ')' : '';
+    return `<option value="${v}"${v === cur ? ' selected' : ''}>${label}${hint}</option>`;
+  }).join('');
+}
+/* F-044 shape / colour language on the plan:
+     exterior storefront = round (unchanged)   interior storefront (IS) = diamond
+     door = square, border colour by door type + an F badge on fire-rated
+   A door that is also interior stays a square — the door shape is the stronger signal on
+   site, and its border colour already says "interior". */
+function _unitShapeClass(u) {
+  let c = '';
+  if (isInterior(u) && !isDoor(u)) c += ' interior-sf';
+  const dt = doorTypeOf(u);
+  if (dt) c += ' dt-' + dt.replace(/[^a-z]/g, '');   // dt-exterior | dt-interior | dt-firerated
+  return c;
+}
+// "· Interior · Fire-rated door" tail for hover cards and marker titles.
+function _unitKindText(u) {
+  const bits = [];
+  if (isInterior(u) && !isDoor(u)) bits.push(t('kind_interior_sf'));
+  const dt = doorTypeOf(u);
+  if (dt) bits.push(t('door_type_' + dt.replace(/[^a-z]/g, '')));
+  return bits.length ? ' · ' + bits.join(' · ') : '';
+}
 /* Ring classes for caulking (upper-left arc) + face cover (lower-right arc). Only 'installed'
    and 'in-progress' draw anything — pending / N/A leave the marker exactly as it was. */
 function _scopeRingClass(u) {
@@ -1162,7 +1315,7 @@ function _scopeTipText(u) {
 }
 function showPlanTooltip(e, u) {
   const tt = document.getElementById('planTooltip');
-  tt.innerHTML = `<strong>${u.id}</strong> · ${isDoor(u) ? 'Door' : u.type} · ${u.zone}<br>
+  tt.innerHTML = `<strong>${u.id}</strong> · ${isDoor(u) ? 'Door' : u.type}${_unitKindText(u)} · ${u.zone}<br>
     <span style="color:var(--text-dim)">${formatStatus(u.status)}${u.date ? ' · ' + formatDate(u.date) : ''}${u.louver==='yes' ? ' · Louver ✓' : ''}${u.facecap==='yes' ? ' · Face Cap ✓' : ''}${_scopeTipText(u)}</span>
     ${u.note ? '<br><span style="color:var(--text-dim);font-size:10px">' + u.note + '</span>' : ''}`;
   const rect = e.currentTarget.getBoundingClientRect();
@@ -1713,6 +1866,23 @@ document.getElementById('planImg').addEventListener('click', e => {
     }
     return;
   }
+  /* F-045 (Leo, 2026-08-05): placing an existing unit while another floor is open used to
+     only rewrite its coordinates — the marker stayed on its old floor and appeared to
+     "jump" there instead of showing up where it was placed. Placing IS the gesture for
+     "this unit lives here", so it moves the unit to the current floor. Asked first, since
+     it changes which floor's counts the unit belongs to. */
+  const from = unit.level || firstFloorKey();
+  if (from !== currentLevel) {
+    const fl = k => { const f = getFloors().find(x => x.key === k); return f ? floorLabel(f) : k; };
+    if (!confirm(t('confirm_move_floor').replace('{id}', unit.id).replace('{from}', fl(from)).replace('{to}', fl(currentLevel)))) return;
+    unit.level = currentLevel;
+    if (Array.isArray(state.log)) {
+      state.log.push({ kind: 'floor-move', auto: true, unitKey: unit.key,
+        date: new Date().toISOString().slice(0, 10), category: 'field-verify', categories: ['field-verify'],
+        content: `${unit.id} · moved ${fl(from)} → ${fl(currentLevel)}` });
+    }
+    toast(t('msg_moved_floor').replace('{id}', unit.id).replace('{to}', fl(currentLevel)));
+  }
   state.positions[unit.key] = { x, y };
   togglePlaceMode();
   saveState();
@@ -1776,12 +1946,20 @@ function _invertedSrc(src) {
     } catch (e) { resolve(null); }
   });
 }
-function _floorImgSrc(lvl) {
+// A floor's shipped dark twin, if it has one (PROJECT.floors[].imgDark). Ground floor keeps
+// carrying its pair on the <img> markup (data-plan-light / data-plan-dark).
+function _floorDarkSrc(lvl) {
   const img = document.getElementById('planImg');
+  if (lvl === firstFloorKey()) return (img && img.getAttribute('data-plan-dark')) || '';
+  const f = getFloors().find(x => x.key === lvl);
+  return (f && f.imgDark) || '';
+}
+function _floorImgSrc(lvl) {
   const light = _floorLightSrc(lvl);
   if (isDayMode()) return light;
-  if (lvl === firstFloorKey()) { const dark = img && img.getAttribute('data-plan-dark'); if (dark) return dark; }
-  return _INVERT_CACHE[light] || light;    // upper floors: cached inversion, else invert async below
+  const dark = _floorDarkSrc(lvl);
+  if (dark) return dark;                   // pre-inverted twin — always preferred
+  return _INVERT_CACHE[light] || light;    // legacy floors with no twin: runtime inversion below
 }
 // Re-point the plan at the right asset (called on floor change and on theme toggle).
 function applyPlanTheme() {
@@ -1792,7 +1970,7 @@ function applyPlanTheme() {
   // Upper floor in dark mode with no cached inversion yet → build it, then swap in.
   const light = _floorLightSrc(currentLevel);
   const needsRuntimeInvert = !isDayMode()
-    && !(currentLevel === firstFloorKey() && img.getAttribute('data-plan-dark'))
+    && !_floorDarkSrc(currentLevel)        // a shipped dark twin makes inversion unnecessary
     && !_INVERT_CACHE[light];
   if (needsRuntimeInvert) {
     // Wear the CSS filter immediately so the plan is never briefly white-on-white while
@@ -1802,7 +1980,7 @@ function applyPlanTheme() {
     img.style.filter = 'invert(1)';
     _invertedSrc(light).then(out => {
       const el = document.getElementById('planImg'); if (!el) return;
-      if (isDayMode() || currentLevel === firstFloorKey()) return;   // theme/floor changed meanwhile
+      if (isDayMode() || _floorDarkSrc(currentLevel)) return;   // theme/floor changed meanwhile
       if (out) { el.setAttribute('src', out); el.style.filter = ''; }
     });
   }
@@ -3078,7 +3256,7 @@ function _lensMarkerTitle(u, lens) {
     const r = _roReqOf(u); const ack = _openingAcks()[String(u.id).trim().toLowerCase()];
     return `${u.id} · required R.O. ${_roReqDims(r)}${r.tol ? ' ' + r.tol : ''}${ack ? ' · GC marked ready ' + _gcTsDate(ack.ts) : ' · awaiting the GC'}`;
   }
-  return `${u.id} · ${formatStatus(u.status)}${u.date ? ' · ' + formatDate(u.date) : ''}${_scopeTipText(u)}`;
+  return `${u.id}${_unitKindText(u)} · ${formatStatus(u.status)}${u.date ? ' · ' + formatDate(u.date) : ''}${_scopeTipText(u)}`;
 }
 function _lensCounts() {
   const units = (state && Array.isArray(state.units) ? state.units : []);
@@ -3467,6 +3645,8 @@ function openUnit(id) {
   document.getElementById('cal-id').value = u.id;
   { const _cl = document.getElementById('cal-louver'); if (_cl) _cl.value = u.louver || 'na'; }
   { const _cf = document.getElementById('cal-facecap'); if (_cf) _cf.value = u.facecap || 'na'; }
+  renderDoorTypeRow(u);                      // F-044: door type (doors only)
+  renderFloorSelect(u);                      // F-045: which floor this unit lives on
   document.getElementById('cal-note').value = u.note || '';
   // glassPanels[]/ro[] tabs: dropped by AC3's M3 (glass now lives on elevation elements,
   // R.O. superseded by RFI) but CP2 kept both tabs (no elevation data yet) — seed them here
@@ -3754,6 +3934,24 @@ function saveUnit() {
   // --- Calendar-tab header fields (M3) ---
   { const _cl = document.getElementById('cal-louver'); if (_cl) u.louver = _cl.value; }
   { const _cf = document.getElementById('cal-facecap'); if (_cf) u.facecap = _cf.value; }
+  // F-045: floor change — clear the stale position and log the move.
+  { const _fs = document.getElementById('cal-floor');
+    const _was = u.level || firstFloorKey();
+    if (_fs && _fs.value && _fs.value !== _was) {
+      const fl = k => { const f = getFloors().find(x => x.key === k); return f ? floorLabel(f) : k; };
+      u.level = _fs.value;
+      if (state.positions) delete state.positions[u.key];
+      if (Array.isArray(state.log)) {
+        state.log.push({ kind: 'floor-move', auto: true, unitKey: u.key,
+          date: new Date().toISOString().slice(0, 10), category: 'field-verify', categories: ['field-verify'],
+          content: `${u.id} · moved ${fl(_was)} → ${fl(u.level)}` });
+      }
+      toast(t('msg_moved_floor').replace('{id}', u.id).replace('{to}', fl(u.level)));
+    } }
+  // F-044: door type. Only doors carry it, and an empty pick removes the field so
+  // doorTypeOf() falls back to the inferred default instead of storing a fake value.
+  { const _dt = document.getElementById('cal-doortype');
+    if (_dt && isDoor(u)) { if (_dt.value) u.doorType = _dt.value; else delete u.doorType; } }
   u.note = document.getElementById('cal-note').value;
   // glassPanels[] / glassNote / ro[] intentionally left untouched — those tabs were
   // dropped by M3 (D3/D4); the data stays stored, just untabbed.
