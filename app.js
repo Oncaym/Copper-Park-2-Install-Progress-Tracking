@@ -35,6 +35,8 @@ const I18N = {
     legend_facecap: "Face Cap",
     legend_caulk: "Caulking",
     legend_facecover: "Face Cover",
+    legend_sunshade: "Sun Shade",
+    legend_beautycap: "Beauty Cap",
     legend_interior_sf: "Interior storefront",
     legend_int_door: "Interior door",
     legend_fire_door: "Fire-rated door",
@@ -45,6 +47,16 @@ const I18N = {
     form_door_type: "Door type",
     opt_door_unset: "— not set —",
     form_floor: "Floor",
+    unit_type_auto: "Auto (by unit id)",
+    sub_item_header: "📋 Submittals not approved",
+    sub_item_resubmit: "Resubmit",
+    sub_item_waiting: "In review",
+    sub_item_ours: "Us — resubmission owed",
+    sub_item_theirs: "Reviewers",
+    sub_item_ours_short: "on us",
+    sub_item_theirs_short: "with reviewers",
+    unit_type_none: "No special type",
+    form_unit_type: "Unit type",
     ro_basis_label: "Dimension basis — who the opening follows",
     ro_basis_hold: "We hold this dimension (glass purchased)",
     ro_basis_follow: "We follow the GC's opening (glass not purchased)",
@@ -159,6 +171,7 @@ const I18N = {
     kpi_detail_title_louvers: "Louver-Installed Units",
     kpi_detail_title_caulking: "Caulking — Unit by Unit",
     kpi_detail_title_facecover: "Face Cover — Unit by Unit",
+    kpi_detail_title_beautycap: "Beauty Cap — Unit by Unit",
     kpi_detail_title_glass: "Glass-Installed Panels",
     kpi_detail_title_percent: "All Units",
     kpi_detail_empty: "Nothing to show.",
@@ -215,6 +228,8 @@ const I18N = {
     legend_facecap: "压条",
     legend_caulk: "打胶",
     legend_facecover: "盖板",
+    legend_sunshade: "遮阳板",
+    legend_beautycap: "压条",
     legend_interior_sf: "室内店面",
     legend_int_door: "室内门",
     legend_fire_door: "防火门",
@@ -225,6 +240,16 @@ const I18N = {
     form_door_type: "门类型",
     opt_door_unset: "— 未设置 —",
     form_floor: "楼层",
+    unit_type_auto: "自动（按编号）",
+    sub_item_header: "📋 未批准的 submittal",
+    sub_item_resubmit: "需重提",
+    sub_item_waiting: "审核中",
+    sub_item_ours: "我方 —— 待重提",
+    sub_item_theirs: "审核方",
+    sub_item_ours_short: "在我方",
+    sub_item_theirs_short: "在审核方",
+    unit_type_none: "不特殊标记",
+    form_unit_type: "单元类型",
     ro_basis_label: "尺寸基准 —— 谁跟谁的尺寸",
     ro_basis_hold: "我方尺寸为准（玻璃已订）",
     ro_basis_follow: "我方跟随 GC 开口（玻璃未订）",
@@ -339,6 +364,7 @@ const I18N = {
     kpi_detail_title_louvers: "已装百叶单元",
     kpi_detail_title_caulking: "打胶 — 逐单元",
     kpi_detail_title_facecover: "盖板 — 逐单元",
+    kpi_detail_title_beautycap: "压条 — 逐单元",
     kpi_detail_title_glass: "已装玻璃面板",
     kpi_detail_title_percent: "全部单元",
     kpi_detail_empty: "暂无数据。",
@@ -395,6 +421,8 @@ const I18N = {
     legend_facecap: "페이스 캡",
     legend_caulk: "코킹",
     legend_facecover: "페이스 커버",
+    legend_sunshade: "차양",
+    legend_beautycap: "뷰티 캡",
     legend_interior_sf: "실내 스토어프론트",
     legend_int_door: "실내 도어",
     legend_fire_door: "방화문",
@@ -405,6 +433,16 @@ const I18N = {
     form_door_type: "도어 종류",
     opt_door_unset: "— 미설정 —",
     form_floor: "층",
+    unit_type_auto: "자동 (유닛 ID 기준)",
+    sub_item_header: "📋 미승인 제출물",
+    sub_item_resubmit: "재제출 필요",
+    sub_item_waiting: "검토 중",
+    sub_item_ours: "당사 — 재제출 대기",
+    sub_item_theirs: "검토자",
+    sub_item_ours_short: "당사",
+    sub_item_theirs_short: "검토자",
+    unit_type_none: "특수 타입 없음",
+    form_unit_type: "유닛 종류",
     ro_basis_label: "치수 기준 — 누구의 개구부를 따르는가",
     ro_basis_hold: "당사 치수 기준 (유리 발주 완료)",
     ro_basis_follow: "GC 개구부를 따름 (유리 미발주)",
@@ -519,6 +557,7 @@ const I18N = {
     kpi_detail_title_louvers: "루버 설치 유닛",
     kpi_detail_title_caulking: "코킹 — 유닛별",
     kpi_detail_title_facecover: "페이스 커버 — 유닛별",
+    kpi_detail_title_beautycap: "뷰티 캡 — 유닛별",
     kpi_detail_title_glass: "유리 설치 패널",
     kpi_detail_title_percent: "전체 유닛",
     kpi_detail_empty: "데이터 없음.",
@@ -1198,6 +1237,20 @@ function render() {
 }
 
 /* ---- Floor Plan rendering ---- */
+/* F-051: the plan legend grows with the registry — a type nobody can identify is worse
+   than no type. Rebuilt on every render so an edit shows up immediately. */
+function renderUnitTypeLegend() {
+  const legend = document.querySelector('#planSection .legend') || document.querySelector('.legend');
+  if (!legend) return;
+  legend.querySelectorAll('.legend-item[data-ut]').forEach(el => el.remove());
+  const esc = v => String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  unitTypes().forEach(t => {
+    const d = document.createElement('div');
+    d.className = 'legend-item'; d.dataset.ut = t.key;
+    d.innerHTML = `<span class="ut-swatch ut-${esc(t.shape)}" style="--ut-color:${esc(utColorHex(t.color))}"></span> <span>${esc(t.label)}</span>`;
+    legend.appendChild(d);
+  });
+}
 function renderPlan() {
   // F-039 v3: make sure the plan is showing the asset that matches the current theme.
   // Cheap (only touches src when it differs) and covers the first paint, where a day-mode
@@ -1249,7 +1302,12 @@ function renderPlan() {
       // In the Openings lens the label is the dimension itself (F-039) — the answer the
       // GC is looking for, with no click required.
       const _lbl = _lensMarkerLabel(u, lens);
-      if (isInterior(u) && !isDoor(u)) {
+      const _ut = unitTypeOf(u);
+      if (_ut) {
+        m.style.setProperty('--ut-color', utColorHex(_ut.color));
+        if (_ut.badge) m.dataset.utBadge = _ut.badge;
+      }
+      if ((_ut && _ut.shape === 'diamond') || (!_ut && isInterior(u) && !isDoor(u))) {
         // F-044: the diamond is a 45°-rotated box, so the text needs its own span to
         // rotate back and stay readable.
         const sp = document.createElement('span');
@@ -1268,11 +1326,29 @@ function renderPlan() {
     wrap.appendChild(m);
   });
   setupPlanInteractions();
+  renderUnitTypeLegend();
   if (typeof mapGlassMode !== 'undefined' && mapGlassMode) renderGlassMarkers();
 }
 
 /* Door-type row in the unit modal. Hidden entirely for non-doors — a storefront has no
    door type, and an always-visible dead field is worse than no field. */
+/* F-051: unit type picker — "(auto: …)" spells out what the id pattern would pick, so
+   overriding is a deliberate act rather than a mystery. Hidden when no types are defined. */
+function renderUnitTypeRow(u) {
+  const row = document.getElementById('cal-unittype-row');
+  if (!row) return;
+  const list = unitTypes();
+  if (!list.length) { row.style.display = 'none'; return; }
+  row.style.display = '';
+  const sel = document.getElementById('cal-unittype');
+  if (!sel) return;
+  const auto = (function () { const cp = Object.assign({}, u); delete cp.unitType; return unitTypeOf(cp); })();
+  const cur = String((u && u.unitType) || '');
+  const esc = v => String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  sel.innerHTML = `<option value=""${cur ? '' : ' selected'}>${esc(t('unit_type_auto'))}${auto ? ' (' + esc(auto.label) + ')' : ''}</option>`
+    + `<option value="__none__"${cur === '__none__' ? ' selected' : ''}>${esc(t('unit_type_none'))}</option>`
+    + list.map(x => `<option value="${esc(x.key)}"${cur === x.key ? ' selected' : ''}>${esc(x.label)}</option>`).join('');
+}
 /* F-045: floor picker. Only shown when the project has more than one floor. Changing it
    clears the marker position — the new floor is a different drawing, so the old x/y is
    meaningless there; Leo drags it into place (or uses ➕ Add new marker, which now also
@@ -1304,6 +1380,68 @@ function renderDoorTypeRow(u) {
     return `<option value="${v}"${v === cur ? ' selected' : ''}>${label}${hint}</option>`;
   }).join('');
 }
+/* ================= Unit type registry (F-051, Leo 2026-08-05) =====================
+   Adding a marker kind (hollow metal door, sun shade, canopy…) used to mean editing
+   three hardcoded branches in this file. Now it is data: a list of types, each with an
+   id pattern, a shape and an outline colour, editable in-app (⚙ → Unit types) and
+   stored in `state.unitTypes` so it syncs to everyone like any other change — no new
+   Firebase rules, no deploy. `PROJECT.unitTypes` may ship project defaults; the cloud
+   list wins on a key clash.
+
+   Deliberate limits (they keep the plan readable):
+     • fill colour always means INSTALL STATUS — a type only ever sets the outline;
+     • shapes and colours come from a fixed palette, not free input;
+     • the three built-ins (exterior storefront / interior storefront / door) stay put,
+       and a custom type only overrides them when its pattern matches first.       */
+const UT_SHAPES = [
+  { key: 'circle',   label: 'Circle (default)' },
+  { key: 'diamond',  label: 'Diamond' },
+  { key: 'square',   label: 'Square' },
+  { key: 'triangle', label: 'Triangle' },
+  { key: 'hex',      label: 'Hexagon' },
+  { key: 'capsule',  label: 'Capsule (wide)' }
+];
+// Picked to stay clear of the status fills (green / yellow / red / grey) and of each other.
+const UT_COLORS = [
+  { key: 'cyan',   hex: '#22d3ee', label: 'Cyan' },
+  { key: 'violet', hex: '#a371f7', label: 'Violet' },
+  { key: 'mint',   hex: '#7ee787', label: 'Mint' },
+  { key: 'amber',  hex: '#ffb224', label: 'Amber' },
+  { key: 'pink',   hex: '#ff7eb6', label: 'Pink' },
+  { key: 'steel',  hex: '#a5b8cc', label: 'Steel' },
+  { key: 'lime',   hex: '#bdda57', label: 'Lime' },
+  { key: 'copper', hex: '#e8a26a', label: 'Copper' }
+];
+function utColorHex(key) { const c = UT_COLORS.find(x => x.key === key); return c ? c.hex : (String(key || '').charAt(0) === '#' ? key : UT_COLORS[0].hex); }
+function utShapeOk(k) { return UT_SHAPES.some(s => s.key === k); }
+// Project defaults + the cloud list, cloud wins per key.
+function unitTypes() {
+  const proj = (window.PROJECT && Array.isArray(PROJECT.unitTypes)) ? PROJECT.unitTypes : [];
+  const cloud = (state && Array.isArray(state.unitTypes)) ? state.unitTypes : [];
+  const out = [];
+  proj.concat(cloud).forEach(t => {
+    if (!t || !t.key) return;
+    const i = out.findIndex(x => x.key === t.key);
+    const row = { key: String(t.key), label: t.label || t.key, match: t.match || '',
+                  shape: utShapeOk(t.shape) ? t.shape : 'circle', color: t.color || 'cyan',
+                  badge: (t.badge || '').slice(0, 2) };
+    if (i === -1) out.push(row); else out[i] = row;
+  });
+  return out;
+}
+/* Which registry type a unit is. `u.unitType` (set by hand in the unit modal) always wins
+   over the id pattern — auto-detection is a default guess, never a verdict (§4.9). */
+function unitTypeOf(u) {
+  if (!u) return null;
+  const list = unitTypes();
+  if (u.unitType) {
+    if (u.unitType === '__none__') return null;          // explicitly "just a plain marker"
+    const pick = list.find(t => t.key === u.unitType);
+    if (pick) return pick;
+  }
+  const id = String(u.id || '');
+  return list.find(t => { try { return t.match && new RegExp(t.match, 'i').test(id); } catch (e) { return false; } }) || null;
+}
 /* F-044 shape / colour language on the plan:
      exterior storefront = round (unchanged)   interior storefront (IS) = diamond
      door = square, border colour by door type + an F badge on fire-rated
@@ -1311,7 +1449,9 @@ function renderDoorTypeRow(u) {
    site, and its border colour already says "interior". */
 function _unitShapeClass(u) {
   let c = '';
-  if (isInterior(u) && !isDoor(u)) c += ' interior-sf';
+  const ut = unitTypeOf(u);                          // F-051: registry type wins the shape
+  if (ut) c += ' ut ut-' + ut.shape;
+  else if (isInterior(u) && !isDoor(u)) c += ' interior-sf';
   const dt = doorTypeOf(u);
   if (dt) c += ' dt-' + dt.replace(/[^a-z]/g, '');   // dt-exterior | dt-interior | dt-firerated
   return c;
@@ -1319,7 +1459,9 @@ function _unitShapeClass(u) {
 // "· Interior · Fire-rated door" tail for hover cards and marker titles.
 function _unitKindText(u) {
   const bits = [];
-  if (isInterior(u) && !isDoor(u)) bits.push(t('kind_interior_sf'));
+  const ut = unitTypeOf(u);
+  if (ut) bits.push(ut.label);
+  else if (isInterior(u) && !isDoor(u)) bits.push(t('kind_interior_sf'));
   const dt = doorTypeOf(u);
   if (dt) bits.push(t('door_type_' + dt.replace(/[^a-z]/g, '')));
   return bits.length ? ' · ' + bits.join(' · ') : '';
@@ -1328,21 +1470,20 @@ function _unitKindText(u) {
    and 'in-progress' draw anything — pending / N/A leave the marker exactly as it was. */
 function _scopeRingClass(u) {
   let c = '';
-  const ca = scopeStatusOf(u, 'caulking');
-  if (ca === 'installed') c += ' scope-caulk';
-  else if (ca === 'in-progress') c += ' scope-caulk scope-caulk-wip';
-  const fc = scopeStatusOf(u, 'faceCover');
-  if (fc === 'installed') c += ' scope-fc';
-  else if (fc === 'in-progress') c += ' scope-fc scope-fc-wip';
+  _ringScopes().forEach(r => {
+    const st = scopeStatusOf(u, r.scope);
+    if (st === 'installed') c += ' ' + r.cls;
+    else if (st === 'in-progress') c += ' ' + r.cls + ' ' + r.cls + '-wip';
+  });
   return c;
 }
 // "Caulking ✓" / "Caulking …" (in progress) for the hover card + marker title attribute.
 function _scopeTipText(u) {
   const mark = st => st === 'installed' ? ' ✓' : (st === 'in-progress' ? ' …' : (st === 'issue' ? ' ⚠' : null));
   const bits = [];
-  [['caulking', t('legend_caulk')], ['faceCover', t('legend_facecover')]].forEach(([k, label]) => {
-    const m = mark(scopeStatusOf(u, k));
-    if (m) bits.push(label + m);
+  _ringScopes().forEach(r => {
+    const m = mark(scopeStatusOf(u, r.scope));
+    if (m) bits.push(t(r.labelKey || 'legend_caulk') + m);
   });
   return bits.length ? ' · ' + bits.join(' · ') : '';
 }
@@ -2029,7 +2170,7 @@ function setLevel(lvl) {
 }
 
 /* -------- Caulking / Face Cover progress (Leo, 2026-08-03) --------
-   Both live on the unit as Calendar-tab scopes: u.scopes.caulking / u.scopes.faceCover,
+   Both live on the unit as Calendar-tab scopes: u.scopes.caulking / u.scopes.beautyCap,
    status ∈ '' (N/A) | pending | in-progress | installed | issue. Denominator is every unit
    on the project (same convention as the Overall Progress card) — a unit that genuinely
    doesn't need the scope can be left at N/A and still counts as not-done, so the number
@@ -2045,6 +2186,24 @@ function scopeProgress(name) {
   const total = u.length;
   return { done, wip, total, pct: total ? Math.round((done / total) * 100) : 0 };
 }
+/* Which per-unit scopes get a headline card and a marker ring is PROJECT data (F-048):
+   CP2 tracks Caulking + Face Cover, AC3 tracks Caulking + Sun Shade + Beauty Cap. Core
+   ships the CP2 pair as the default so an un-migrated project behaves exactly as before. */
+function _scopeKpis() {
+  const list = (window.PROJECT && Array.isArray(PROJECT.scopeKpis)) ? PROJECT.scopeKpis : null;
+  return list || [
+    { scope: 'caulking',  valueId: 'kpi-caulk',     subId: 'kpi-caulk-sub' },
+    { scope: 'beautyCap', valueId: 'kpi-beautycap', subId: 'kpi-beautycap-sub' }
+  ];
+}
+// Up to two arcs are drawable (upper-left + lower-right) — see .scope-caulk / .scope-fc CSS.
+function _ringScopes() {
+  const list = (window.PROJECT && Array.isArray(PROJECT.ringScopes)) ? PROJECT.ringScopes : null;
+  return (list || [
+    { scope: 'caulking',  cls: 'scope-caulk', labelKey: 'legend_caulk' },
+    { scope: 'beautyCap', cls: 'scope-fc',    labelKey: 'legend_beautycap' }
+  ]).slice(0, 2);
+}
 function _paintScopeKpi(valueId, subId, name) {
   const p = scopeProgress(name);
   const v = document.getElementById(valueId);
@@ -2056,8 +2215,7 @@ function _paintScopeKpi(valueId, subId, name) {
 }
 function renderKPIs() {
   const u = state.units;
-  _paintScopeKpi('kpi-caulk', 'kpi-caulk-sub', 'caulking');
-  _paintScopeKpi('kpi-facecover', 'kpi-facecover-sub', 'faceCover');
+  _scopeKpis().forEach(k => _paintScopeKpi(k.valueId, k.subId, k.scope));
   const installed = u.filter(x=>x.status==='installed').length;
   const inProg = u.filter(x=>x.status==='in-progress').length;
   const issues = u.filter(x=>x.status==='issue').length;
@@ -2360,8 +2518,28 @@ function renderCharts() {
    KPI DRILL-DOWN PANEL
    Each KPI card and the donut slices route to openKpiDetail(kind).
    ====================================================== */
+/* One unit list for any tracked scope: the SCOPE's own status/date (not the frame's),
+   worst-first so "who still owes me caulking" is the top of the list. */
+function _scopeDrillRows(name) {
+  const u = (state && Array.isArray(state.units)) ? state.units : [];
+  const rank = { issue: 0, 'in-progress': 1, pending: 2, '': 3, installed: 4 };
+  const rows = u.map(x => {
+    const st = scopeStatusOf(x, name);
+    const sc = (x.scopes && x.scopes[name]) || {};
+    return Object.assign({}, x, { status: st || 'pending', date: sc.date || '', _rank: rank[st] != null ? rank[st] : 3 });
+  }).sort((a, b) => a._rank - b._rank || String(a.id).localeCompare(String(b.id)));
+  const cfg = _scopeKpis().find(k => k.scope === name) || {};
+  const title = cfg.titleKey ? t(cfg.titleKey)
+    : (name === 'caulking' ? t('kpi_detail_title_caulking')
+      : (name === 'beautyCap' ? t('kpi_detail_title_beautycap') : (cfg.label || name)));
+  return { units: rows, title: title };
+}
 function _kpiUnitsForKind(kind) {
   const u = state.units || [];
+  // F-048: project-defined scope cards call openKpiDetail('scope:<name>').
+  if (typeof kind === 'string' && kind.indexOf('scope:') === 0) {
+    return _scopeDrillRows(kind.slice(6));
+  }
   switch (kind) {
     case 'installed': return { units: u.filter(x => x.status === 'installed'), title: t('kpi_detail_title_installed') };
     case 'pending':   return { units: u.filter(x => x.status === 'pending'),   title: t('kpi_detail_title_pending') };
@@ -2375,17 +2553,9 @@ function _kpiUnitsForKind(kind) {
     // Caulking / Face Cover: list every unit but swap in the SCOPE's own status+date, so the
     // drill-down answers "who still owes me caulking" instead of repeating frame status.
     // Rows keep `key`, so clicking one still opens that unit's modal.
-    case 'caulking':
-    case 'facecover': {
-      const name = kind === 'caulking' ? 'caulking' : 'faceCover';
-      const rank = { issue: 0, 'in-progress': 1, pending: 2, '': 3, installed: 4 };
-      const rows = u.map(x => {
-        const st = scopeStatusOf(x, name);
-        const sc = (x.scopes && x.scopes[name]) || {};
-        return Object.assign({}, x, { status: st || 'pending', date: sc.date || '', _rank: rank[st] != null ? rank[st] : 3 });
-      }).sort((a, b) => a._rank - b._rank || String(a.id).localeCompare(String(b.id)));
-      return { units: rows, title: t(kind === 'caulking' ? 'kpi_detail_title_caulking' : 'kpi_detail_title_facecover') };
-    }
+    case 'caulking':   return _scopeDrillRows('caulking');
+    case 'facecover':                                   // legacy alias
+    case 'beautycap':  return _scopeDrillRows('beautyCap');
     case 'percent':   return { units: u.slice(),                               title: t('kpi_detail_title_percent') };
     case 'glass': {
       // Flatten glass panels
@@ -3611,7 +3781,7 @@ function formatStatus(s) {
 function categoryLabel(c) {
   return { framing:'Framing', glass:'Glass', louver:'Louver', caulking:'Caulking', issue:'Issue',
     'fit-issue':'Fit Issue', 'field-verify':'Field Verify', 'gc-inquiry':'GC Inquiry',
-    'doors':'Doors', 'metal-panel':'Metal Panel', 'faceCover':'Face Cover', 'sunshade':'Sun Shade', 'beauty-cap':'Beauty Cap' }[c] || c;
+    'doors':'Doors', 'metal-panel':'Metal Panel', 'faceCover':'Beauty Cap', 'sunshade':'Sun Shade', 'beautyCap':'Beauty Cap', 'beauty-cap':'Beauty Cap' }[c] || c;
 }
 
 /* -------- Modals -------- */
@@ -3750,6 +3920,7 @@ function openUnit(id) {
   { const _cl = document.getElementById('cal-louver'); if (_cl) _cl.value = u.louver || 'na'; }
   { const _cf = document.getElementById('cal-facecap'); if (_cf) _cf.value = u.facecap || 'na'; }
   renderDoorTypeRow(u);                      // F-044: door type (doors only)
+  renderUnitTypeRow(u);                      // F-051: registry type (manual override)
   renderFloorSelect(u);                      // F-045: which floor this unit lives on
   document.getElementById('cal-note').value = u.note || '';
   // glassPanels[]/ro[] tabs: dropped by AC3's M3 (glass now lives on elevation elements,
@@ -3858,12 +4029,13 @@ function renderCalendar() {
   rows.push({ scope:'caulking', label:'Caulking', editable:true,
     status: (S.caulking && S.caulking.status) || '', date: (S.caulking && S.caulking.date) || '' });
   // CP2 has no sunshades — track Face Cover install instead (Leo, 2026-07-23).
-  rows.push({ scope:'faceCover', label:'Face Cover', editable:true,
-    status: (S.faceCover && S.faceCover.status) || '', date: (S.faceCover && S.faceCover.date) || '' });
-  if (u.facecap === 'yes') {
+  /* F-050 (Leo, 2026-08-05): "Face Cover" (CP2) and "Beauty Cap" (AC3) were the same part
+     under two names. One row now, keyed `beautyCap` everywhere; CP2's old `faceCover` data
+     is renamed by a one-time migration. Falls back to the legacy key so a project that
+     hasn't run the migration yet still shows its numbers. */
+  { const bc = S.beautyCap || S.faceCover || {};
     rows.push({ scope:'beautyCap', label:'Beauty Cap', editable:true,
-      status: (S.beautyCap && S.beautyCap.status) || 'installed', date: (S.beautyCap && S.beautyCap.date) || '' });
-  }
+      status: bc.status || '', date: bc.date || '' }); }
   if (bt.glass[1] > 0) rows.push({ scope:'glass', label:'Glass', editable:false, rollup:bt.glass });
   if (bt.panel[1] > 0) rows.push({ scope:'metalPanel', label:'Metal Panel', editable:false, rollup:bt.panel });
   if (bt.louver[1] > 0 || u.louver === 'yes') rows.push({ scope:'louver', label:'Louver', editable:false, rollup: bt.louver[1]>0 ? bt.louver : null });
@@ -4038,6 +4210,9 @@ function saveUnit() {
   // --- Calendar-tab header fields (M3) ---
   { const _cl = document.getElementById('cal-louver'); if (_cl) u.louver = _cl.value; }
   { const _cf = document.getElementById('cal-facecap'); if (_cf) u.facecap = _cf.value; }
+  // F-051: manual unit-type override ('' = follow the id pattern).
+  { const _ut = document.getElementById('cal-unittype');
+    if (_ut) { if (_ut.value) u.unitType = _ut.value; else delete u.unitType; } }
   // F-045: floor change — clear the stale position and log the move.
   { const _fs = document.getElementById('cal-floor');
     const _was = u.level || firstFloorKey();
@@ -4309,6 +4484,55 @@ const SUBMITTAL_STATUS_LABEL = {
   'revise-resubmit': 'Revise & Resubmit', 'rejected': 'Rejected'
 };
 function setSubmittalFilter(v) { _submittalFilter = v || 'all'; renderSubmittals(); }
+
+/* -------- Ball-in-court reviews, grouped by revision (Leo, 2026-08-03) --------
+   Procore replies are recorded per reviewer, per Rev:
+     s.reviews = { Rev0:[{party,status,response,date},…], Rev1:[…] }
+   `s.ballInCourt` stays as a derived "A / B / C" string so legacy rows, exports and
+   anything still reading the old field keep working. The default party list + order is
+   PROJECT data (window.PROJECT.submittalReviewers) — core code never hardcodes names.
+   Every seeded row is hand-editable / removable (constitution §4.8). */
+const REVIEW_STATUS = {
+  'pending':         { label: 'Awaiting response',  color: '#4d5764' },
+  'no-exception':    { label: 'No Exception Taken', color: 'var(--green)' },
+  'reviewed':        { label: 'Reviewed',           color: 'var(--green)' },
+  'note':            { label: 'Action Required',    color: 'var(--yellow)' },
+  'revise-resubmit': { label: 'Revise & Resubmit',  color: 'var(--red)' },
+  'rejected':        { label: 'Rejected',           color: 'var(--red)' },
+  'na':              { label: 'Review Not Required',color: '#4d5764' }
+};
+function projectReviewers() { return ((window.PROJECT && window.PROJECT.submittalReviewers) || []).slice(); }
+function defaultReviewRows() { return projectReviewers().map(p => ({ party: p, status: 'pending', response: '', date: '' })); }
+function revKey(rev) { return String(rev == null ? '' : rev).trim() || 'Rev0'; }
+// Read-only accessor: never mutates/persists. Legacy rows (ballInCourt string only) are
+// projected into rows on the fly so they render before anyone opens/saves them.
+function reviewsFor(s, k) {
+  const R = (s && s.reviews && typeof s.reviews === 'object' && !Array.isArray(s.reviews)) ? s.reviews : {};
+  if (Array.isArray(R[k])) return R[k];
+  return String((s && s.ballInCourt) || '').split('/').map(x => x.trim()).filter(Boolean)
+    .map(p => ({ party: p, status: 'pending', response: '', date: '' }));
+}
+// Two-column grid: reviewer on the left, that reviewer's response text directly to its right
+// (Leo, 2026-08-03 — replaced the 💬 tooltip; the reply has to be readable from the list).
+function renderBicCell(s) {
+  const esc = v => String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const k = revKey(s.rev);
+  const rows = reviewsFor(s, k);
+  if (!rows.length) return '<span style="color:var(--text-dim)">—</span>';
+  const done = rows.filter(r => r.status && r.status !== 'pending').length;
+  return `<div style="font-size:10px;color:var(--text-dim);margin-bottom:3px">${esc(k)} · ${done}/${rows.length} responded</div>` +
+    '<div style="display:grid;grid-template-columns:max-content 1fr;gap:3px 10px;align-items:start">' +
+    rows.map(r => {
+      const st = REVIEW_STATUS[r.status] || REVIEW_STATUS.pending;
+      const date = r.date ? `<span style="opacity:.55"> · ${esc(r.date)}</span>` : '';
+      const reply = r.response
+        ? esc(r.response) + date
+        : (r.status && r.status !== 'pending' ? `<em style="opacity:.7">${esc(st.label)}</em>${date}` : '');
+      return `<div style="font-size:11px;line-height:1.5;white-space:nowrap" title="${esc(st.label)}">` +
+          `<span class="status-dot" style="background:${st.color}"></span>${esc(r.party)}</div>` +
+        `<div style="font-size:11px;line-height:1.5;color:var(--text-dim);min-width:0">${reply}</div>`;
+    }).join('') + '</div>';
+}
 function renderSubmittals() {
   if (!Array.isArray(state.submittals)) state.submittals = [];
   const body = document.getElementById('submittalsBody');
@@ -4318,10 +4542,13 @@ function renderSubmittals() {
     .map((s, i) => ({ s, i }))
     .filter(({ s }) => _submittalFilter === 'all' || s.status === _submittalFilter);
   body.innerHTML = rows.map(({ s, i }, p) => `
-    <tr style="cursor:pointer">
+    <tr style="cursor:pointer" data-sub="${i}" ondragover="onSubDragOver(event,${i})" ondragleave="onSubDragLeave(event)" ondrop="onSubDrop(event,${i})">
       <td style="white-space:nowrap" onclick="event.stopPropagation()">
-        <button class="btn" style="padding:2px 6px;font-size:11px;line-height:1;min-height:0" title="Move up" ${p === 0 ? 'disabled' : ''} onclick="moveSubmittal(${i},-1)">&#9650;</button>
-        <button class="btn" style="padding:2px 6px;font-size:11px;line-height:1;min-height:0" title="Move down" ${p === rows.length - 1 ? 'disabled' : ''} onclick="moveSubmittal(${i},1)">&#9660;</button>
+        <div class="drag-grip" draggable="true" title="Drag to reorder" ondragstart="onSubDragStart(event,${i})" ondragend="onSubDragEnd(event)">&#10303;</div>
+        <div style="white-space:nowrap;margin-top:2px">
+          <button class="btn" style="padding:1px 5px;font-size:10px;line-height:1;min-height:0" title="Move up" ${p === 0 ? 'disabled' : ''} onclick="moveSubmittal(${i},-1)">&#9650;</button>
+          <button class="btn" style="padding:1px 5px;font-size:10px;line-height:1;min-height:0" title="Move down" ${p === rows.length - 1 ? 'disabled' : ''} onclick="moveSubmittal(${i},1)">&#9660;</button>
+        </div>
       </td>
       <td onclick="editSubmittal(${i})"><strong>${esc(s.number)}</strong></td>
       <td onclick="editSubmittal(${i})">${esc(s.title)}</td>
@@ -4331,7 +4558,7 @@ function renderSubmittals() {
       <td onclick="editSubmittal(${i})">${esc(SUBMITTAL_STATUS_LABEL[s.status] || s.status || '')}</td>
       <td onclick="editSubmittal(${i})">${esc(s.rev)}</td>
       <td onclick="editSubmittal(${i})">${s.returnedDate ? formatDate(s.returnedDate) : '<span style="color:var(--text-dim)">—</span>'}</td>
-      <td onclick="editSubmittal(${i})">${esc(s.ballInCourt)}</td>
+      <td onclick="editSubmittal(${i})" style="min-width:340px;max-width:520px">${renderBicCell(s)}</td>
       <td onclick="editSubmittal(${i})" style="font-size:12px;color:var(--text-dim);max-width:200px">${esc(s.note)}</td>
     </tr>`).join('') || `<tr><td colspan="11" style="text-align:center;color:var(--text-dim);padding:24px">No submittals${_submittalFilter !== 'all' ? ' match this filter' : ' yet'}</td></tr>`;
 }
@@ -4349,12 +4576,147 @@ function moveSubmittal(idx, dir) {
   const tmp = state.submittals[a]; state.submittals[a] = state.submittals[b]; state.submittals[b] = tmp;
   saveState(false);
 }
+/* Working copy of the review matrix while the modal is open — Cancel discards it. */
+let _subReviews = {};
+let _subReviewsRev = 'Rev0';
+function setReviewField(i, field, val) {
+  const rows = _subReviews[_subReviewsRev];
+  if (!rows || !rows[i]) return;
+  rows[i][field] = val;
+  // First real response auto-stamps today's date (still editable / clearable by hand).
+  if (field === 'status' && val !== 'pending' && !rows[i].date) {
+    rows[i].date = new Date().toISOString().slice(0, 10);
+    renderReviewEditor();
+  }
+}
+function addReviewRow() {
+  (_subReviews[_subReviewsRev] = _subReviews[_subReviewsRev] || []).push({ party: '', status: 'pending', response: '', date: '' });
+  renderReviewEditor();
+}
+function removeReviewRow(i) {
+  const rows = _subReviews[_subReviewsRev];
+  if (!rows) return;
+  rows.splice(i, 1);
+  renderReviewEditor();
+}
+function resetReviewRows() {
+  const rows = _subReviews[_subReviewsRev] || [];
+  const byParty = {}; rows.forEach(r => { if (r.party) byParty[r.party] = r; });
+  // Restore the project default list/order, keeping any response already typed for that party.
+  _subReviews[_subReviewsRev] = defaultReviewRows().map(d => byParty[d.party] || d);
+  renderReviewEditor();
+}
+// Typing a new Rev in the modal starts a fresh response set (previous Revs stay as history),
+// pre-seeded with the same party list so the chain carries forward.
+function onSubRevChange() {
+  const k = revKey(document.getElementById('sub-rev').value);
+  if (k === _subReviewsRev) return;
+  if (!Array.isArray(_subReviews[k]) || !_subReviews[k].length) {
+    const prev = _subReviews[_subReviewsRev] || [];
+    const base = prev.length ? prev : defaultReviewRows();
+    _subReviews[k] = base.map(r => ({ party: r.party, status: 'pending', response: '', date: '' }));
+  }
+  _subReviewsRev = k;
+  renderReviewEditor();
+}
+function renderReviewEditor() {
+  const wrap = document.getElementById('sub-reviews');
+  if (!wrap) return;
+  const esc = v => String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const rows = _subReviews[_subReviewsRev] = _subReviews[_subReviewsRev] || [];
+  const opts = sel => Object.keys(REVIEW_STATUS)
+    .map(k => `<option value="${k}"${(sel || 'pending') === k ? ' selected' : ''}>${esc(REVIEW_STATUS[k].label)}</option>`).join('');
+  const editor = rows.map((r, i) => {
+    const st = REVIEW_STATUS[r.status] || REVIEW_STATUS.pending;
+    return `<div style="border:1px solid var(--border);border-left:3px solid ${st.color};border-radius:6px;padding:7px 8px;margin-bottom:6px">
+      <div style="display:flex;gap:5px;margin-bottom:5px">
+        <input type="text" value="${esc(r.party)}" placeholder="Reviewer" oninput="setReviewField(${i},'party',this.value)" style="flex:2 1 0;min-width:0;font-size:12px">
+        <select onchange="setReviewField(${i},'status',this.value)" style="flex:1.4 1 0;min-width:0;font-size:12px">${opts(r.status)}</select>
+        <input type="date" value="${esc(r.date)}" onchange="setReviewField(${i},'date',this.value)" style="flex:1 1 0;min-width:0;font-size:12px">
+        <button class="btn btn-danger" title="Remove reviewer" onclick="removeReviewRow(${i})" style="padding:2px 9px;min-height:0;line-height:1.2">×</button>
+      </div>
+      <textarea rows="2" placeholder="Paste the Procore response…" oninput="setReviewField(${i},'response',this.value)" style="width:100%;font-size:12px">${esc(r.response)}</textarea>
+    </div>`;
+  }).join('') || '<div style="color:var(--text-dim);font-size:12px;margin-bottom:6px">No reviewers on this revision.</div>';
+  const older = Object.keys(_subReviews).filter(k => k !== _subReviewsRev && (_subReviews[k] || []).length).sort();
+  const history = older.length ? `<details style="margin-top:8px">
+    <summary style="cursor:pointer;font-size:12px;color:var(--text-dim)">Previous revisions (${older.length})</summary>
+    ${older.map(k => `<div style="margin:6px 0 0 0">
+      <div style="font-size:11px;font-weight:600;margin-bottom:3px">${esc(k)}</div>
+      ${_subReviews[k].map(r => {
+        const st = REVIEW_STATUS[r.status] || REVIEW_STATUS.pending;
+        return `<div style="font-size:11px;line-height:1.5;padding-left:2px">
+          <span class="status-dot" style="background:${st.color}"></span><strong>${esc(r.party)}</strong>
+          <span style="color:var(--text-dim)"> · ${esc(st.label)}${r.date ? ' · ' + esc(r.date) : ''}</span>
+          ${r.response ? `<div style="color:var(--text-dim);padding-left:12px">${esc(r.response)}</div>` : ''}</div>`;
+      }).join('')}</div>`).join('')}
+  </details>` : '';
+  wrap.innerHTML = `<div style="font-size:11px;color:var(--text-dim);margin-bottom:5px">Responses for <strong>${esc(_subReviewsRev)}</strong> — change the Revision field above to start a new round.</div>
+    ${editor}
+    <div style="display:flex;gap:6px">
+      <button class="btn" onclick="addReviewRow()" style="font-size:11px;padding:4px 9px;min-height:0">+ Reviewer</button>
+      <button class="btn" onclick="resetReviewRows()" style="font-size:11px;padding:4px 9px;min-height:0">Restore default list</button>
+    </div>${history}`;
+}
+/* Drag-to-reorder (Leo, 2026-08-03): grip is the only draggable element, so plain row clicks
+   still open the editor. The row itself is the drop zone; dropping in a row's upper half inserts
+   above it, lower half below. Moves are resolved by object identity, not index, so reordering is
+   correct even while a status filter hides rows. Arrows stay as the touch/keyboard fallback. */
+let _dragSubIdx = null;
+let _dropBefore = true;
+function _clearDropMarks() {
+  const body = document.getElementById('submittalsBody');
+  if (body) Array.prototype.forEach.call(body.rows, tr => { tr.style.boxShadow = ''; });
+}
+function onSubDragStart(ev, idx) {
+  _dragSubIdx = idx;
+  try { ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', String(idx)); } catch (e) {}
+  const tr = ev.target.closest && ev.target.closest('tr');
+  if (tr) tr.style.opacity = '.45';
+}
+function onSubDragEnd(ev) {
+  _dragSubIdx = null;
+  _clearDropMarks();
+  const tr = ev.target.closest && ev.target.closest('tr');
+  if (tr) tr.style.opacity = '';
+}
+function onSubDragOver(ev, idx) {
+  if (_dragSubIdx === null || _dragSubIdx === idx) return;
+  ev.preventDefault();
+  const tr = ev.currentTarget;
+  const r = tr.getBoundingClientRect();
+  _dropBefore = (ev.clientY - r.top) < r.height / 2;
+  tr.style.boxShadow = _dropBefore ? 'inset 0 2px 0 0 var(--accent)' : 'inset 0 -2px 0 0 var(--accent)';
+}
+function onSubDragLeave(ev) { ev.currentTarget.style.boxShadow = ''; }
+function onSubDrop(ev, idx) {
+  ev.preventDefault();
+  const from = _dragSubIdx;
+  _dragSubIdx = null;
+  _clearDropMarks();
+  if (from === null || from === idx) return;
+  reorderSubmittal(from, idx, _dropBefore);
+}
+function reorderSubmittal(from, target, before) {
+  const arr = state.submittals;
+  if (!Array.isArray(arr)) return;
+  const item = arr[from], tgt = arr[target];
+  if (!item || !tgt || item === tgt) return;
+  arr.splice(from, 1);
+  const ti = arr.indexOf(tgt);
+  arr.splice(before ? ti : ti + 1, 0, item);
+  saveState(false);
+}
 function openAddSubmittal() {
   editingSubmittalIdx = null;
   document.getElementById('submittalModalTitle').textContent = 'Add Submittal';
-  ['sub-number','sub-title','sub-spec','sub-scope','sub-submitted','sub-rev','sub-returned','sub-ball','sub-note']
+  ['sub-number','sub-title','sub-spec','sub-scope','sub-submitted','sub-returned','sub-note']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('sub-status').value = 'draft';
+  document.getElementById('sub-rev').value = 'Rev0';
+  _subReviewsRev = 'Rev0';
+  _subReviews = { Rev0: defaultReviewRows() };
+  renderReviewEditor();
   document.getElementById('submittalDeleteBtn').style.display = 'none';
   document.getElementById('submittalModal').classList.add('show');
 }
@@ -4371,8 +4733,20 @@ function editSubmittal(idx) {
   document.getElementById('sub-status').value = s.status || 'draft';
   document.getElementById('sub-rev').value = s.rev || '';
   document.getElementById('sub-returned').value = s.returnedDate || '';
-  document.getElementById('sub-ball').value = s.ballInCourt || '';
   document.getElementById('sub-note').value = s.note || '';
+  _subReviewsRev = revKey(s.rev);
+  _subReviews = {};
+  if (s.reviews && typeof s.reviews === 'object' && !Array.isArray(s.reviews)) {
+    Object.keys(s.reviews).forEach(k => {
+      if (Array.isArray(s.reviews[k])) _subReviews[k] = s.reviews[k]
+        .map(r => ({ party: r.party || '', status: r.status || 'pending', response: r.response || '', date: r.date || '' }));
+    });
+  }
+  if (!Array.isArray(_subReviews[_subReviewsRev]) || !_subReviews[_subReviewsRev].length) {
+    const legacy = reviewsFor({ ballInCourt: s.ballInCourt }, '__none__');
+    _subReviews[_subReviewsRev] = legacy.length ? legacy : defaultReviewRows();
+  }
+  renderReviewEditor();
   document.getElementById('submittalDeleteBtn').style.display = '';
   document.getElementById('submittalModal').classList.add('show');
 }
@@ -4381,7 +4755,19 @@ function closeSubmittalModal() {
   editingSubmittalIdx = null;
 }
 function saveSubmittal() {
+  // Persist the review matrix: drop blank rows and empty revisions so Firebase stays clean.
+  const reviews = {};
+  Object.keys(_subReviews).forEach(k => {
+    const rows = (_subReviews[k] || [])
+      .filter(r => (r.party || '').trim() || (r.response || '').trim())
+      .map(r => ({ party: (r.party || '').trim(), status: r.status || 'pending', response: (r.response || '').trim(), date: r.date || '' }));
+    if (rows.length) reviews[k] = rows;
+  });
+  const curRev = revKey(document.getElementById('sub-rev').value);
   const entry = {
+    reviews,
+    // derived legacy string — current revision's party list
+    ballInCourt: (reviews[curRev] || []).map(r => r.party).filter(Boolean).join(' / '),
     number: document.getElementById('sub-number').value.trim(),
     title: document.getElementById('sub-title').value.trim(),
     spec: document.getElementById('sub-spec').value.trim(),
@@ -4390,7 +4776,6 @@ function saveSubmittal() {
     status: document.getElementById('sub-status').value,
     rev: document.getElementById('sub-rev').value.trim(),
     returnedDate: document.getElementById('sub-returned').value,
-    ballInCourt: document.getElementById('sub-ball').value.trim(),
     note: document.getElementById('sub-note').value.trim(),
   };
   if (!entry.number && !entry.title) { toast('Enter at least a number or title'); return; }
@@ -4980,8 +5365,37 @@ function computeOpenItems() {
       date: m.date || '', days: _daysOpen(m.date)
     });
   });
+  // F-052 (Leo): an unapproved submittal IS a thing to solve — it holds fabrication.
+  // Two flavours, and the difference is who has the ball:
+  //   revise-resubmit / rejected → OURS: we owe a resubmission (that's the urgent one)
+  //   submitted / under-review   → THEIRS: waiting on reviewers, aged from the submit date
+  // Draft (not sent yet) and approved / approved-as-noted never appear.
+  submittalOpenItems().forEach(x => items.push(x));
   items.sort((a, b) => (b.days == null ? -1 : b.days) - (a.days == null ? -1 : a.days));
   return items;
+}
+const SUB_OURS = ['revise-resubmit', 'rejected'];
+const SUB_THEIRS = ['submitted', 'under-review'];
+function submittalOpenItems() {
+  const subs = (typeof state !== 'undefined' && state && Array.isArray(state.submittals)) ? state.submittals : [];
+  const out = [];
+  subs.forEach((sm, i) => {
+    const st = sm.status || '';
+    const ours = SUB_OURS.indexOf(st) !== -1;
+    if (!ours && SUB_THEIRS.indexOf(st) === -1) return;
+    // Who we're actually waiting on: reviewers of the current revision with no response yet.
+    const rev = revKey(sm.rev);
+    const waiting = reviewsFor(sm, rev).filter(r => !r.status || r.status === 'pending').map(r => r.party);
+    const date = ours ? (sm.returnedDate || sm.submittedDate || '') : (sm.submittedDate || '');
+    out.push({
+      scope: 'submittal', idx: i, unitId: null, unitKey: null,
+      ref: sm.number || '', subject: sm.title || '',
+      party: ours ? t('sub_item_ours') : (waiting.length ? waiting.join(', ') : t('sub_item_theirs')),
+      subStatus: st, needsResubmit: ours, rev: rev,
+      spec: sm.spec || '', date: date, days: _daysOpen(date)
+    });
+  });
+  return out;
 }
 function _openItemsT() {
   // Title kept in English on purpose — it's the main urgency cue and is GC-facing.
@@ -5070,6 +5484,28 @@ function openItemsModal() {
         ${actions}
       </div>`;
   };
+  /* F-052: submittals get their own block — they are project-wide, not unit threads, and
+     the action is different (resubmit vs chase a reviewer). Sorted ours-first, then oldest. */
+  const subItems = computeOpenItems().filter(it => it.scope === 'submittal')
+    .sort((a, b) => (b.needsResubmit ? 1 : 0) - (a.needsResubmit ? 1 : 0) || (b.days || 0) - (a.days || 0));
+  const subCard = (it) => {
+    const c = it.needsResubmit ? 'var(--red,#e5484d)' : 'var(--yellow,#d29922)';
+    const label = it.needsResubmit ? t('sub_item_resubmit') : t('sub_item_waiting');
+    const open = (!ro && typeof editSubmittal === 'function') ? ` onclick="closeOpenItemsModal();editSubmittal(${it.idx})" style="cursor:pointer"` : '';
+    return `<div style="padding:10px 2px;border-bottom:1px solid var(--border,rgba(255,255,255,.08))"${open}>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis"><b>${esc(it.ref || '—')}</b>${it.spec ? ` <span style="color:var(--text-dim);font-size:11px">${esc(it.spec)}</span>` : ''}</span>
+          <span style="font-size:10px;text-transform:uppercase;letter-spacing:.4px;border:1px solid ${c};color:${c};border-radius:20px;padding:1px 8px;white-space:nowrap">${esc(label)}</span>
+          ${it.days != null ? _daysOpenBadge(it.days) : ''}
+        </div>
+        ${it.subject ? `<div style="font-size:13px;margin-top:3px">${esc(it.subject)}</div>` : ''}
+        <div style="font-size:11.5px;color:var(--text-dim);margin-top:3px">${esc(it.rev)} · ${esc(SUBMITTAL_STATUS_LABEL[it.subStatus] || it.subStatus)} · 👤 ${esc(it.party)}</div>
+      </div>`;
+  };
+  const subSection = subItems.length ? `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">${t('sub_item_header')} — ${subItems.filter(x => x.needsResubmit).length} ${t('sub_item_ours_short')} · ${subItems.filter(x => !x.needsResubmit).length} ${t('sub_item_theirs_short')}</div>
+        ${subItems.map(subCard).join('')}
+      </div>` : '';
   const gcSection = gcPending.length ? `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
         <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">${ro ? 'Sent to Advanced Facade — awaiting review' : `📥 From the GC — needs triage (${gcPending.length})`}</div>
         ${gcPending.map(gcCard).join('')}
@@ -5078,6 +5514,7 @@ function openItemsModal() {
       <h3 style="margin-bottom:12px">${T.title}</h3>
       <div style="max-height:44vh;overflow:auto">
         ${unitCards}
+        ${subSection}
         ${gcSection}
         <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
@@ -5394,94 +5831,9 @@ function _injectBlockerBanner() {
   if (bn.parentElement !== host) host.appendChild(bn); // ride the sticky header → always pinned
   bn.innerHTML = `<span style="font-size:16px">🔧</span><span>${label}</span><span style="margin-left:auto;font-weight:500;opacity:.85">Review →</span>`;
 }
-
-/* ==================== 2-week pilot add-ons (F-033) ====================
-   Blocker-first daily push + lightweight usage log. Rationale (Leo): during the
-   install window the GC can see install COUNT on site — the dashboard's job is to
-   surface what changes daily and needs his coordination (cross-trade blockers), and
-   to be pushed to him each morning rather than passively waited on. */
-
-// yyyy-mm-dd offset helper (local time, matches u.date / TODAY_ISO format)
-function _isoAddDays(iso, n){ const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0,10); }
-
-// Compose the morning message from LIVE state: installed today / planned tomorrow /
-// open blockers by days / one item that needs a GC reply. Kept plain-text so it drops
-// straight into email or SMS.
-function buildDailyPushText(){
-  const today = new Date().toISOString().slice(0,10);
-  const tomorrow = _isoAddDays(today, 1);
-  const units = (typeof state!=='undefined' && state && Array.isArray(state.units)) ? state.units : [];
-  const installedToday = units.filter(u => u.status==='installed' && u.date===today).map(u => u.id);
-  const planTomorrow  = units.filter(u => u.date===tomorrow).map(u => u.id);
-  const open = (typeof computeOpenItems==='function') ? computeOpenItems() : []; // oldest-first
-  const dLabel = new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
-  const L = [];
-  L.push(`CP2 Curtain Wall — ${dLabel}`);
-  L.push('');
-  L.push(`Installed today (${installedToday.length}): ${installedToday.length ? installedToday.join(', ') : '—'}`);
-  L.push(`Planned tomorrow (${planTomorrow.length}): ${planTomorrow.length ? planTomorrow.join(', ') : 'TBD'}`);
-  L.push('');
-  if (open.length){
-    L.push(`Open blockers (${open.length}):`);
-    open.slice(0, 8).forEach(it => {
-      const label = it.scope==='project' ? 'PROJECT' : it.unitId;
-      const subj  = it.subject || it.ref || '(no subject)';
-      const who   = it.party ? ` · waiting on ${it.party}` : '';
-      const days  = (it.days != null) ? ` · ${it.days}d` : '';
-      L.push(`  • ${label} — ${subj}${who}${days}`);
-    });
-    const a = open[0];
-    const aLabel = a.scope==='project' ? '' : a.unitId + ' ';
-    L.push('');
-    L.push(`Need your reply: ${aLabel}"${a.subject || a.ref || 'above'}" has been open ${a.days != null ? a.days : '?'} days${a.party ? ' ('+a.party+')' : ''} — can you give us a direction today?`);
-  } else {
-    L.push('No open blockers right now ✅');
-  }
-  return L.join('\n');
-}
-
-function openDailyPush(){
-  const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const text = buildDailyPushText();
-  const subject = `CP2 install update — ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'})}`;
-  let ov = document.getElementById('dailyPushModal');
-  if (!ov){
-    ov = document.createElement('div'); ov.id = 'dailyPushModal'; ov.className = 'modal-overlay';
-    document.body.appendChild(ov);
-    ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('show'); });
-  }
-  const zh = false; // GC-facing push tool is English-only regardless of UI language
-  ov.innerHTML = `<div class="modal" style="max-width:620px">
-      <h3>📤 ${zh?'今日 GC 推送':'Daily GC push'}</h3>
-      <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">${zh?'用当前云端数据生成。可直接改，再复制或生成邮件草稿发给 GC。':'Generated from live cloud data. Edit if needed, then copy or open an email draft to send to the GC.'}</div>
-      <textarea id="dailyPushText" style="width:100%;min-height:220px;box-sizing:border-box;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;line-height:1.5;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px">${esc(text)}</textarea>
-      <div class="modal-actions" style="gap:8px;flex-wrap:wrap">
-        <button class="btn" type="button" onclick="document.getElementById('dailyPushModal').classList.remove('show')">${zh?'关闭':'Close'}</button>
-        <button class="btn" type="button" onclick="_copyDailyPush()">📋 ${zh?'复制':'Copy'}</button>
-        <button class="btn btn-primary" type="button" onclick="_emailDailyPush('${encodeURIComponent(subject)}')">✉️ ${zh?'邮件草稿':'Email draft'}</button>
-      </div>
-    </div>`;
-  ov.classList.add('show');
-}
-function _copyDailyPush(){
-  const ta = document.getElementById('dailyPushText'); if (!ta) return;
-  const done = () => { if (typeof toast==='function') toast('Copied ✓'); };
-  if (navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(ta.value).then(done).catch(()=>{ ta.select(); document.execCommand('copy'); done(); }); }
-  else { ta.select(); document.execCommand('copy'); done(); }
-}
-function _emailDailyPush(encSubject){
-  const ta = document.getElementById('dailyPushText'); if (!ta) return;
-  window.location.href = `mailto:?subject=${encSubject}&body=${encodeURIComponent(ta.value)}`;
-}
-function _injectDailyPushBtn(){
-  let b = document.getElementById('dailyPushBtn');
-  const bar = document.querySelector('.header-actions'); if (!bar) return;
-  if (!b){
-    b = document.createElement('button'); b.className = 'btn'; b.id = 'dailyPushBtn'; b.type = 'button';
-    b.textContent = '📤'; b.title = 'Daily GC push · 生成今日推送'; b.onclick = openDailyPush;
-    bar.appendChild(b);
-  }
-}
+/* Daily GC push (F-033) removed 2026-08-05 (Leo): the push was drafted by hand in the end,
+   and a half-used generator in the header is worse than none. The blocker banner and the
+   Things-to-Solve board — the parts that actually got used — stay. */
 
 // Usage viewer (F-033): reads the append-only /access log Firebase collects on each
 // authed page load, aggregated per email → open count + last seen. Presence panel
@@ -5565,7 +5917,7 @@ function openUsagePanel(){
 // F-039: Drawings goes too (Leo) — a OneDrive link list is our internal reference, not
 // something the GC should be poking at, and it was the fourth 📐-ish button competing
 // for their attention.
-const _READONLY_HIDE = ['a[href="/chat"]', 'a[href="warehouse.html"]', '#modulesBtn', '#dailyPushBtn', 'button[onclick="openDrawings()"]'];
+const _READONLY_HIDE = ['a[href="/chat"]', 'a[href="warehouse.html"]', '#modulesBtn', 'button[onclick="openDrawings()"]'];
 function applyReadOnlyUI(){
   const ro = !!(window.CloudSync && typeof window.CloudSync.isReadOnly === 'function' && window.CloudSync.isReadOnly());
   // GC (read-only) simplified view — CSS (body.gc-view + [data-gc-hide]) collapses the
@@ -5626,6 +5978,89 @@ function applyFeatures(){
     m.sel.forEach(q=>document.querySelectorAll(q).forEach(el=>{ el.style.display = on ? '' : 'none'; }));
   });
 }
+/* ---- Unit types editor (F-051) -------------------------------------------------
+   Lives behind ⚙ Modules → "Unit types". Writes state.unitTypes and saves through the
+   normal path, so it syncs to everyone and lands in the edit history like any change.
+   Editors only: read-only accounts can look but the Save button is not offered. */
+let _utDraft = null;
+function openUnitTypes() {
+  _utDraft = unitTypes().map(t => Object.assign({}, t));
+  let ov = document.getElementById('unitTypesModal');
+  if (!ov) {
+    ov = document.createElement('div'); ov.id = 'unitTypesModal'; ov.className = 'modal-overlay';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('show'); });
+  }
+  renderUnitTypesPanel();
+  ov.classList.add('show');
+}
+function closeUnitTypes() { const ov = document.getElementById('unitTypesModal'); if (ov) ov.classList.remove('show'); }
+function addUnitTypeRow() {
+  _utDraft.push({ key: 'type' + (_utDraft.length + 1), label: '', match: '', shape: 'circle', color: UT_COLORS[_utDraft.length % UT_COLORS.length].key, badge: '' });
+  renderUnitTypesPanel();
+}
+function removeUnitTypeRow(i) {
+  const t = _utDraft[i]; if (!t) return;
+  const used = (state.units || []).filter(u => unitTypeOf(u) && unitTypeOf(u).key === t.key).length;
+  if (used && !confirm(t.label + ': ' + used + ' unit(s) currently show this type. Remove it anyway?')) return;
+  _utDraft.splice(i, 1); renderUnitTypesPanel();
+}
+function setUnitTypeField(i, field, v) {
+  if (!_utDraft[i]) return;
+  _utDraft[i][field] = (field === 'badge') ? String(v).slice(0, 2) : v;
+  if (field === 'shape' || field === 'color' || field === 'badge') renderUnitTypesPanel();
+}
+function renderUnitTypesPanel() {
+  const ov = document.getElementById('unitTypesModal'); if (!ov) return;
+  const esc = v => String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const ro = (typeof _isRO === 'function') && _isRO();
+  const count = t => (state.units || []).filter(u => { const x = unitTypeOf(u); return x && x.key === t.key; }).length;
+  const rows = _utDraft.map((t, i) => `
+    <div style="border:1px solid var(--border);border-left:3px solid ${esc(utColorHex(t.color))};border-radius:8px;padding:9px 10px;margin-bottom:8px">
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+        <span class="ut-swatch ut-${esc(t.shape)}" style="--ut-color:${esc(utColorHex(t.color))};flex:0 0 auto"></span>
+        <input type="text" value="${esc(t.label)}" placeholder="Name (Hollow metal door)" oninput="setUnitTypeField(${i},'label',this.value)" style="flex:2;min-width:0;font-size:12px">
+        <input type="text" value="${esc(t.match)}" placeholder="Id starts with (HM)" oninput="setUnitTypeField(${i},'match',this.value)" style="flex:1;min-width:0;font-size:12px">
+        ${ro ? '' : `<button type="button" class="btn btn-danger" title="Remove" onclick="removeUnitTypeRow(${i})" style="padding:2px 9px;min-height:0">×</button>`}
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <select onchange="setUnitTypeField(${i},'shape',this.value)" style="flex:1;min-width:0;font-size:12px">
+          ${UT_SHAPES.map(sh => `<option value="${sh.key}"${sh.key === t.shape ? ' selected' : ''}>${esc(sh.label)}</option>`).join('')}
+        </select>
+        <select onchange="setUnitTypeField(${i},'color',this.value)" style="flex:1;min-width:0;font-size:12px">
+          ${UT_COLORS.map(c => `<option value="${c.key}"${c.key === t.color ? ' selected' : ''}>${esc(c.label)}</option>`).join('')}
+        </select>
+        <input type="text" value="${esc(t.badge)}" maxlength="2" placeholder="Badge" oninput="setUnitTypeField(${i},'badge',this.value)" style="width:74px;font-size:12px">
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:5px">${count(t)} unit(s) match today · fill colour still shows install status</div>
+    </div>`).join('') || `<div style="color:var(--text-dim);font-size:12.5px;margin-bottom:8px">No custom types yet. Storefront / interior storefront / doors keep their built-in shapes.</div>`;
+  ov.innerHTML = `<div class="modal" style="max-width:560px;max-height:88vh;overflow-y:auto">
+      <h3 style="margin-bottom:4px">🔷 Unit types</h3>
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px">Give a kind of unit its own shape and outline on the plan — hollow metal doors, sun shades, canopies. Matching is by id prefix; any unit can be overridden by hand in its Calendar tab.</div>
+      ${rows}
+      ${ro ? '' : `<button class="btn" type="button" onclick="addUnitTypeRow()" style="font-size:12px">+ Add type</button>`}
+      <div class="modal-actions">
+        <button class="btn" type="button" onclick="closeUnitTypes()">Cancel</button>
+        ${ro ? '' : '<button class="btn btn-primary" type="button" onclick="saveUnitTypes()">Save</button>'}
+      </div>
+    </div>`;
+}
+function saveUnitTypes() {
+  const clean = (_utDraft || []).filter(t => (t.label || '').trim() || (t.match || '').trim()).map(t => ({
+    key: (t.key || '').trim() || ((t.label || 'type').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 24) || 'type'),
+    label: (t.label || '').trim() || t.key,
+    match: (t.match || '').trim(),
+    shape: utShapeOk(t.shape) ? t.shape : 'circle',
+    color: t.color || 'cyan',
+    badge: (t.badge || '').trim().slice(0, 2)
+  }));
+  const seen = {};
+  state.unitTypes = clean.filter(t => (seen[t.key] ? false : (seen[t.key] = 1)));
+  closeUnitTypes();
+  if (typeof CloudSync !== 'undefined' && CloudSync.describe) CloudSync.describe('Updated unit types (' + state.unitTypes.length + ')');
+  saveState();
+  toast('Unit types saved ✓');
+}
 function openModules(){
   let ov=document.getElementById('modulesModal');
   if(!ov){
@@ -5640,7 +6075,11 @@ function openModules(){
   }
   ov.querySelector('#modulesList').innerHTML = FEATURE_MODULES.map(m=>
     '<label style="display:flex;gap:10px;align-items:center;padding:7px 2px;cursor:pointer">'
-    +'<input type="checkbox" data-k="'+m.k+'"'+(featureOn(m.k)?' checked':'')+'> <span>'+moduleLabel(m)+'</span></label>').join('');
+    +'<input type="checkbox" data-k="'+m.k+'"'+(featureOn(m.k)?' checked':'')+'> <span>'+moduleLabel(m)+'</span></label>').join('')
+    // F-051: not a feature toggle — a small editor, so it gets its own row at the bottom.
+    + '<div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px">'
+    + '<button class="btn" type="button" style="font-size:12px" onclick="closeModules();openUnitTypes()">🔷 Unit types…</button>'
+    + '<div style="font-size:11px;color:var(--text-dim);margin-top:5px">Shapes + outline colours for hollow metal doors, sun shades, canopies…</div></div>';
   ov.classList.add('show');
 }
 function closeModules(){ const ov=document.getElementById('modulesModal'); if(ov)ov.classList.remove('show'); }
@@ -5658,7 +6097,7 @@ function _injectModulesBtn(){
 }
 // Re-apply after every render so remote toggles from teammates take effect live.
 const _renderBase = render;
-render = function(){ _renderBase(); applyFeatures(); _injectModulesBtn(); _injectOpenItemsBtn(); _injectDailyPushBtn(); renderPlanLensBar(); _injectBlockerBanner(); applyReadOnlyUI(); };
+render = function(){ _renderBase(); applyFeatures(); _injectModulesBtn(); _injectOpenItemsBtn(); renderPlanLensBar(); _injectBlockerBanner(); applyReadOnlyUI(); };
 
 /* boot */
 function initApp() {

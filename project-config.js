@@ -26,6 +26,17 @@ return {
   // Interior storefront id patterns (F-044) — these render as diamonds, not circles
   interiorPatterns: ["^IS"],
 
+  /* F-048/F-050: scopes with a headline card + a marker ring. "Face Cover" was renamed
+     Beauty Cap (same part as AC3's) — the stored key is `beautyCap` on both projects. */
+  scopeKpis: [
+    { scope: 'caulking',  valueId: 'kpi-caulk',     subId: 'kpi-caulk-sub',     label: 'Caulking' },
+    { scope: 'beautyCap', valueId: 'kpi-beautycap', subId: 'kpi-beautycap-sub', label: 'Beauty Cap' }
+  ],
+  ringScopes: [
+    { scope: 'caulking',  cls: 'scope-caulk', labelKey: 'legend_caulk' },
+    { scope: 'beautyCap', cls: 'scope-fc',    labelKey: 'legend_beautycap' }
+  ],
+
   // true → only markers explicitly placed via Place mode render on the plan
   requirePlacedMarkers: false,
 
@@ -47,6 +58,22 @@ return {
   /* One-time state migrations (F-044). Each runs once per project — the id is recorded in
      state.migrations[] — so it can safely fix up live cloud data that no seed edit reaches. */
   migrations: [
+    {
+      id: 'cp2-2026-08-facecover-to-beautycap',
+      note: 'F-050: "Face Cover" and AC3\'s "Beauty Cap" are the same part. Rename the stored ' +
+            'scope key so both trackers speak one language; status/date are carried over as-is.',
+      apply(state) {
+        let n = 0;
+        (state.units || []).forEach(u => {
+          if (u.scopes && u.scopes.faceCover) {
+            if (!u.scopes.beautyCap) u.scopes.beautyCap = u.scopes.faceCover;
+            delete u.scopes.faceCover;
+            n++;
+          }
+        });
+        return n + ' unit(s): scopes.faceCover → scopes.beautyCap';
+      }
+    },
     {
       id: 'cp2-2026-08-floor-split',
       note: 'Split L2 into 2F + 13F: SF70/SF71 are the 13th-floor terrace doors, everything ' +

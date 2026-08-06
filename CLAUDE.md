@@ -61,11 +61,10 @@ CP2 特有：`defaultPositions` 有平面图预置坐标（requirePlacedMarkers=
 - [ ] F-031 待同步到 AC3（Open Items 面板 + RFI 行的 party 输入框 bug 修复，这个 bug 两边都有）
 - [ ] F-032 待同步到 AC3（弹窗加宽、mergeSeedUnits 的 RFI 追加、upsertRfiLog 日志同步、
   state.projectItems 项目级条目）——Opus review 过，细节见 HANDOFF-F031-F032-review.md
-- [ ] **F-033（两周 pilot 三件套：📤 每日 GC 推送生成器 + access 访问日志 + 卡点优先落地）
-  部署前须做**：①Firebase Console 更新并发布 `firebase-database-rules.json`（新增 `access` 节点），
-  否则访问日志写不进；②给 GC 建**只读账号**（现规则下不登录看不到看板）；③本地过一遍：
-  点 📤 出草稿 / ⏳ 有卡点时自动弹一次 / ⏳ 面板底部 📊 Usage 能读。运行手册见 `PILOT-2WK.md`。
-  待同步到 AC3（app.js + cloud-sync.js；rules 的 access 节点两边各自发布）。
+- [ ] **F-033（access 访问日志 + 卡点优先落地）部署前须做**：①Firebase Console 更新并发布
+  `firebase-database-rules.json`（`access` 节点），否则访问日志写不进；②给 GC 建**只读账号**；
+  ③本地过一遍：⏳ 有卡点时自动弹一次 / ⏳ 面板底部 📊 Activity 能读。运行手册见 `PILOT-2WK.md`。
+  **📤 每日 GC 推送生成器已于 2026-08-05 删除（F-049）**——推送最后都是手写的，留个半吊子生成器更碍事。
 - [ ] **F-037（GC 双向协作）部署前须做**：①Firebase Console 更新并发布 `firebase-database-rules.json`
   （新增 `gcItems` 节点：任何登录用户可创建自己那条，只有 editor 能改/删）——不发布的话 GC 提交会
   自动降级成邮件草稿，内容不丢但看板收不到；②本地过一遍：用 GC 只读账号点 marker → 应该出**只读卡**
@@ -129,5 +128,28 @@ CP2 特有：`defaultPositions` 有平面图预置坐标（requirePlacedMarkers=
 - [ ] **F-047（手机端用户菜单）验一遍**：手机上点右上头像 → 三个选项（Edit history / Who's online /
   Sign out）应完整显示、不再被裁一半；横屏时若下方空间不够会翻到按钮上方。
   验证脚本：`node _tests/test-user-menu.cjs`（21 断言）。**core 改动（cloud-sync.js），AC3 同样中招，待同步。**
+- [ ] **F-050（Face Cover → Beauty Cap）本地验一遍**：①第一次用 editor 账号打开会跑迁移
+  `cp2-2026-08-facecover-to-beautycap`（控制台 + Daily Log 各一条），跑完确认推回云端；②unit 弹窗
+  Calendar tab 里原来的「Face Cover」行现在叫 **Beauty Cap**，之前填的状态/日期应原样还在；
+  ③顶部第二张卡变成 Beauty Cap，marker 右下弧同理。验证脚本：`node _tests/test-scope-kpi.cjs`（36）。
 - [ ] Leo：把安装窗口**结束日期**告诉当前会话，好设"最后一天"收尾对话提醒（super/PM 访谈，
   问题清单在 PILOT-2WK.md 第四节）。GC 依赖清单给我可批量录入 project-config SEED。
+
+## 怎么加一种新的 unit 类型（F-051）
+
+不用改代码，也不用部署：
+
+1. 顶部 **⚙** → 面板底部 **🔷 Unit types…**
+2. **+ Add type**，填四样：
+   - **Name** —— 图例上显示的名字，例如 `Hollow metal door`
+   - **Id starts with** —— 编号前缀，例如 `HM`（其实是正则，`^` 可省略；大小写不敏感）
+   - **形状 / 颜色** —— 6 种形状 × 8 种描边色，都是挑好的
+   - **Badge**（可选）—— marker 角上的两字标记，例如 `HM`
+3. **Save**。立刻生效，并同步给所有登录的人；平面图图例会自动多出这一项。
+
+几条要知道的规矩：
+- **填充色永远是安装状态**（绿=已装、黄=就绪、红=问题、灰=待装），类型只改形状/描边/徽标 —— 所以一眼还是先看得出装没装。
+- 前缀命中就自动归类；某个 unit 想例外，打开它的弹窗 → Calendar tab → **Unit type** 下拉手动指定（下拉里会写明"自动会判成什么"）。
+- 删掉一个类型，对应的 marker 会退回普通圆点，数据不会丢。
+- 内置的三种（外部 storefront 圆形 / IS 菱形 / 门 方形）删不掉，但可以用同前缀的自定义类型盖过去。
+- 想让某个类型跟着仓库走（新克隆的 tracker 也自带），把它写进 `project-config.js` 的 `unitTypes`；界面上加的存在云端。
