@@ -126,5 +126,8 @@ CP2 特有：`defaultPositions` 有平面图预置坐标（requirePlacedMarkers=
   **2F 底图已换成 `2nd fl.dxf` 渲染的整层平面**（不再是老图纸裁的左半）—— SF60~63 六个 marker 的坐标
   是按老底图算的，在新图上会偏，拖一下就行（我没清空，免得把你已经调过的位置也一起清了）。
   **Leo 待办**：把哪些 unit 是"玻璃还没订"标出来（或给我清单，我批量写进 project-config）。
+- [ ] **F-047（手机端用户菜单）验一遍**：手机上点右上头像 → 三个选项（Edit history / Who's online /
+  Sign out）应完整显示、不再被裁一半；横屏时若下方空间不够会翻到按钮上方。
+  验证脚本：`node _tests/test-user-menu.cjs`（21 断言）。**core 改动（cloud-sync.js），AC3 同样中招，待同步。**
 - [ ] Leo：把安装窗口**结束日期**告诉当前会话，好设"最后一天"收尾对话提醒（super/PM 访谈，
   问题清单在 PILOT-2WK.md 第四节）。GC 依赖清单给我可批量录入 project-config SEED。

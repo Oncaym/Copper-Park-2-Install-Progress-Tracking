@@ -263,10 +263,34 @@
     document.getElementById('cs-history-btn').addEventListener('click', openHistoryPanel);
     const userBtn = document.getElementById('cs-user-btn');
     const dropdown = document.getElementById('cs-user-dropdown');
+    /* F-047 (Leo, 2026-08-05 — menu was half cut off on a phone): on mobile the host page
+       makes .header-actions horizontally scrollable, and an `overflow` ancestor clips an
+       absolutely-positioned child. The header also uses backdrop-filter, which makes it the
+       containing block for `position:fixed` descendants — so simply switching to fixed is
+       not enough either. Move the menu to <body> and place it from the button's screen
+       rect: nothing can clip it, on any host layout. */
+    document.body.appendChild(dropdown);
+    const placeDropdown = () => {
+      const r = userBtn.getBoundingClientRect();
+      const w = dropdown.offsetWidth || 200;
+      const vw = document.documentElement.clientWidth;
+      const vh = document.documentElement.clientHeight;
+      const left = Math.max(8, Math.min(r.right - w, vw - w - 8));
+      // Flip above the button if there genuinely isn't room below (short landscape phones).
+      const h = dropdown.offsetHeight || 140;
+      const below = r.bottom + 6;
+      const top = (below + h > vh - 8 && r.top - h - 6 > 8) ? (r.top - h - 6) : Math.min(below, vh - h - 8);
+      dropdown.style.left = Math.round(left) + 'px';
+      dropdown.style.top = Math.round(top) + 'px';
+    };
     userBtn.addEventListener('click', (e) => {
       e.stopPropagation();
+      const opening = !dropdown.classList.contains('open');
+      if (opening) placeDropdown();
       dropdown.classList.toggle('open');
     });
+    window.addEventListener('resize', () => { if (dropdown.classList.contains('open')) placeDropdown(); });
+    window.addEventListener('scroll', () => { if (dropdown.classList.contains('open')) placeDropdown(); }, true);
     document.addEventListener('click', () => dropdown.classList.remove('open'));
     dropdown.addEventListener('click', (e) => {
       const action = e.target.dataset.action;
@@ -775,13 +799,15 @@
     .cs-user-email { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .cs-caret { font-size: 9px; color: #8b949e; }
     .cs-user-dropdown {
-      position: absolute; top: calc(100% + 6px); right: 0;
-      min-width: 180px;
+      /* Placed from script against the button's screen rect (F-047) — it lives on <body>,
+         so no scrolling/overflow ancestor in the host page can clip it. */
+      position: fixed; top: 0; left: 0;
+      min-width: 200px; max-width: calc(100vw - 16px);
       background: #1a2028; border: 1px solid #2d3744; border-radius: 8px;
       padding: 4px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
       opacity: 0; pointer-events: none; transform: translateY(-4px);
       transition: opacity 0.12s, transform 0.12s;
-      z-index: 1000;
+      z-index: 10000;   /* above the sticky header (100) and its stacking context */
     }
     .cs-user-dropdown.open { opacity: 1; pointer-events: auto; transform: translateY(0); }
     .cs-user-dropdown button {
@@ -789,6 +815,12 @@
       background: none; border: none; color: #e6edf3;
       padding: 8px 12px; border-radius: 5px;
       font-size: 13px; cursor: pointer; font-family: inherit;
+      white-space: nowrap;
+    }
+    /* Finger-sized rows on touch screens — the menu is only ever three items. */
+    @media (max-width: 720px) {
+      .cs-user-dropdown { min-width: 214px; padding: 6px; }
+      .cs-user-dropdown button { padding: 12px 14px; font-size: 14px; }
     }
     .cs-user-dropdown button:hover { background: #232b36; }
 
