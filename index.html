@@ -440,8 +440,125 @@
     body.printing-openings #openingsSheet .op-table th { background:#fff !important; color:#000 !important; border-bottom:2px solid #333 !important; }
     body.printing-openings #openingsSheet .op-table td { border-bottom:1px solid #bbb !important; }
     body.printing-openings .op-noprint { display:none !important; }
+    .elev-key-label { color:#000 !important; background:#fff !important; }
+    .elev-key-dot { background:#fff !important; color:#000 !important; border-color:#000 !important; box-shadow:none !important; }
+    .elev-key-arrow::before { border-left-color:#000 !important; filter:none !important; }
     body.printing-openings #openingsSheet .op-floor { page-break-inside:avoid; }
     body.printing-openings #openingsSheet tr { page-break-inside:avoid; }
+  }
+
+  /* F-055 — bay elevation panel inside the 📐 Openings sheet.
+     The SVG's user units ARE inches (viewBox = the real bay), so the drawing
+     cannot drift out of scale and a stroke width is a real dimension. Colours
+     match the Openings lens on the plan so "blue = issued, green = the GC says
+     it's ready, purple = we follow yours" means the same thing on both. */
+  #openingsSheet .op-tabs { display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
+  #openingsSheet .op-view { display:none; }
+  #openingsSheet .op-view.on { display:block; }
+  #openingsSheet .op-empty { color:var(--text-dim); padding:22px 6px; line-height:1.6; }
+  #openingsSheet .bay-picker { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+  #openingsSheet .bay-tools { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:6px 0 8px; }
+  #openingsSheet .bay-hint { font-size:11.5px; color:var(--text-dim); }
+  #openingsSheet .bay-stage { border:1px solid var(--border); border-radius:8px; background:var(--bg);
+                              padding:10px 6px; overflow-x:auto; }
+  #openingsSheet .bay-svg { display:block; width:100%; min-width:620px; height:auto; }
+
+  #openingsSheet .bay-solid   { fill:rgba(255,255,255,.07); stroke:var(--border,#30363d); stroke-width:.8; }
+  #openingsSheet .bay-rib line{ stroke:rgba(255,255,255,.13); stroke-width:.6; }
+  #openingsSheet .bay-void    { fill:var(--bg,#0d1117); stroke:none; }
+  #openingsSheet .bay-frame   { fill:#7d8ea3; stroke:none; }
+  #openingsSheet .bay-panel   { fill:#4c5866; stroke:#8b949e; stroke-width:.5; }
+  #openingsSheet .bay-glass   { fill:rgba(88,166,255,.13); stroke:rgba(88,166,255,.32); stroke-width:.5; }
+  #openingsSheet .bay-glint   { stroke:rgba(255,255,255,.28); stroke-width:1.2; stroke-linecap:round; }
+  #openingsSheet .bay-doorleaf{ fill:rgba(219,112,219,.16); stroke:#db70db; stroke-width:1; }
+  #openingsSheet .bay-swing   { fill:none; stroke:#db70db; stroke-width:.7; stroke-dasharray:4 3; }
+  #openingsSheet .bay-nodoors .bay-door { display:none; }
+
+  #openingsSheet .bay-ro { fill:none; stroke:#6e7681; stroke-width:1.4; stroke-dasharray:6 4; }
+  #openingsSheet .bay-op[data-state="issued"]  .bay-ro { stroke:#58a6ff; stroke-dasharray:none; stroke-width:2; }
+  #openingsSheet .bay-op[data-state="ready"]   .bay-ro { stroke:#2ea043; stroke-dasharray:none; stroke-width:2.4; }
+  #openingsSheet .bay-op[data-state="follow"]  .bay-ro { stroke:#a371f7; }
+  #openingsSheet .bay-op[data-state="missing"] .bay-ro { stroke:#d29922; }
+  #openingsSheet .bay-op[onclick] { cursor:pointer; }
+  #openingsSheet .bay-op[onclick]:hover .bay-ro,
+  #openingsSheet .bay-op[onclick]:focus .bay-ro { stroke-width:3.4; }
+  #openingsSheet .bay-op:focus { outline:none; }
+  #openingsSheet .bay-op:focus .bay-void { fill:rgba(88,166,255,.10); }
+
+  #openingsSheet .bay-tag path { fill:var(--bg,#0d1117); stroke:#d9a441; stroke-width:1; }
+  #openingsSheet .bay-tag text { fill:#d9a441; font-size:6.5px; font-weight:700; text-anchor:middle;
+                                 font-family:inherit; letter-spacing:.3px; }
+  /* Labels sit on top of mullions and glass, so they carry a halo in the page's own
+     background colour — otherwise a dimension lands on a frame member and vanishes. */
+  #openingsSheet .bay-op-dim, #openingsSheet .bay-op-dxf, #openingsSheet .bay-dimtext, #openingsSheet .bay-tag text {
+    paint-order:stroke fill; stroke:var(--bg,#0d1117); stroke-width:1.6px; stroke-linejoin:round;
+  }
+  #openingsSheet .bay-op-dim { fill:var(--text,#e6edf3); font-size:6px; font-weight:700; text-anchor:middle;
+                               font-family:inherit; font-variant-numeric:tabular-nums; }
+  #openingsSheet .bay-op-dxf { fill:var(--text-dim,#8b949e); font-size:5px; text-anchor:middle;
+                               font-family:inherit; font-variant-numeric:tabular-nums; opacity:.85; }
+  #openingsSheet [data-state="none"]    .bay-op-dim,
+  #openingsSheet [data-state="missing"] .bay-op-dim,
+  #openingsSheet [data-state="follow"]  .bay-op-dim { fill:var(--text-dim,#8b949e); font-weight:500; }
+  #openingsSheet .bay-lbl { pointer-events:none; }
+
+  #openingsSheet .bay-dimline { stroke:#f85149; stroke-width:.7; }
+  #openingsSheet .bay-dimtick { stroke:#f85149; stroke-width:1.1; }
+  #openingsSheet .bay-dimtext { fill:#f85149; font-size:7px; font-weight:700; text-anchor:middle;
+                                font-family:inherit; font-variant-numeric:tabular-nums; }
+  #openingsSheet .bay-dimtext-side { text-anchor:start; }
+  #openingsSheet .bay-dim-overall .bay-dimline,
+  #openingsSheet .bay-dim-overall .bay-dimtick { stroke:#8b949e; }
+  #openingsSheet .bay-dim-overall .bay-dimtext { fill:#8b949e; }
+
+  #openingsSheet .bay-legend { display:flex; gap:14px; flex-wrap:wrap; margin:9px 2px 0; font-size:11.5px; color:var(--text-dim); }
+  #openingsSheet .bay-key { display:inline-flex; align-items:center; gap:5px; }
+  #openingsSheet .bay-key i { width:15px; height:0; border-top:2px solid #6e7681; border-radius:2px; display:inline-block; }
+  #openingsSheet .bay-key i[data-state="issued"] { border-top-color:#58a6ff; }
+  #openingsSheet .bay-key i[data-state="ready"]  { border-top-color:#2ea043; }
+  #openingsSheet .bay-key i[data-state="follow"] { border-top-style:dashed; border-top-color:#a371f7; }
+  #openingsSheet .bay-key i[data-state="none"]   { border-top-style:dashed; }
+  #openingsSheet .bay-gaps { margin-top:12px; font-size:12.5px; }
+  #openingsSheet .bay-gaps ul { margin:5px 0 0; padding-left:18px; color:var(--text-dim); line-height:1.7; }
+  #openingsSheet .bay-gaps b  { color:var(--text); }
+  #openingsSheet .bay-src { font-size:11px; color:var(--text-dim); margin-top:9px; line-height:1.5; }
+
+  body.day-mode #openingsSheet .bay-solid    { fill:rgba(0,0,0,.11); stroke:#98a2ad; }
+  body.day-mode #openingsSheet .bay-rib line { stroke:rgba(0,0,0,.26); }
+  body.day-mode #openingsSheet .bay-glint    { stroke:rgba(0,0,0,.18); }
+  body.day-mode #openingsSheet .bay-frame    { fill:#5b6b7d; }
+  body.day-mode #openingsSheet .bay-panel    { fill:#aab4c0; stroke:#63707e; }
+
+  @media (max-width:768px) {
+    #openingsSheet .bay-stage { padding:6px 2px; }
+    #openingsSheet .bay-svg { min-width:520px; }
+    #openingsSheet .bay-hint { width:100%; }
+  }
+  @media print {
+    /* Every tab prints, not just the one on screen — on paper the GC wants the
+       plan, the elevation and the table together. Black linework on white. */
+    body.printing-openings #openingsSheet .op-view { display:block !important; page-break-before:always; }
+    body.printing-openings #openingsSheet .op-view[data-view="plan"] { page-break-before:auto; }
+    body.printing-openings #openingsSheet .bay-stage { background:#fff !important; border-color:#999 !important; overflow:visible !important; }
+    body.printing-openings #openingsSheet .bay-svg { min-width:0 !important; }
+    body.printing-openings #openingsSheet .bay-solid { fill:#eaeaea !important; stroke:#666 !important; }
+    body.printing-openings #openingsSheet .bay-rib line { stroke:#bbb !important; }
+    body.printing-openings #openingsSheet .bay-void { fill:#fff !important; }
+    body.printing-openings #openingsSheet .bay-frame { fill:#9aa4b0 !important; }
+    body.printing-openings #openingsSheet .bay-panel { fill:#cfd6dd !important; stroke:#777 !important; }
+    body.printing-openings #openingsSheet .bay-glass { fill:#f2f7ff !important; stroke:#9dbfe8 !important; }
+    body.printing-openings #openingsSheet .bay-glint { stroke:#c8d4e2 !important; }
+    body.printing-openings #openingsSheet .bay-tag path { fill:#fff !important; stroke:#333 !important; }
+    body.printing-openings #openingsSheet .bay-op-dim, body.printing-openings #openingsSheet .bay-dimtext,
+    body.printing-openings #openingsSheet .bay-tag text { stroke:#fff !important; }
+    body.printing-openings #openingsSheet .bay-op-dxf { display:none !important; }  /* never on a GC handout */
+    body.printing-openings #openingsSheet .bay-tag text,
+    body.printing-openings #openingsSheet .bay-op-dim { fill:#000 !important; }
+    body.printing-openings #openingsSheet .bay-dimline,
+    body.printing-openings #openingsSheet .bay-dimtick { stroke:#000 !important; }
+    body.printing-openings #openingsSheet .bay-dimtext { fill:#000 !important; }
+    body.printing-openings #openingsSheet .bay-doorleaf { fill:#fff !important; stroke:#666 !important; }
+    body.printing-openings #openingsSheet .bay-swing { stroke:#888 !important; }
   }
 
   /* Two column layout */
@@ -544,6 +661,64 @@
     transform: translate(-50%, -50%) scale(calc(1.25 * var(--mk, 1)));
     z-index: 10;
   }
+  /* F-056 — the elevation key on the plan: the drafting symbol a super already
+     knows (circle + pointer aimed at the facade), stacked above the unit markers
+     without hiding them, and scaling with the plan zoom via the same --mk the
+     markers use. */
+  .elev-key {
+    position: absolute;
+    transform: translate(-50%, -50%) scale(var(--mk, 1));
+    cursor: pointer;
+    z-index: 12;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transition: filter .15s, transform .15s;
+  }
+  .elev-key-dot {
+    position: relative; z-index: 2;          /* the number stays readable over the pointer */
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--accent, #58a6ff); border: 2px solid #fff; color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 800; line-height: 1;
+    box-shadow: 0 2px 8px rgba(0,0,0,.45);
+  }
+  /* The pointer hangs off the EDGE of the circle, aimed at the facade — the way an
+     elevation tag is drawn. The span itself is a zero-size pivot at the circle's
+     centre; rotating it swings the triangle (pushed out by the radius) around it. */
+  .elev-key-arrow {
+    position: absolute; left: 50%; top: 15px;
+    width: 0; height: 0;
+    transform-origin: 0 0;
+    pointer-events: none; z-index: 1;
+  }
+  .elev-key-arrow::before {
+    content: ''; position: absolute; left: 13px; top: -9px;
+    width: 0; height: 0;
+    border: 9px solid transparent;
+    border-left: 15px solid var(--accent, #58a6ff);
+    filter: drop-shadow(0 1px 2px rgba(0,0,0,.5));
+  }
+  .elev-key-label {
+    margin-top: 3px; white-space: nowrap;
+    font-size: 9px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase;
+    color: #fff; background: rgba(13,17,23,.82); border: 1px solid var(--accent, #58a6ff);
+    border-radius: 20px; padding: 1px 7px;
+    box-shadow: 0 2px 6px rgba(0,0,0,.4);
+  }
+  .elev-key:hover { filter: brightness(1.15); transform: translate(-50%, -50%) scale(calc(1.12 * var(--mk, 1))); }
+  body.day-mode .elev-key-label { color: #1f2328; background: rgba(255,255,255,.92); }
+  /* Hovering the key rings the openings that elevation covers — otherwise the symbol
+     and its five markers are two unrelated things on the same picture. */
+  .plan-marker.elev-linked {
+    box-shadow: 0 0 0 3px var(--accent, #58a6ff), 0 2px 6px rgba(0,0,0,.4);
+    z-index: 9;
+  }
+  @media (max-width: 768px) {
+    .elev-key-label { display: none; }     /* the circle alone still reads on a phone */
+    .elev-key-dot { width: 30px; height: 30px; font-size: 13px; }
+  }
+
   .plan-marker.installed { background: var(--green); }
   .plan-marker.in-progress { background: var(--yellow); }
   .plan-marker.issue { background: var(--red); animation: pulse 1.6s infinite; }
@@ -3146,8 +3321,9 @@ document.addEventListener('DOMContentLoaded', applyThemeUI);
 <div id="toast" class="toast">Saved ✓</div>
 
 <script type="application/json" id="__embedded_state"></script>
-<script src="app-log.js"></script>
-<script src="app.js?v=20260805j"></script>
+<script src="elevations.js?v=20260826a"></script>
+<script src="app-log.js?v=20260805k"></script>
+<script src="app.js?v=20260826c"></script>
 <!-- boot handled inside app.js (core) -->
 </body>
 </html>

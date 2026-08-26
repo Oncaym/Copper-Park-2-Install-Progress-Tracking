@@ -59,6 +59,29 @@ return {
      state.migrations[] — so it can safely fix up live cloud data that no seed edit reaches. */
   migrations: [
     {
+      id: 'glasslog-installed-only-2026-08',
+      note: 'F-053: drop daily-log glass entries that were written for a panel merely being ' +
+            '"ready" (on site) — only installed panels belong on the installation trend. ' +
+            'Entries record the non-installed status per unit, so they are identifiable; an ' +
+            'entry left with nothing in it is removed.',
+      apply(state) {
+        const log = Array.isArray(state.log) ? state.log : [];
+        let dropped = 0;
+        log.forEach(l => {
+          if (!l || l.auto !== true || l.kind !== 'glass' || !l.autoUnits) return;
+          Object.keys(l.autoUnits).forEach(k => {
+            const v = l.autoUnits[k];
+            const st = (v && typeof v === 'object') ? (v.status || '') : (typeof v === 'string' ? v : '');
+            if (st) { delete l.autoUnits[k]; dropped++; }        // '' === installed
+          });
+          if (typeof rebuildAutoUnitsContent === 'function') rebuildAutoUnitsContent(l);
+        });
+        state.log = log.filter(l => !(l && l.auto === true && l.kind === 'glass' &&
+          (!l.autoUnits || !Object.keys(l.autoUnits).length)));
+        return dropped + ' non-installed glass row(s) removed from the trend';
+      }
+    },
+    {
       id: 'cp2-2026-08-facecover-to-beautycap',
       note: 'F-050: "Face Cover" and AC3\'s "Beauty Cap" are the same part. Rename the stored ' +
             'scope key so both trackers speak one language; status/date are carried over as-is.',
@@ -168,6 +191,8 @@ return {
   { key:'SF31__1', id:'SF31', type:'Storefront', zone:'South', level:'GF', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
   { key:'SF17S', id:'SF17S', type:'Storefront', zone:'South', level:'GF', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
   { key:'SF47', id:'SF47', type:'Storefront', zone:'South', level:'GF', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'' },
+  { key:'SF49', id:'SF49', type:'Storefront', zone:'South', level:'GF', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'Transom over the south main entry (above SF47) — F-055' },
+  { key:'SD01', id:'SD01', type:'Storefront', zone:'South', level:'GF', status:'pending', date:'', louver:'no', glass:'', panels:'', note:'South main entry door, inside the SF47 opening — F-055' },
   { key:'SF13A', id:'SF13A', type:'Storefront', zone:'East', level:'GF', status:'installed', date:`${YEAR}-05-13`, louver:'no', note:'Framing 5/13' },
   { key:'SF12B', id:'SF12B', type:'Storefront', zone:'East', level:'GF', status:'installed', date:`${YEAR}-05-11`, louver:'no', note:'Framing 5/11' },
   { key:'SF12A__1', id:'SF12A', type:'Storefront', zone:'East', level:'GF', status:'installed', date:`${YEAR}-05-12`, louver:'no', note:'Framing 5/12' },
@@ -270,6 +295,8 @@ return {
   'SF31__1': { x: 85.33, y: 87.87 },
   'SF17S': { x: 90.69, y: 87.79 },
   'SF47': { x: 36.12, y: 84.53 },
+  'SF49': { x: 36.12, y: 82.40 },   // transom above SF47 — offset so both markers are clickable; drag to taste
+  'SD01': { x: 36.12, y: 86.70 },   // entry door within SF47 — same idea
   'SF13A': { x: 92.27, y: 66.58 },
   'SF12B': { x: 92.28, y: 61.00 },
   'SF12A__1': { x: 92.27, y: 54.60 },

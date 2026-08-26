@@ -17,3 +17,9 @@ node_modules/
 
 # Source drawings (inputs only — the tracker ships the rendered PNG, not the DXF)
 *.dxf
+
+# local-only demo launcher (not part of the site)
+_demo/_chrome-demo-profile/
+
+# generated visual harness for the bay elevation (rebuild: node _tests/make-bay-preview.cjs)
+_tests/preview-bay.html

@@ -31,7 +31,9 @@ ref/party/fault，分类含 fit-issue/field-verify/gc-inquiry）。细节见 AC3
 的 CLAUDE.md 或直接读 `project-config.js`。
 
 CP2 特有：`defaultPositions` 有平面图预置坐标（requirePlacedMarkers=false）；
-门 ID 规则只有 `^SD`；无立面视图（F-007 未启用，需要 shop drawing DXF 才能生成）。
+门 ID 规则只有 `^SD`；**bay 立面已启用（F-055）**——`elevations.js` 由 `tools/dxf2bay.py` 从 shop
+drawing DXF 生成，目前只有 south main entry 一张。per-unit 的 F-007 仍未启用：数据其实够了，但打开它
+会改动 unit 弹窗和 F-030 的 scope rollup，等你真要了再开。
 
 ## 关键规则
 
@@ -132,6 +134,42 @@ CP2 特有：`defaultPositions` 有平面图预置坐标（requirePlacedMarkers=
   `cp2-2026-08-facecover-to-beautycap`（控制台 + Daily Log 各一条），跑完确认推回云端；②unit 弹窗
   Calendar tab 里原来的「Face Cover」行现在叫 **Beauty Cap**，之前填的状态/日期应原样还在；
   ③顶部第二张卡变成 Beauty Cap，marker 右下弧同理。验证脚本：`node _tests/test-scope-kpi.cjs`（36）。
+- [ ] **F-056（平面图上的立面标记）本地验一遍** —— 这条是 F-055「步骤太多」的答案，先验这个：
+  ①打开看板，**平面图上（Ground Floor）南侧 SF46~48 下方应该有一个蓝色圆圈「1」+ 朝上的三角 + `SOUTH MAIN ENTRY` 标签**；
+  ②**点它 → 直接出立面**（不用先点 📐，也不用切 tab）；③鼠标移上去，SF46/47/48/49/SD01 五个 marker 应该同时亮蓝圈；
+  ④切到 2nd Floor → SF60/SF61 下方也有同一个符号（**注意**：2F 那几个 marker 的坐标你还没拖过，符号是跟着它们算的，
+  你把 marker 拖对之后符号会自己跟过去）；⑤editor 模式下这个符号可以**拖**，位置存在 `__elev:` 开头的保留键里，
+  不会跟任何 unit 冲突；⑥点任意 unit 的 marker → 卡片里有「🏢 See SFxx on the South Main Entry elevation」按钮
+  （**没发布尺寸的 unit 也有这个按钮**）；⑦📐 清单里的 key plan 上也有同一个符号，**打印出来的纸上是黑白的**，
+  GC 拿着平面就知道翻哪张立面。**不需要改 Firebase 规则。**
+  验证脚本：`node _tests/test-bay-elevation.cjs`（111 断言，F-055 + F-056 合并在一起）。
+  **注意这里踩过的坑**（细节见 `_tests/README.md` 末尾）：平面图上任何可点的东西都必须像 `.plan-marker`
+  那样在 `onpointerdown` 里 `stopPropagation()`，否则 `#planViewport` 的 `setPointerCapture` 会把指针抢走、
+  **click 事件根本不会触发**（jsdom 测不出来，只能在真浏览器里点）；另外 `editMode` **不是全局变量**，
+  是 `setupPlanInteractions()` 的局部 const，要读就读 `#editPositionMode` 这个 checkbox。
+  看图不用开 app：`node _tests/make-bay-preview.cjs` → `_tests/preview-bay.html`，里面除了立面的四种样子，
+  最后两节就是**真实 state.json 坐标下、符号画在真实 GF / 2F 底图上**的样子。
+  待同步到 AC3（app.js + index.html 的 `.elev-key` CSS）。
+- [ ] **F-055（bay 立面板）本地验一遍**：①点 header 📐 → 清单上方应有 `🗺 Key plan / 🏢 Elevation / 📋 Table`
+  三个 tab（Key plan 是原来的样子，没变）；②Elevation → 整个 south main entry bay 按比例画出来，红色标注
+  `2'-2" / 1'-2" / 1'-8" / 1'-0"` 就是你在图上标的 26 / 14 / 20 / 12，外框 `25'-6" × 25'-7 1/4"`；
+  ③点任意开口 → 出 unit 弹窗（GC 账号点 → 只读卡，跟点平面图 marker 一样）；④「👁 Doors shown」按钮
+  能把 SD01 收起来，收起来后那一格是玻璃不是黑洞；⑤**只有 editor 看得到的 `dwg …` 行**：SF48/49/60/61
+  下面写着图上量出来的尺寸，SF46/SF47 没有（因为跟 7-31 发布的值一致，一致就不啰嗦）；⑥unit 弹窗
+  `Field Verify · R.O.` tab 的 Width/Height 下面多一行——没填过的写「Shop drawing south main entry.dxf
+  measures …」+ **Use these**（只填进输入框，还是要按 Save 才算发布给 GC），填过且一致的是绿色 ✓，
+  **不一致是琥珀色警告**；⑦🖨 打印 → 平面图、立面、表格三样都要在纸上，立面黑线白底、没有 `dwg` 行。
+  **不需要改 Firebase 规则。**
+  验证脚本：`node _tests/test-bay-elevation.cjs`（现在含 F-056，共 106 断言）。不开 app 也能看图：`node _tests/make-bay-preview.cjs`
+  生成 `_tests/preview-bay.html`，浏览器打开就是 GC 深色 / 日间 / 打印 / 隐藏门 四种样子。
+  **要加第二张立面**：DXF 丢进文件夹，跑
+  `python3 tools/dxf2bay.py "<file>.dxf" --id <slug> --name "<名字>" --out elevations.js`。
+  脚本会把自己推导的净空跟图上的 DIMENSION **双向对账**，任一方向对不上就报错、不出文件；多张 bay 时
+  Elevation tab 上方自动出选择器。`*.dxf` 在 .gitignore 里，仓库只放生成好的 `elevations.js`。
+  **Leo 待办**：SF49 / SF60 / SF61 / SF48 的 R.O. 还没发布过，填了 GC 那边才看得到数字（现在显示 not issued）。
+  另外 SF49 / SD01 是这次新加进 SEED + state.json 的（原来两个都不在看板上），平面图坐标先叠在 SF47 旁边，
+  切到 Ground Floor 拖到正确位置即可。
+  待同步到 AC3（app.js；AC3 没有 `elevations.js`，Elevation tab 不会出现，其余行为完全不变）。
 - [ ] Leo：把安装窗口**结束日期**告诉当前会话，好设"最后一天"收尾对话提醒（super/PM 访谈，
   问题清单在 PILOT-2WK.md 第四节）。GC 依赖清单给我可批量录入 project-config SEED。
 

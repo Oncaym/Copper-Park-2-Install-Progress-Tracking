@@ -1031,6 +1031,32 @@
       "panels": ""
     },
     {
+      "key": "SF49",
+      "id": "SF49",
+      "type": "Storefront",
+      "zone": "South",
+      "level": "GF",
+      "status": "pending",
+      "date": "",
+      "louver": "no",
+      "note": "Transom over the south main entry (above SF47) — F-055",
+      "glass": "",
+      "panels": ""
+    },
+    {
+      "key": "SD01",
+      "id": "SD01",
+      "type": "Storefront",
+      "zone": "South",
+      "level": "GF",
+      "status": "pending",
+      "date": "",
+      "louver": "no",
+      "note": "South main entry door, inside the SF47 opening — F-055",
+      "glass": "",
+      "panels": ""
+    },
+    {
       "key": "SF13A",
       "id": "SF13A",
       "type": "Storefront",
@@ -1765,6 +1791,14 @@
     "SF63__2": {
       "x": 74.77,
       "y": 19.37
+    },
+    "SF49": {
+      "x": 36.12,
+      "y": 82.4
+    },
+    "SD01": {
+      "x": 36.12,
+      "y": 86.7
     }
   },
   "updatedAt": "2026-06-04T18:40:25.210837Z"
