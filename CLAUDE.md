@@ -134,6 +134,16 @@ drawing DXF 生成，目前只有 south main entry 一张。per-unit 的 F-007 �
   `cp2-2026-08-facecover-to-beautycap`（控制台 + Daily Log 各一条），跑完确认推回云端；②unit 弹窗
   Calendar tab 里原来的「Face Cover」行现在叫 **Beauty Cap**，之前填的状态/日期应原样还在；
   ③顶部第二张卡变成 Beauty Cap，marker 右下弧同理。验证脚本：`node _tests/test-scope-kpi.cjs`（36）。
+- [ ] **F-057（立面对 GC 的可见性）本地验一遍** —— **默认是不给 GC 看的**，所以先看这条：
+  ①用你自己的账号打开 → 平面图上那个立面符号现在是**灰色带锁头**，tooltip 写着 Internal only；
+  ②点开立面 → 面板上方一条状态栏写「🔒 Internal only — the GC cannot see this elevation」，
+  右边一个 **Show to the GC** 按钮；③点它 → 变成绿色的「👁 The GC can see this elevation」，
+  平面图上的符号也恢复成蓝色；④用 GC 只读账号登录（或临时把开关关掉再看）→ 平面图上**没有符号**、
+  📐 清单里**没有 Elevation tab**、unit 卡上**没有** See on elevation 按钮；⑤🖨 打印：隐藏状态下
+  立面**整页不出现**在给 GC 的纸上（平面图 + 表格照常）；⑥GC 账号自己**改不了**这个开关。
+  **不需要改 Firebase 规则**（`state.elevGc` 跟着整个 state 一起同步）。
+  验证脚本：`node _tests/test-bay-elevation.cjs`（135 断言）。
+  待同步到 AC3（app.js + index.html 的 `.bay-gcbar` / `.elev-key-internal` / print CSS）。
 - [ ] **F-056（平面图上的立面标记）本地验一遍** —— 这条是 F-055「步骤太多」的答案，先验这个：
   ①打开看板，**平面图上（Ground Floor）南侧 SF46~48 下方应该有一个蓝色圆圈「1」+ 朝上的三角 + `SOUTH MAIN ENTRY` 标签**；
   ②**点它 → 直接出立面**（不用先点 📐，也不用切 tab）；③鼠标移上去，SF46/47/48/49/SD01 五个 marker 应该同时亮蓝圈；

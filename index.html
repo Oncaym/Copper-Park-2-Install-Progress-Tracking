@@ -518,6 +518,15 @@
   #openingsSheet .bay-key i[data-state="ready"]  { border-top-color:#2ea043; }
   #openingsSheet .bay-key i[data-state="follow"] { border-top-style:dashed; border-top-color:#a371f7; }
   #openingsSheet .bay-key i[data-state="none"]   { border-top-style:dashed; }
+  /* F-057 — the audience bar. Editors only; states the current audience in words,
+     because "can the GC see this right now" is not a thing to read off a toggle. */
+  #openingsSheet .bay-gcbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    margin:10px 0 2px; padding:9px 12px; border-radius:9px; font-size:12.5px;
+    border:1px solid var(--border); background:rgba(110,118,129,.10); }
+  #openingsSheet .bay-gcbar.on { border-color:var(--green,#2ea043); background:rgba(46,160,67,.10); }
+  #openingsSheet .bay-gcbar-state { font-weight:700; }
+  #openingsSheet .bay-gcbar.on .bay-gcbar-state { color:var(--green,#2ea043); }
+  #openingsSheet .bay-gcbar-note { flex:1; min-width:200px; color:var(--text-dim); font-size:11.5px; }
   #openingsSheet .bay-gaps { margin-top:12px; font-size:12.5px; }
   #openingsSheet .bay-gaps ul { margin:5px 0 0; padding-left:18px; color:var(--text-dim); line-height:1.7; }
   #openingsSheet .bay-gaps b  { color:var(--text); }
@@ -538,6 +547,10 @@
     /* Every tab prints, not just the one on screen — on paper the GC wants the
        plan, the elevation and the table together. Black linework on white. */
     body.printing-openings #openingsSheet .op-view { display:block !important; page-break-before:always; }
+    /* F-057: the printed openings sheet is the GC's handout, so an internal-only
+       elevation is left off it — otherwise "hidden from the GC" leaks on paper. */
+    body.printing-openings #openingsSheet .op-view-internal { display:none !important; }
+    body.printing-openings .elev-key-internal { display:none !important; }
     body.printing-openings #openingsSheet .op-view[data-view="plan"] { page-break-before:auto; }
     body.printing-openings #openingsSheet .bay-stage { background:#fff !important; border-color:#999 !important; overflow:visible !important; }
     body.printing-openings #openingsSheet .bay-svg { min-width:0 !important; }
@@ -714,6 +727,13 @@
     box-shadow: 0 0 0 3px var(--accent, #58a6ff), 0 2px 6px rgba(0,0,0,.4);
     z-index: 9;
   }
+  /* F-057 — an elevation the GC cannot see still shows for us, but greyed and padlocked
+     so nobody has to open the panel to find out who is looking at it. */
+  .elev-key-internal .elev-key-dot { background: #6e7681; }
+  .elev-key-internal .elev-key-arrow::before { border-left-color: #6e7681; }
+  .elev-key-internal .elev-key-label { border-color: #6e7681; opacity: .85; }
+  .elev-key-internal .elev-key-label::before { content: '\1F512 '; }
+
   @media (max-width: 768px) {
     .elev-key-label { display: none; }     /* the circle alone still reads on a phone */
     .elev-key-dot { width: 30px; height: 30px; font-size: 13px; }
@@ -3323,7 +3343,7 @@ document.addEventListener('DOMContentLoaded', applyThemeUI);
 <script type="application/json" id="__embedded_state"></script>
 <script src="elevations.js?v=20260826a"></script>
 <script src="app-log.js?v=20260805k"></script>
-<script src="app.js?v=20260826c"></script>
+<script src="app.js?v=20260827a"></script>
 <!-- boot handled inside app.js (core) -->
 </body>
 </html>

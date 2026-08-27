@@ -3366,7 +3366,7 @@ function openOpeningsSheet() {
     const keys = _bays().map((b, i) => {
       const p = _bayUnitsOnFloor(b, f.key).length ? _bayKeyState(b, f.key) : null;
       if (!p) return '';
-      return `<span class="elev-key op-elev-key" style="left:${p.x}%;top:${p.y}%" title="${esc(b.name)} elevation"
+      return `<span class="elev-key op-elev-key${_bayGcShown(b) ? '' : ' elev-key-internal'}" style="left:${p.x}%;top:${p.y}%" title="${esc(b.name)} elevation"
           onclick="openBayElevation('${esc(b.id)}')">
           <span class="elev-key-arrow" style="transform:rotate(${p.ang}deg)"></span>
           <span class="elev-key-dot">${i + 1}</span>
@@ -3413,7 +3413,7 @@ function openOpeningsSheet() {
         </div>
         <div class="op-scroll">
           <div class="op-view" data-view="plan">${floors.map(planFor).join('')}</div>
-          ${_bays().length ? `<div class="op-view" data-view="elev">${_bayPanelHtml()}</div>` : ''}
+          ${_bays().length ? `<div class="op-view${_bayGcShown(_curBay()) ? '' : ' op-view-internal'}" data-view="elev">${_bayPanelHtml()}</div>` : ''}
           <div class="op-view" data-view="table">
           <table class="op-table">
             <thead><tr><th>Unit</th><th>Floor</th><th>Required W</th><th>Required H</th><th>Tol.</th><th>Note</th><th>Issued</th><th>Drawing</th><th>GC status</th></tr></thead>
@@ -3479,10 +3479,47 @@ function exportOpeningsCsv() {
 
    Doors are drawn because the GC asked to see them, and hidden by one toggle
    because the door is our scope inside their opening, not a second opening. */
-function _bays() {
+/* F-057 (Leo, 2026-08-26): each bay elevation can be shown to the GC or kept
+   internal. Default is INTERNAL — a bay reaches the GC only when someone here
+   deliberately publishes it, the same rule F-038 already applies to dimensions.
+   Nothing built for our own use should escape to an outside party by default.
+
+   `_bays()` is the single choke point: filtering here means the plan symbol, the
+   Elevation tab, the panel, the key-plan symbol, the button on the unit card and
+   the printed handout all follow from one flag, with no surface left behind. */
+function _bayGcShown(bay) {
+  const m = (typeof state !== 'undefined' && state && state.elevGc) || {};
+  return m[bay && bay.id] === true;
+}
+function _baysAll() {
   const B = window.ELEV_BAYS || {};
   return Object.keys(B).map(k => B[k]).filter(b => b && Array.isArray(b.openings) && b.openings.length);
 }
+function _bays() {
+  const all = _baysAll();
+  return _isRO() ? all.filter(_bayGcShown) : all;
+}
+/* Editors flip it; the change syncs like any other state edit (pushNow spreads the
+   whole state object, so no Firebase rule changes) and is logged, because "who
+   showed the GC this drawing, and when" is the kind of thing that gets asked later. */
+function setBayGc(bayId, on) {
+  if (_isRO()) return;
+  const bay = _baysAll().find(b => b.id === bayId);
+  if (!bay) return;
+  if (!state.elevGc) state.elevGc = {};
+  const was = state.elevGc[bayId] === true;
+  if (was === !!on) return;
+  state.elevGc[bayId] = !!on;
+  saveState(false, `${bay.name} elevation ${on ? 'shown to' : 'hidden from'} the GC`);
+  if (typeof toast === 'function') {
+    toast(on ? `${bay.name} elevation is now visible to the GC`
+             : `${bay.name} elevation is hidden from the GC`);
+  }
+  try { renderPlan(); } catch (e) {}
+  const sheet = document.getElementById('openingsModal');
+  if (sheet && sheet.classList.contains('show')) openOpeningsSheet();
+}
+function toggleBayGc(bayId) { setBayGc(bayId, !_bayGcShown(_baysAll().find(b => b.id === bayId))); }
 /* The opening for a unit, in whichever bay holds it — used both by the panel and
    by the R.O. tab, where it becomes a suggestion Leo can accept with one click.
    A suggestion, never an auto-fill: issuing a dimension to the GC is a deliberate
@@ -3640,6 +3677,18 @@ function _bayPanelHtml() {
     : '';
   const gaps = (cur.gaps || []).map(g =>
     `<li><b>${esc(g.text)}</b> between ${esc(g.pairs.map(p => p.join(' and ')).join(', '))}</li>`).join('');
+  /* F-057: editors always see the bay AND its current audience, stated in words
+     rather than an icon — "is the GC looking at this right now" is not something
+     to infer from a toggle's colour. The GC never sees this bar at all: a hidden
+     bay never reaches them, and a shown one does not need announcing. */
+  const shown = _bayGcShown(cur);
+  const gcBar = _isRO() ? '' : `<div class="bay-gcbar${shown ? ' on' : ''} op-noprint">
+       <span class="bay-gcbar-state">${shown ? '\u{1F441} The GC can see this elevation' : '\u{1F512} Internal only \u2014 the GC cannot see this elevation'}</span>
+       <span class="bay-gcbar-note">${shown
+          ? 'It appears on their plan, in their \u{1F4D0} Openings sheet and on printouts.'
+          : 'No symbol on their plan, no Elevation tab, no button on their unit cards, and it is left off printouts.'}</span>
+       <button type="button" class="btn${shown ? '' : ' btn-primary'}" onclick="toggleBayGc('${esc(cur.id)}')">${shown ? 'Hide from the GC' : 'Show to the GC'}</button>
+     </div>`;
   return picker +
     `<div class="op-floor">
        <div class="op-floor-name">${esc(cur.name)} — ${esc((cur.overall && cur.overall[0] ? cur.overall[0].text : ''))} wide × ${esc((cur.overall && cur.overall[1] ? cur.overall[1].text : ''))} tall</div>
@@ -3647,12 +3696,15 @@ function _bayPanelHtml() {
          <button type="button" class="btn" onclick="toggleBayDoors()">${_bayDoors ? '👁 Doors shown' : '🚪 Doors hidden'}</button>
          <span class="bay-hint">Tap any opening for its required size.</span>
        </div>
+       ${gcBar}
        <div class="bay-stage${_bayDoors ? '' : ' bay-nodoors'}">${_baySvg(cur)}</div>
        ${_bayLegend()}
        <div class="bay-gaps"><b>Distance between openings</b><ul>${gaps}</ul></div>
        <div class="bay-src">Geometry from <code>${esc(cur.source)}</code>. The four clear distances above are taken from that drawing and were checked against the dimensions on the sheet. Opening sizes shown on each unit are the values issued to the GC, not scaled off the drawing.</div>
      </div>`;
 }
+// The bay the Elevation tab is currently showing — same pick _bayPanelHtml() makes.
+function _curBay() { const b = _bays(); return b.find(x => x.id === _opBay) || b[0] || null; }
 function setOpBay(id) { _opBay = id; openOpeningsSheet(); }
 function toggleBayDoors() {
   _bayDoors = !_bayDoors;
@@ -3748,12 +3800,14 @@ function renderElevationKeys(wrap) {
     const p = _bayKeyState(bay, currentLevel);
     if (!p) return;
     const k = document.createElement('div');
-    k.className = 'elev-key';
+    const _gc = _bayGcShown(bay);              // F-057
+    k.className = 'elev-key' + (_gc ? '' : ' elev-key-internal');
     k.dataset.unit = ELEV_KEY_PREFIX + bay.id + ':' + currentLevel;   // reuses the marker drag path
     k.dataset.bay = bay.id;
     k.style.left = p.x + '%';
     k.style.top = p.y + '%';
-    k.title = `${bay.name} elevation — ${mine.map(u => u.id).join(', ')}. Tap to see the rough openings and the distances between them.`;
+    k.title = `${bay.name} elevation — ${mine.map(u => u.id).join(', ')}. Tap to see the rough openings and the distances between them.`
+      + (_gc ? '' : '\n\u{1F512} Internal only — the GC does not see this.');
     k.innerHTML = `<span class="elev-key-arrow" style="transform:rotate(${p.ang}deg)"></span>` +
                   `<span class="elev-key-dot">${i + 1}</span>` +
                   `<span class="elev-key-label">${esc(bay.name)}</span>`;
