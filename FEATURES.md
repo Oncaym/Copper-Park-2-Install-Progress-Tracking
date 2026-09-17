@@ -119,3 +119,42 @@ Status: ✅ live · ⬜ not enabled · ⚠ diverged (see note)
   **保持方式**：改完 core 跑一遍两边的 `_tests/`，然后 `md5sum` 对一下 app.js / cloud-sync.js / app-log.js / chat.html。
   项目差异一律走 `window.PROJECT`（现有开关：`doorPatterns` `interiorPatterns` `floors` `migrations`
   `scopeKpis` `ringScopes` `submittalReviewers` `requirePlacedMarkers`），**不要让 core 再分叉**。
+
+## F-058 — GC 身份独立于"不能写"（core，三个 tracker 同步）
+
+**2026-09-17 · core: `cloud-sync.js` · 规则: `firebase-database-rules.json`**
+
+**问题**：`isReadOnly`（= 不在 `/allowlist`）同时被拿来回答"这个人是不是 GC"。
+这两个问题以前答案碰巧一样，于是**这个 Firebase 项目里任何一个登录账号**，只要不在
+allowlist 上，就自动拿到 GC 的窄视图，还能以 `source:'gc'` 往 `/gcItems` 提条目 ——
+没有人需要被邀请就能变成"总包"。而且旧规则 `/state` 的 `.read` 是 `auth != null`，
+所以他连整个工地的数据都读得到。Leo 2026-09-17 报的就是这个。
+
+**改法**：引入显式角色，来源是**被点名**而不是"没被点名"。
+
+| 角色 | 条件 | 看到什么 |
+|---|---|---|
+| `editor` | 在 `/allowlist` | 完整看板，可编辑 |
+| `gc` | 不在 allowlist，但在 **`/gcList`** | GC 窄视图，只读 |
+| `none` | 两个都不在 | 一块"No access to this project"的墙，看不到任何数据 |
+
+新 API：`CloudSync.role()` / `CloudSync.isGC()`。`app.js` **一行没改** —— GC 窄视图本来就
+只对 read-only 账号生效，而现在能走到那一步的 read-only 账号只剩真正的 GC。
+
+**灰度是刻意的**：`/gcList` 节点不存在时，前端 (`gcListConfigured`) 和规则
+(`|| !root.child('gcList').exists()`) 都保持旧行为，所以代码可以先部署、Console 后做。
+建好 `/gcList` 当天开始生效。键是邮箱把 `.` **全部**换成 `,`（规则里的 `replace` 是全局的，
+只换第一个会让 `leo.sun@…` 这种地址静默漏掉）。
+
+**部署前必做**：① Firebase Console → Realtime Database → Rules 贴上新的
+`firebase-database-rules.json` 并发布；② 建 `/gcList`，把真正的 GC 邮箱写进去，例如
+`{ "gcList": { "pm@broadwaybuilder,com": true } }`；③ 用一个既不在 allowlist 也不在
+gcList 的账号登录一次，应该看到那块墙。**②没做之前不要以为漏洞补上了** —— 那之前还是旧行为。
+
+验证：`node _tests/test-roles.cjs` 之外，浏览器里 26 条断言覆盖 editor / gc / none /
+灰度四种情况，外加 hub 过来的 `#u=` 预填。
+
+**顺带（同一次 core 改动）**：hub 的 Open ↗ 会把已登录邮箱放在 URL fragment 里带过来
+（`#u=…`，fragment 不进服务器日志也不进 referrer），sign-in 框自动填好邮箱、光标落在密码框，
+读完就从地址栏抹掉。四个 app 是四个独立的 Firebase 项目，没有真正的 SSO，这只是把每个
+tracker 的第一次登录变成"只打密码"。
