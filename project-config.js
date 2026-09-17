@@ -13,6 +13,10 @@ const YEAR = new Date().getFullYear(); // seed log dates use the current year
 return {
   name: 'Cooper Park 2',
   code: 'CP2',
+  // AF Hub reporting (hub-report.js) - see Downloads/af-hub/README.md
+  hubId:    'cp2',
+  hubUnit:  'openings',
+  hubScope: 'Storefront',
 
   // localStorage identity — NEVER change on a live project (orphans local caches)
   storageKey:  'cooper_park_2_install_v4',
