@@ -20,7 +20,7 @@ const ME = 'someone@advfacade.com';
 const WORLDS = {
   editor:     { canWrite: true,  gcList: {} },
   gc:         { canWrite: false, gcList: { 'someone@advfacade,com': true } },
-  stranger:   { canWrite: false, gcList: { 'thegc@broadwaybuilder,com': true } },
+  viewer:     { canWrite: false, gcList: { 'thegc@broadwaybuilder,com': true } },
   prerollout: { canWrite: false, gcList: null },          // node not created yet
 };
 
@@ -97,18 +97,26 @@ const ck = (n, c, x) => { if (!c) fails++; console.log((c ? 'PASS  ' : 'FAIL  ')
     ck('gc: item stamped source=gc', rec && rec.source === 'gc', rec && rec.source);
   }
   {
-    const { w, pushed, signOut } = boot(WORLDS.stranger); await settle();
-    ck('stranger: role is none', w.CloudSync.role() === 'none', w.CloudSync.role());
-    ck('stranger: NOT treated as the GC  ← the 2026-09-17 bug', w.CloudSync.isGC() === false);
-    const wall = w.document.getElementById('cs-noaccess');
-    ck('stranger: gets the wall', !!wall);
-    ck('stranger: wall names the account', wall && wall.textContent.includes(ME));
-    ck('stranger: wall offers a way out', !!w.document.getElementById('cs-na-out'));
+    /* Someone with an account who is simply not on /allowlist. allowlist is EDITOR
+       permission — this person is one of us without edit rights, so they get the
+       ordinary internal board, read-only. Not the GC's view, and not a wall. */
+    const { w, pushed } = boot(WORLDS.viewer); await settle();
+    ck('viewer: role is viewer', w.CloudSync.role() === 'viewer', w.CloudSync.role());
+    ck('viewer: NOT treated as the GC  ← the 2026-09-17 bug', w.CloudSync.isGC() === false);
+    ck('viewer: cannot write', w.CloudSync.isReadOnly() === true);
+    ck('viewer: is NOT walled off', !w.document.getElementById('cs-noaccess'));
+    ck('viewer: no wall markup exists at all anywhere',
+       !/noaccess/i.test(w.document.body.innerHTML));
     await w.CloudSync.submitGcItem({ text: 'hi' }); await settle();
     const rec = (pushed.find(p => p.path === 'gcItems') || {}).rec;
-    ck('stranger: cannot stamp an item as the GC', rec && rec.source === 'af', rec && rec.source);
-    await signOut(); await settle();
-    ck('stranger: signing out clears the wall', !w.document.getElementById('cs-noaccess'));
+    ck('viewer: cannot stamp an item as the GC', rec && rec.source === 'af', rec && rec.source);
+  }
+  {
+    /* app.js keys its two behaviours off these exact two calls — _noEdit() -> isReadOnly,
+       _isGC() -> isGC. If either disappears the split silently collapses back into the bug. */
+    const { w } = boot(WORLDS.editor); await settle();
+    ck('the API app.js relies on is present',
+       typeof w.CloudSync.isReadOnly === 'function' && typeof w.CloudSync.isGC === 'function');
   }
   {
     const { w, warnings } = boot(WORLDS.prerollout); await settle();

@@ -906,7 +906,7 @@ function runStateMigrations(s) {
   if (!list.length || !s) return false;
   // Read-only sessions (GC) can never push the "already migrated" marker back, so a
   // migration would re-run on every reload and drift THEIR copy. Editors do the fixup.
-  if (typeof _isRO === 'function' && _isRO()) return false;
+  if (typeof _noEdit === 'function' && _noEdit()) return false;
   if (!Array.isArray(s.migrations)) s.migrations = [];
   let ran = false;
   list.forEach(m => {
@@ -3104,7 +3104,7 @@ function renderRoRequired(u, keepDrafts) {
    DIFFERENT (say so loudly; either the drawing moved or we published a typo, and
    the GC may already be building to the published number). */
 function _roDxfHint(u, r) {
-  if (_isRO()) return '';
+  if (_isGC()) return '';
   const hit = _bayOpeningFor(u && u.id);
   if (!hit) return '';
   const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -3347,7 +3347,7 @@ function openOpeningsSheet() {
     document.body.appendChild(ov);
     ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('show'); });
   }
-  const ro = _isRO();
+  const ro = _isGC();
   const rows = openingsRows();
   const floors = getFloors().filter(f => rows.some(r => r.level === f.key));
   // Key plan per floor — tags carry the FULL unit id (the dashboard strips the SF prefix
@@ -3497,13 +3497,13 @@ function _baysAll() {
 }
 function _bays() {
   const all = _baysAll();
-  return _isRO() ? all.filter(_bayGcShown) : all;
+  return _isGC() ? all.filter(_bayGcShown) : all;
 }
 /* Editors flip it; the change syncs like any other state edit (pushNow spreads the
    whole state object, so no Firebase rule changes) and is logged, because "who
    showed the GC this drawing, and when" is the kind of thing that gets asked later. */
 function setBayGc(bayId, on) {
-  if (_isRO()) return;
+  if (_noEdit()) return;
   const bay = _baysAll().find(b => b.id === bayId);
   if (!bay) return;
   if (!state.elevGc) state.elevGc = {};
@@ -3545,7 +3545,7 @@ function _bayUnitOf(unitId) {
    editors — a GC must never see an un-issued dimension sitting on a drawing. */
 function _bayOpeningInfo(o) {
   const u = _bayUnitOf(o.unit);
-  const ro = _isRO();
+  const ro = _isGC();
   const dxf = ro ? '' : `${o.dxfW} × ${o.dxfH}`;
   if (!u) return { u: null, state: 'missing', dims: '', sub: 'not on the tracker yet', dxf: dxf };
   if (_roFollows(u)) return { u: u, state: 'follow', dims: '', sub: t('sheet_follows_short') || 'follows your opening', dxf: dxf };
@@ -3682,7 +3682,7 @@ function _bayPanelHtml() {
      to infer from a toggle's colour. The GC never sees this bar at all: a hidden
      bay never reaches them, and a shown one does not need announcing. */
   const shown = _bayGcShown(cur);
-  const gcBar = _isRO() ? '' : `<div class="bay-gcbar${shown ? ' on' : ''} op-noprint">
+  const gcBar = _noEdit() ? '' : `<div class="bay-gcbar${shown ? ' on' : ''} op-noprint">
        <span class="bay-gcbar-state">${shown ? '\u{1F441} The GC can see this elevation' : '\u{1F512} Internal only \u2014 the GC cannot see this elevation'}</span>
        <span class="bay-gcbar-note">${shown
           ? 'It appears on their plan, in their \u{1F4D0} Openings sheet and on printouts.'
@@ -3921,11 +3921,11 @@ let _lensRfi = '';             // selected RFI key inside the Issues lens ('' = 
    unit is internal production data. Read-only accounts get Openings + Issues only, so the
    tab is not rendered and the lens is unreachable even if it was already selected when the
    allowlist check came back (read-only resolves after the first paint). */
-function _lensAllowed(l) { return _LENSES.indexOf(l) !== -1 && !(l === 'progress' && _isRO()); }
+function _lensAllowed(l) { return _LENSES.indexOf(l) !== -1 && !(l === 'progress' && _isGC()); }
 function _lens() {
   if (_planLens && _lensAllowed(_planLens)) return _planLens;
   // First paint: the GC's job is preparing openings, so that's where they land.
-  _planLens = _isRO() ? 'openings' : 'progress';
+  _planLens = _isGC() ? 'openings' : 'progress';
   return _planLens;
 }
 function setPlanLens(l) {
@@ -4255,9 +4255,24 @@ function categoryLabel(c) {
 }
 
 /* -------- Modals -------- */
-// Single source of truth for "is this session a read-only (GC) account?".
-function _isRO() {
+/* Two questions that used to share one answer, which is the whole bug (Leo, 2026-09-18):
+
+     _noEdit()  this session cannot write.   TRUE for a viewer AND for the GC.
+     _isGC()    this session is the general contractor, named on /gcList.
+
+   /allowlist is EDITOR permission. Not being on it makes you a VIEWER — one of us,
+   without edit rights — not an outsider. Before this split, every viewer was handed
+   the GC's narrowed dashboard: no KPI cards, no Progress lens, forced English, and
+   our internal-only elevations filtered out of their own board.
+
+   Rule of thumb when adding a call site:
+     hiding a control, a Save, an input   -> _noEdit()
+     narrowing what the GC is shown       -> _isGC()                                */
+function _noEdit() {
   return !!(window.CloudSync && typeof window.CloudSync.isReadOnly === 'function' && window.CloudSync.isReadOnly());
+}
+function _isGC() {
+  return !!(window.CloudSync && typeof window.CloudSync.isGC === 'function' && window.CloudSync.isGC());
 }
 
 /* -------- GC unit view (F-037, Leo 2026-07-31) --------------------------------
@@ -4387,7 +4402,7 @@ function openUnit(id) {
   const u = state.units.find(x=>x.key===id);
   if (!u) return;
   // GC / non-allowlist accounts never reach the editor (F-037).
-  if (_isRO()) { openUnitReadOnly(u); return; }
+  if (_noEdit()) { openUnitReadOnly(u); return; }
   editingUnitId = id;
   document.getElementById('modalTitle').textContent = t('edit_unit_title').replace('{id}', u.id);
   // Calendar-tab header fields (M3 — replaces the old Details/Framing tab's id/note/louver/facecap)
@@ -5889,16 +5904,17 @@ function openItemsModal() {
     ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('show'); });
   }
   const T = _openItemsT();
-  // GC (read-only) accounts can't edit RFI status — they only respond. In that mode we
-  // drop the edit affordances (no clickable→editable unit modal, no Edit/Usage buttons)
-  // and give each open item a Respond button that composes an email draft to the PM.
-  const ro = !!(window.CloudSync && typeof window.CloudSync.isReadOnly === 'function' && window.CloudSync.isReadOnly());
+  // Two different questions (Leo, 2026-09-18): nobody without editor rights can change
+  // RFI status, but only the GC gets the Respond-by-email affordance — a viewer is one
+  // of us and just reads the thread.
+  const ro = _noEdit();
+  const gc = _isGC();
   const statusPill = (st) => { st = st || 'open'; const c = st === 'open' ? 'var(--red,#e5484d)' : (st === 'answered' ? 'var(--yellow,#d29922)' : 'var(--text-dim)'); return `<span style="font-size:10px;text-transform:uppercase;letter-spacing:.4px;border:1px solid ${c};color:${c};border-radius:20px;padding:1px 8px;white-space:nowrap">${esc(st)}</span>`; };
   // Read-only "thread" card — lists the info, no input boxes (Leo, 2026-07-23). Same
   // shape for unit + project items so each reads as one thread and nothing overlaps on mobile.
   const threadCard = (it) => {
     const clickable = !ro && it.scope === 'unit' && it.unitKey;
-    const respondBtn = (ro && (it.status || 'open') === 'open')
+    const respondBtn = (gc && (it.status || 'open') === 'open')
       ? `<div style="margin-top:8px"><button type="button" class="btn" data-unit="${esc(it.unitId || '')}" data-ref="${esc(it.ref || '')}" data-subject="${esc(it.subject || '')}" style="font-size:12px" onclick="event.stopPropagation();openRfiRespond(this.dataset.unit,this.dataset.ref,this.dataset.subject)">💬 Respond</button></div>`
       : '';
     const head = it.scope === 'unit'
@@ -6392,26 +6408,33 @@ function openUsagePanel(){
 // F-039: Drawings goes too (Leo) — a OneDrive link list is our internal reference, not
 // something the GC should be poking at, and it was the fourth 📐-ish button competing
 // for their attention.
-const _READONLY_HIDE = ['a[href="/chat"]', 'a[href="warehouse.html"]', '#modulesBtn', 'button[onclick="openDrawings()"]'];
+// Editor-only tools — useless to anyone who cannot write, viewer included.
+const _NOEDIT_HIDE = ['a[href="/chat"]', '#modulesBtn'];
+// Internal reference we keep away from the GC specifically. A viewer is our own staff
+// without editor rights, so they keep both of these (Leo, 2026-09-18).
+const _GC_HIDE = ['a[href="warehouse.html"]', 'button[onclick="openDrawings()"]'];
 function applyReadOnlyUI(){
-  const ro = !!(window.CloudSync && typeof window.CloudSync.isReadOnly === 'function' && window.CloudSync.isReadOnly());
-  // GC (read-only) simplified view — CSS (body.gc-view + [data-gc-hide]) collapses the
-  // dashboard to progress + map + Things to Solve. Safe to toggle both ways: it only
-  // drives CSS, never touches Modules' own element display.
-  document.body.classList.toggle('gc-view', ro);
+  const noEdit = _noEdit();
+  const gc     = _isGC();
+  // The GC's narrowed dashboard — CSS (body.gc-view + [data-gc-hide]) collapses it to
+  // progress + map + Things to Solve. Safe to toggle both ways: it only drives CSS,
+  // never touches Modules' own element display. A VIEWER keeps the full board.
+  document.body.classList.toggle('gc-view', gc);
   // F-039: read-only resolves asynchronously (allowlist check), so the first paint may
   // already have landed on the editor default. Snap a GC to the Openings lens once we
   // know — unless they've clicked a lens themselves, in which case leave them alone.
   // F-043: also repaint if they'd already landed on a lens a GC isn't allowed (Progress) —
   // _lens() will coerce it, but the bar and the plan have to be redrawn to match.
-  if (ro && ((!_lensUserPicked && _planLens !== 'openings') || !_lensAllowed(_planLens))) {
+  if (gc && ((!_lensUserPicked && _planLens !== 'openings') || !_lensAllowed(_planLens))) {
     _planLens = 'openings';
     try { renderPlanLensBar(); renderPlan(); } catch (e) {}
   }
-  if (!ro) return; // below is hide-only (inline) — never un-hide, so we don't clobber Modules' toggling
+  // Both lists below are hide-only (inline) — never un-hide, so we don't clobber Modules' toggling.
+  if (noEdit) _NOEDIT_HIDE.forEach(q => document.querySelectorAll(q).forEach(el => { el.style.display = 'none'; }));
+  if (!gc) return;
   // GC is English-only: force EN once (guard on currentLang so applyLang's re-render can't loop).
   if (typeof currentLang !== 'undefined' && currentLang !== 'en' && typeof applyLang === 'function') applyLang('en');
-  _READONLY_HIDE.forEach(q => document.querySelectorAll(q).forEach(el => { el.style.display = 'none'; }));
+  _GC_HIDE.forEach(q => document.querySelectorAll(q).forEach(el => { el.style.display = 'none'; }));
 }
 // Let cloud-sync notify us the moment it flips a session to read-only.
 window._onReadOnly = function(){ try { applyReadOnlyUI(); } catch(e){} };
@@ -6488,7 +6511,7 @@ function setUnitTypeField(i, field, v) {
 function renderUnitTypesPanel() {
   const ov = document.getElementById('unitTypesModal'); if (!ov) return;
   const esc = v => String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const ro = (typeof _isRO === 'function') && _isRO();
+  const ro = (typeof _noEdit === 'function') && _noEdit();
   const count = t => (state.units || []).filter(u => { const x = unitTypeOf(u); return x && x.key === t.key; }).length;
   const rows = _utDraft.map((t, i) => `
     <div style="border:1px solid var(--border);border-left:3px solid ${esc(utColorHex(t.color))};border-radius:8px;padding:9px 10px;margin-bottom:8px">
