@@ -1,12 +1,19 @@
 {
-  "cleanUrls": true,
-  "headers": [
+  "redirects": [
+    {
+      "source": "/chat",
+      "destination": "https://af-hub-two.vercel.app/cp2/chat.html",
+      "permanent": false
+    },
+    {
+      "source": "/",
+      "destination": "https://af-hub-two.vercel.app/cp2/",
+      "permanent": false
+    },
     {
       "source": "/(.*)",
-      "headers": [
-        { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
-      ]
+      "destination": "https://af-hub-two.vercel.app/cp2/$1",
+      "permanent": false
     }
   ]
 }
